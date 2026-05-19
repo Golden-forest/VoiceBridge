@@ -1,4 +1,5 @@
 import { WebSocket, WebSocketServer } from "ws";
+import { pressEnter } from "./input/paste.js";
 
 export function createWebSocketHub(server) {
   const wss = new WebSocketServer({ server, path: "/ws" });
@@ -14,6 +15,16 @@ export function createWebSocketHub(server) {
 
     socket.on("close", () => clients.delete(socket));
     socket.on("error", () => clients.delete(socket));
+    socket.on("message", async (data) => {
+      try {
+        const payload = JSON.parse(data);
+        if (payload.type === "enter") {
+          await pressEnter();
+        }
+      } catch {
+        // Ignore malformed messages.
+      }
+    });
   });
 
   function broadcast(payload) {

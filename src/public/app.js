@@ -1,6 +1,7 @@
 const statusEl = document.querySelector("#status");
 const resultEl = document.querySelector("#resultText");
 const recordButton = document.querySelector("#recordButton");
+const enterButton = document.querySelector("#enterButton");
 const autoPasteEl = document.querySelector("#autoPaste");
 const fallbackButton = document.querySelector("#fallbackButton");
 const fallbackFile = document.querySelector("#fallbackFile");
@@ -12,7 +13,15 @@ let isStarting = false;
 let stopRequested = false;
 let maxRecordTimer = null;
 
+let ws = null;
+
 connectWebSocket();
+
+enterButton.addEventListener("click", () => {
+  if (ws && ws.readyState === WebSocket.OPEN) {
+    ws.send(JSON.stringify({ type: "enter" }));
+  }
+});
 
 if (!navigator.mediaDevices?.getUserMedia || !window.MediaRecorder) {
   setStatus("当前浏览器无法直接录音，可改用音频上传兜底。", true);
@@ -139,10 +148,10 @@ async function uploadAudio(blob, extension) {
 
 function connectWebSocket() {
   const protocol = location.protocol === "https:" ? "wss" : "ws";
-  const socket = new WebSocket(`${protocol}://${location.host}/ws`);
+  ws = new WebSocket(`${protocol}://${location.host}/ws`);
 
-  socket.addEventListener("open", () => setStatus("已连接电脑端。"));
-  socket.addEventListener("message", (event) => {
+  ws.addEventListener("open", () => setStatus("已连接电脑端。"));
+  ws.addEventListener("message", (event) => {
     try {
       const payload = JSON.parse(event.data);
       if (payload.type === "result" && payload.text) {
@@ -158,7 +167,7 @@ function connectWebSocket() {
       // Ignore malformed status messages from non-MVP clients.
     }
   });
-  socket.addEventListener("close", () => {
+  ws.addEventListener("close", () => {
     setStatus("连接已断开，正在重连...");
     setTimeout(connectWebSocket, 1500);
   });

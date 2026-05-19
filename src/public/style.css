@@ -91,6 +91,18 @@ h1 {
   box-shadow: 0 10px 24px rgb(194 65 12 / 24%);
 }
 
+.enter-button {
+  width: 100%;
+  min-height: 56px;
+  border: 0;
+  border-radius: 8px;
+  background: #475569;
+  color: #fff;
+  font-size: 22px;
+  font-weight: 700;
+  touch-action: manipulation;
+}
+
 .fallback-button {
   width: 100%;
   min-height: 48px;

@@ -32,3 +32,33 @@ export async function pasteClipboard() {
   const { command, args } = getPasteCommand();
   await execFileAsync(command, args, { windowsHide: true });
 }
+
+export function getEnterCommand(platform = process.platform) {
+  if (platform === "darwin") {
+    return {
+      command: "osascript",
+      args: ["-e", 'tell application "System Events" to keystroke return']
+    };
+  }
+
+  if (platform === "win32") {
+    return {
+      command: "powershell.exe",
+      args: [
+        "-NoProfile",
+        "-Command",
+        "[System.Windows.Forms.SendKeys]::SendWait('{ENTER}')"
+      ]
+    };
+  }
+
+  return {
+    command: "xdotool",
+    args: ["key", "Return"]
+  };
+}
+
+export async function pressEnter() {
+  const { command, args } = getEnterCommand();
+  await execFileAsync(command, args, { windowsHide: true });
+}
