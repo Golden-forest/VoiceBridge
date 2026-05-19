@@ -1,0 +1,22 @@
+{
+  "name": "voicebridge",
+  "version": "0.1.0",
+  "description": "Local cross-device speech input bridge MVP.",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "start": "node src/server/index.js",
+    "test": "node --test"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "clipboardy": "^4.0.0",
+    "dotenv": "^16.4.7",
+    "express": "^4.21.2",
+    "multer": "^2.0.2",
+    "qrcode-terminal": "^0.12.0",
+    "ws": "^8.18.0"
+  }
+}

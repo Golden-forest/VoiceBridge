@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>VoiceBridge</title>
+    <link rel="stylesheet" href="/style.css" />
+  </head>
+  <body>
+    <main class="shell">
+      <section class="panel">
+        <header>
+          <p class="eyebrow">VoiceBridge</p>
+          <h1>按住说话</h1>
+          <p id="status" class="status">正在连接电脑端...</p>
+        </header>
+
+        <label class="switch">
+          <input id="autoPaste" type="checkbox" checked />
+          <span>自动粘贴到电脑当前输入框</span>
+        </label>
+
+        <button id="recordButton" class="record-button" type="button">
+          按住说话
+        </button>
+
+        <button id="fallbackButton" class="fallback-button hidden" type="button">
+          录音或选择音频上传
+        </button>
+        <input id="fallbackFile" class="hidden" type="file" accept="audio/*" capture />
+
+        <section class="result">
+          <div class="result-label">识别结果</div>
+          <p id="resultText">等待录音</p>
+        </section>
+      </section>
+    </main>
+
+    <script src="/app.js" type="module"></script>
+  </body>
+</html>

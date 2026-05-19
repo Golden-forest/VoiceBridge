@@ -1,0 +1,143 @@
+:root {
+  color-scheme: light dark;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  background: #f7f7f4;
+  color: #171717;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+}
+
+.shell {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  padding: 20px;
+}
+
+.panel {
+  width: min(100%, 420px);
+  display: grid;
+  gap: 22px;
+}
+
+.eyebrow {
+  margin: 0 0 8px;
+  color: #52616b;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0;
+  text-transform: uppercase;
+}
+
+h1 {
+  margin: 0;
+  font-size: 34px;
+  line-height: 1.1;
+}
+
+.status {
+  min-height: 24px;
+  margin: 12px 0 0;
+  color: #3d4a52;
+  line-height: 1.45;
+}
+
+.status.error {
+  color: #b42318;
+}
+
+.switch {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 44px;
+  color: #29343a;
+  line-height: 1.35;
+}
+
+.switch input {
+  width: 22px;
+  height: 22px;
+}
+
+.record-button {
+  width: 100%;
+  min-height: 172px;
+  border: 0;
+  border-radius: 8px;
+  background: #176b87;
+  color: #fff;
+  font-size: 28px;
+  font-weight: 800;
+  letter-spacing: 0;
+  touch-action: none;
+  user-select: none;
+  box-shadow: 0 10px 24px rgb(23 107 135 / 22%);
+}
+
+.record-button:disabled {
+  background: #7b8790;
+}
+
+.record-button.recording {
+  background: #c2410c;
+  box-shadow: 0 10px 24px rgb(194 65 12 / 24%);
+}
+
+.fallback-button {
+  width: 100%;
+  min-height: 48px;
+  border: 1px solid #9aa6ac;
+  border-radius: 8px;
+  background: transparent;
+  color: inherit;
+  font-size: 16px;
+  font-weight: 700;
+}
+
+.hidden {
+  display: none;
+}
+
+.result {
+  border-top: 1px solid #d7dbd8;
+  padding-top: 18px;
+}
+
+.result-label {
+  color: #52616b;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+#resultText {
+  margin: 8px 0 0;
+  min-height: 72px;
+  line-height: 1.6;
+  word-break: break-word;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    background: #101417;
+    color: #f4f4f0;
+  }
+
+  .eyebrow,
+  .status,
+  .switch,
+  .result-label {
+    color: #b5c0c7;
+  }
+
+  .result {
+    border-top-color: #2b353a;
+  }
+}
