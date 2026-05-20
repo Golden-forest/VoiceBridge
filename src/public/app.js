@@ -246,6 +246,33 @@ class PhrasesManager {
 
 const phrases = new PhrasesManager();
 
+// Quick bar wiring
+const quickBar = document.querySelector("#quickBar");
+const quickToggle = quickBar.querySelector(".quick-toggle");
+const quickPanel = document.querySelector("#quickPanel");
+
+quickToggle.addEventListener("click", () => {
+  quickBar.classList.toggle("open");
+  quickPanel.classList.toggle("hidden");
+});
+
+quickPanel.addEventListener("click", (e) => {
+  const btn = e.target.closest(".quick-btn");
+  if (!btn) return;
+  const text = btn.dataset.text;
+  if (!text) return;
+  if (ws && ws.readyState === WebSocket.OPEN) {
+    ws.send(JSON.stringify({
+      type: "phrase",
+      text,
+      autoPaste: autoPasteEl.checked
+    }));
+    setStatus("已发送快捷指令。");
+  } else {
+    setStatus("发送失败，请检查连接。", true);
+  }
+});
+
 const micSvg = '<svg viewBox="0 0 24 24"><rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 10a7 7 0 0014 0"/><line x1="12" y1="19" x2="12" y2="22"/></svg>';
 const stopSvg = '<svg viewBox="0 0 24 24"><rect x="6" y="6" width="12" height="12" rx="2"/></svg>';
 

@@ -235,6 +235,94 @@ h1 {
   word-break: break-word;
 }
 
+/* Quick bar */
+.quick-bar {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
+.quick-toggle {
+  width: 100%;
+  min-height: 36px;
+  border: 0;
+  border-radius: 6px;
+  background: #e0e8f0;
+  color: #3b6b8a;
+  font-size: 13px;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+
+.quick-toggle #quickToggleIcon {
+  font-size: 10px;
+  transition: transform 0.2s;
+}
+
+.quick-bar.open .quick-toggle #quickToggleIcon {
+  transform: rotate(90deg);
+}
+
+.quick-panel {
+  margin-top: 6px;
+  border: 1px solid #c8d8e4;
+  border-radius: 8px;
+  overflow: hidden;
+  max-height: 200px;
+  overflow-y: auto;
+}
+
+.quick-group {
+  border-bottom: 1px solid #e8eff4;
+}
+
+.quick-group:last-child {
+  border-bottom: none;
+}
+
+.quick-group-label {
+  display: block;
+  padding: 4px 10px;
+  font-size: 11px;
+  font-weight: 700;
+  color: #8a9baa;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  background: #f4f7fa;
+}
+
+.quick-btns {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  padding: 6px 10px;
+}
+
+.quick-btn {
+  border: 1px solid #c8d8e4;
+  border-radius: 14px;
+  background: #fff;
+  color: #3b6b8a;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 4px 10px;
+  cursor: pointer;
+  touch-action: manipulation;
+  transition: background 0.15s, color 0.15s;
+  white-space: nowrap;
+}
+
+.quick-btn:active {
+  background: #176b87;
+  color: #fff;
+  border-color: #176b87;
+}
+
 /* Phrases drawer */
 .phrases-drawer {
   display: flex;
@@ -556,5 +644,35 @@ h1 {
     background: #2b353a;
     border-color: #3b454a;
     color: #b5c0c7;
+  }
+
+  .quick-toggle {
+    background: #1e2d3a;
+    color: #7fb3d0;
+  }
+
+  .quick-panel {
+    border-color: #2b3a45;
+  }
+
+  .quick-group {
+    border-bottom-color: #253340;
+  }
+
+  .quick-group-label {
+    color: #6a8a9e;
+    background: #1a2530;
+  }
+
+  .quick-btn {
+    background: #1e2d3a;
+    border-color: #2b3a45;
+    color: #7fb3d0;
+  }
+
+  .quick-btn:active {
+    background: #176b87;
+    color: #fff;
+    border-color: #176b87;
   }
 }
