@@ -77,13 +77,20 @@ h1 {
   font-size: 28px;
   font-weight: 800;
   letter-spacing: 0;
-  touch-action: none;
+  touch-action: manipulation;
   user-select: none;
   box-shadow: 0 10px 24px rgb(23 107 135 / 22%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  cursor: pointer;
 }
 
 .record-button:disabled {
   background: #7b8790;
+  cursor: not-allowed;
 }
 
 .record-button.recording {
@@ -91,16 +98,108 @@ h1 {
   box-shadow: 0 10px 24px rgb(194 65 12 / 24%);
 }
 
-.enter-button {
-  width: 100%;
-  min-height: 56px;
+.record-icon {
+  width: 52px;
+  height: 52px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.record-icon-mic {
+  background: rgba(255, 255, 255, 0.15);
+}
+
+.record-button.recording .record-icon {
+  background: rgba(255, 255, 255, 0.2);
+  animation: pulse 1.5s ease-in-out infinite;
+}
+
+.record-icon svg {
+  width: 26px;
+  height: 26px;
+  fill: none;
+  stroke: #fff;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.record-icon-stop svg {
+  stroke-width: 0;
+}
+
+.record-icon-stop svg rect {
+  fill: #fff;
+}
+
+@keyframes pulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(255, 255, 255, 0.3); }
+  50% { box-shadow: 0 0 0 10px rgba(255, 255, 255, 0); }
+}
+
+.record-label {
+  font-size: 18px;
+  font-weight: 700;
+}
+
+.record-sub {
+  font-size: 13px;
+  opacity: 0.7;
+  font-weight: 400;
+}
+
+.record-timer {
+  font-size: 24px;
+  font-weight: 800;
+  opacity: 0.9;
+  font-variant-numeric: tabular-nums;
+}
+
+.action-row {
+  display: flex;
+  gap: 10px;
+}
+
+.action-button {
+  flex: 1;
+  min-height: 52px;
   border: 0;
   border-radius: 8px;
   background: #475569;
   color: #fff;
-  font-size: 22px;
+  font-size: 17px;
   font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
   touch-action: manipulation;
+  cursor: pointer;
+}
+
+.action-button svg {
+  fill: none;
+  stroke: #fff;
+  stroke-width: 2.5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  flex-shrink: 0;
+}
+
+.action-button:disabled {
+  background: #7b8790;
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.undo-button {
+  background: #78716c;
+}
+
+.enter-button {
+  background: #475569;
 }
 
 .fallback-button {

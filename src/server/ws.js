@@ -1,5 +1,5 @@
 import { WebSocket, WebSocketServer } from "ws";
-import { pressEnter } from "./input/paste.js";
+import { pressEnter, pressUndo } from "./input/paste.js";
 
 export function createWebSocketHub(server) {
   const wss = new WebSocketServer({ server, path: "/ws" });
@@ -20,6 +20,9 @@ export function createWebSocketHub(server) {
         const payload = JSON.parse(data);
         if (payload.type === "enter") {
           await pressEnter();
+        }
+        if (payload.type === "undo") {
+          await pressUndo();
         }
       } catch {
         // Ignore malformed messages.

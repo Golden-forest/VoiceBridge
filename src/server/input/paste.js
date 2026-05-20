@@ -62,3 +62,33 @@ export async function pressEnter() {
   const { command, args } = getEnterCommand();
   await execFileAsync(command, args, { windowsHide: true });
 }
+
+export function getUndoCommand(platform = process.platform) {
+  if (platform === "darwin") {
+    return {
+      command: "osascript",
+      args: ["-e", 'tell application "System Events" to keystroke "z" using command down']
+    };
+  }
+
+  if (platform === "win32") {
+    return {
+      command: "powershell.exe",
+      args: [
+        "-NoProfile",
+        "-Command",
+        "[System.Windows.Forms.SendKeys]::SendWait('^z')"
+      ]
+    };
+  }
+
+  return {
+    command: "xdotool",
+    args: ["key", "ctrl+z"]
+  };
+}
+
+export async function pressUndo() {
+  const { command, args } = getUndoCommand();
+  await execFileAsync(command, args, { windowsHide: true });
+}
