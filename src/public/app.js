@@ -11,6 +11,241 @@ const iconEl = recordButton.querySelector(".record-icon");
 const labelEl = recordButton.querySelector(".record-label");
 const subEl = recordButton.querySelector(".record-sub");
 
+class PhrasesManager {
+  static STORAGE_KEY = "voicebridge_phrases";
+
+  constructor() {
+    this.el = {
+      drawer: document.querySelector("#phrasesDrawer"),
+      toggle: document.querySelector("#phrasesToggle"),
+      panel: document.querySelector("#phrasesPanel"),
+      list: document.querySelector("#phrasesList"),
+      count: document.querySelector("#phrasesCount"),
+      panelCount: document.querySelector("#phrasesPanelCount"),
+      addBtn: document.querySelector("#phrasesAddBtn"),
+      editDoneBtn: document.querySelector("#phrasesEditDoneBtn"),
+      saveBtn: document.querySelector("#savePhraseBtn"),
+      dialog: document.querySelector("#addPhraseDialog"),
+      dialogOverlay: document.querySelector(".add-phrase-overlay"),
+      dialogInput: document.querySelector("#addPhraseInput"),
+      dialogCancel: document.querySelector("#addPhraseCancelBtn"),
+      dialogConfirm: document.querySelector("#addPhraseConfirmBtn"),
+    };
+    this.editingId = null;
+    this._init();
+  }
+
+  _init() {
+    this.el.toggle.addEventListener("click", () => this._toggle());
+    this.el.addBtn.addEventListener("click", () => this._openAddDialog());
+    this.el.dialogCancel.addEventListener("click", () => this._closeDialog());
+    this.el.dialogOverlay.addEventListener("click", () => this._closeDialog());
+    this.el.dialogConfirm.addEventListener("click", () => this._confirmAdd());
+    this.el.editDoneBtn.addEventListener("click", () => this._exitEditMode());
+    this._render();
+  }
+
+  get _phrases() {
+    try {
+      return JSON.parse(localStorage.getItem(PhrasesManager.STORAGE_KEY)) || [];
+    } catch {
+      return [];
+    }
+  }
+
+  set _phrases(arr) {
+    localStorage.setItem(PhrasesManager.STORAGE_KEY, JSON.stringify(arr));
+  }
+
+  _updateCounts() {
+    const n = this._phrases.length;
+    this.el.count.textContent = `(${n})`;
+    this.el.panelCount.textContent = `(${n})`;
+  }
+
+  _toggle() {
+    this.el.drawer.classList.toggle("open");
+    this.el.panel.classList.toggle("hidden");
+    if (this.el.drawer.classList.contains("open")) {
+      this._exitEditMode();
+    }
+  }
+
+  _render() {
+    const phrases = this._phrases;
+    this._updateCounts();
+    this.el.list.innerHTML = "";
+
+    phrases.forEach((phrase) => {
+      const li = document.createElement("li");
+      li.className = "phrases-item";
+      li.dataset.id = phrase.id;
+
+      const textSpan = document.createElement("span");
+      textSpan.className = "phrases-item-text";
+      textSpan.textContent = phrase.text;
+      li.appendChild(textSpan);
+
+      li.addEventListener("click", (e) => {
+        if (this.editingId) return;
+        this._sendPhrase(phrase.text);
+      });
+
+      let longPressTimer;
+      li.addEventListener("pointerdown", () => {
+        longPressTimer = setTimeout(() => {
+          this._enterEditMode(phrase.id);
+          longPressTimer = null;
+        }, 500);
+      });
+      li.addEventListener("pointerup", () => {
+        if (longPressTimer) clearTimeout(longPressTimer);
+      });
+      li.addEventListener("pointerleave", () => {
+        if (longPressTimer) clearTimeout(longPressTimer);
+      });
+
+      this.el.list.appendChild(li);
+    });
+  }
+
+  _sendPhrase(text) {
+    if (ws && ws.readyState === WebSocket.OPEN) {
+      ws.send(JSON.stringify({
+        type: "phrase",
+        text,
+        autoPaste: autoPasteEl.checked
+      }));
+      setStatus("已发送常用语到电脑。");
+    } else {
+      setStatus("发送失败，请检查连接。", true);
+    }
+  }
+
+  _enterEditMode(editId) {
+    this.editingId = editId;
+    this.el.addBtn.classList.add("hidden");
+    this.el.editDoneBtn.classList.remove("hidden");
+
+    const items = this.el.list.querySelectorAll(".phrases-item");
+    items.forEach((li) => {
+      const id = li.dataset.id;
+      const textSpan = li.querySelector(".phrases-item-text");
+      const phrase = this._phrases.find((p) => p.id === id);
+      if (!phrase) return;
+
+      if (id === editId) {
+        li.classList.add("editing");
+        textSpan.classList.add("hidden");
+        const input = document.createElement("textarea");
+        input.className = "phrases-item-edit-input";
+        input.rows = 2;
+        input.value = phrase.text;
+        li.insertBefore(input, textSpan.nextSibling);
+
+        const deleteBtn = document.createElement("button");
+        deleteBtn.className = "phrases-item-delete";
+        deleteBtn.type = "button";
+        deleteBtn.textContent = "删除";
+        deleteBtn.addEventListener("click", (e) => {
+          e.stopPropagation();
+          this._deletePhrase(id);
+        });
+        li.appendChild(deleteBtn);
+      } else {
+        li.style.opacity = "0.4";
+        li.style.pointerEvents = "none";
+      }
+    });
+  }
+
+  _exitEditMode() {
+    if (!this.editingId) return;
+    this.editingId = null;
+    this.el.addBtn.classList.remove("hidden");
+    this.el.editDoneBtn.classList.add("hidden");
+    this._saveEditChanges();
+    this._render();
+  }
+
+  _saveEditChanges() {
+    const phrases = this._phrases;
+    const editedInput = this.el.list.querySelector(
+      ".phrases-item.editing .phrases-item-edit-input"
+    );
+    if (!editedInput) return;
+
+    const editedId = editedInput.closest(".phrases-item").dataset.id;
+    const newText = editedInput.value.trim();
+    if (!newText) {
+      this._deletePhrase(editedId);
+      return;
+    }
+    const phrase = phrases.find((p) => p.id === editedId);
+    if (phrase) {
+      phrase.text = newText;
+      this._phrases = phrases;
+    }
+  }
+
+  _deletePhrase(id) {
+    const phrases = this._phrases.filter((p) => p.id !== id);
+    this._phrases = phrases;
+    this._render();
+  }
+
+  _openAddDialog() {
+    this.el.dialogInput.value = "";
+    this.el.dialog.classList.remove("hidden");
+    this.el.dialogInput.focus();
+  }
+
+  _closeDialog() {
+    this.el.dialog.classList.add("hidden");
+  }
+
+  _confirmAdd() {
+    const text = this.el.dialogInput.value.trim();
+    if (!text) return;
+    const phrases = this._phrases;
+    phrases.unshift({
+      id: crypto.randomUUID(),
+      text,
+      createdAt: Date.now()
+    });
+    this._phrases = phrases;
+    this._render();
+    this._closeDialog();
+  }
+
+  addPhrase(text) {
+    const exists = this._phrases.some((p) => p.text === text);
+    if (exists) {
+      setStatus("该常用语已存在。");
+      return;
+    }
+    const phrases = this._phrases;
+    phrases.unshift({
+      id: crypto.randomUUID(),
+      text,
+      createdAt: Date.now()
+    });
+    this._phrases = phrases;
+    this._render();
+    setStatus("已收藏为常用语。");
+  }
+
+  showSaveButton() {
+    this.el.saveBtn.classList.remove("hidden");
+  }
+
+  hideSaveButton() {
+    this.el.saveBtn.classList.add("hidden");
+  }
+}
+
+const phrases = new PhrasesManager();
+
 const micSvg = '<svg viewBox="0 0 24 24"><rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 10a7 7 0 0014 0"/><line x1="12" y1="19" x2="12" y2="22"/></svg>';
 const stopSvg = '<svg viewBox="0 0 24 24"><rect x="6" y="6" width="12" height="12" rx="2"/></svg>';
 
@@ -40,6 +275,15 @@ enterButton.addEventListener("click", () => {
 undoButton.addEventListener("click", () => {
   if (ws && ws.readyState === WebSocket.OPEN) {
     ws.send(JSON.stringify({ type: "undo" }));
+  }
+});
+
+phrases.el.saveBtn.addEventListener("click", () => {
+  const text = resultEl.textContent.trim();
+  if (text && text !== "等待录音" && text !== "没有识别到文字") {
+    phrases.addPhrase(text);
+    phrases.el.saveBtn.textContent = "已收藏 ✓";
+    phrases.el.saveBtn.classList.add("saved");
   }
 });
 
@@ -180,6 +424,9 @@ async function uploadAudio(blob, extension) {
     } else {
       setStatus("已复制到电脑剪切板。");
     }
+    phrases.showSaveButton();
+    phrases.el.saveBtn.classList.remove("saved");
+    phrases.el.saveBtn.innerHTML = '<svg viewBox="0 0 24 24" width="16" height="16"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg> 收藏为常用语';
   } catch (error) {
     setStatus(error.message, true);
   } finally {

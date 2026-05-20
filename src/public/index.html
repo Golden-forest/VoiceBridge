@@ -44,13 +44,46 @@
         </button>
         <input id="fallbackFile" class="hidden" type="file" accept="audio/*" capture />
 
+        <div id="phrasesDrawer" class="phrases-drawer">
+          <button id="phrasesToggle" class="phrases-toggle" type="button">
+            <span id="phrasesToggleIcon">▶</span>
+            常用语 <span id="phrasesCount">(0)</span>
+          </button>
+          <div id="phrasesPanel" class="phrases-panel hidden">
+            <div class="phrases-header">
+              <span>常用语 <span id="phrasesPanelCount">(0)</span></span>
+              <div class="phrases-header-actions">
+                <button id="phrasesAddBtn" class="phrases-add-btn" type="button">+ 新增</button>
+                <button id="phrasesEditDoneBtn" class="phrases-edit-done-btn hidden" type="button">完成</button>
+              </div>
+            </div>
+            <ul id="phrasesList" class="phrases-list"></ul>
+          </div>
+        </div>
+
         <section class="result">
           <div class="result-label">识别结果</div>
           <p id="resultText">等待录音</p>
+          <button id="savePhraseBtn" class="save-phrase-btn hidden" type="button">
+            <svg viewBox="0 0 24 24" width="16" height="16"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            收藏为常用语
+          </button>
         </section>
       </section>
     </main>
 
     <script src="/app.js" type="module"></script>
+
+    <div id="addPhraseDialog" class="add-phrase-dialog hidden">
+      <div class="add-phrase-overlay"></div>
+      <div class="add-phrase-content">
+        <h3>新增常用语</h3>
+        <textarea id="addPhraseInput" class="add-phrase-input" rows="3" placeholder="输入常用语内容…"></textarea>
+        <div class="add-phrase-actions">
+          <button id="addPhraseCancelBtn" class="add-phrase-cancel-btn" type="button">取消</button>
+          <button id="addPhraseConfirmBtn" class="add-phrase-confirm-btn" type="button">保存</button>
+        </div>
+      </div>
+    </div>
   </body>
 </html>
