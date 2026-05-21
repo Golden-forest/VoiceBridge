@@ -13,6 +13,7 @@ import { getLocalIp } from "./network/getLocalIp.js";
 import { createUploadRouter } from "./routes/upload.js";
 import { createWebSocketHub } from "./ws.js";
 import { ensureCertificates } from "./certs.js";
+import { listWindows } from "./input/windowManager.js";
 
 dotenv.config();
 
@@ -42,6 +43,14 @@ app.get("/api/health", (_req, res) => {
     tencentAsrEngServiceType: config.tencentAsrEngServiceType,
     hasTencentCredentials: Boolean(config.tencentSecretId && config.tencentSecretKey)
   });
+});
+app.get("/api/windows", async (_req, res) => {
+  try {
+    const windows = await listWindows();
+    res.json({ ok: true, windows });
+  } catch {
+    res.json({ ok: true, windows: [] });
+  }
 });
 app.use("/api", createUploadRouter({ config, wsHub, tmpDir }));
 

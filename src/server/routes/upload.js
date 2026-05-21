@@ -35,6 +35,9 @@ export function createUploadRouter({ config, wsHub, tmpDir }) {
       }
 
       const autoPaste = resolveAutoPaste(req.body.autoPaste, config.autoPaste);
+      const targetWindow = (req.body.targetAppName && req.body.targetWindowTitle)
+        ? { appName: req.body.targetAppName, windowTitle: req.body.targetWindowTitle }
+        : null;
       wsHub.broadcast({
         type: "status",
         status: "transcribing",
@@ -49,7 +52,7 @@ export function createUploadRouter({ config, wsHub, tmpDir }) {
         message: "识别完成"
       });
 
-      const output = await outputText(text, { autoPaste });
+      const output = await outputText(text, { autoPaste, targetWindow });
 
       wsHub.broadcast({
         type: "output",

@@ -27,7 +27,8 @@ export function createWebSocketHub(server) {
         }
         if (payload.type === "phrase" && typeof payload.text === "string") {
           const result = await outputText(payload.text, {
-            autoPaste: Boolean(payload.autoPaste)
+            autoPaste: Boolean(payload.autoPaste),
+            targetWindow: payload.targetWindow || null
           });
           broadcast({ type: "output", ...result });
         }
