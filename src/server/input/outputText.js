@@ -5,9 +5,29 @@ export async function outputText(
     pasteDelayMs = 120,
     clipboardWriter = defaultClipboardWriter,
     pasteFn = defaultPasteFn,
+    targetWindow = null,
+    activateWindowFn = defaultActivateWindowFn,
     logger = console
   } = {}
 ) {
+  // If autoPaste with a target window, activate first so clipboard write
+  // happens while the correct window is becoming active.
+  if (autoPaste && targetWindow && targetWindow.appName) {
+    try {
+      const activateResult = await activateWindowFn(
+        targetWindow.appName,
+        targetWindow.windowTitle
+      );
+      if (!activateResult.success) {
+        logger.warn?.(`Window activation failed: ${activateResult.error}`);
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      logger.warn?.(`Window activation error: ${message}`);
+    }
+    await delay(200);
+  }
+
   await clipboardWriter(text);
 
   if (!autoPaste) {
@@ -53,4 +73,9 @@ async function defaultClipboardWriter(text) {
 async function defaultPasteFn() {
   const { pasteClipboard } = await import("./paste.js");
   await pasteClipboard();
+}
+
+async function defaultActivateWindowFn(appName, windowTitle) {
+  const { activateWindow } = await import("./windowManager.js");
+  return activateWindow(appName, windowTitle);
 }
