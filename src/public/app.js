@@ -11,6 +11,160 @@ const iconEl = recordButton.querySelector(".record-icon");
 const labelEl = recordButton.querySelector(".record-label");
 const subEl = recordButton.querySelector(".record-sub");
 
+class WindowSelector {
+  static STORAGE_KEY = "voicebridge_selected_window";
+
+  constructor() {
+    this.el = {
+      btn: document.querySelector("#windowBtn"),
+      btnLabel: document.querySelector("#windowBtnLabel"),
+      dropdown: document.querySelector("#windowDropdown"),
+      list: document.querySelector("#windowList"),
+      refreshBtn: document.querySelector("#windowRefreshBtn")
+    };
+    this.selectedWindow = this._loadSelection();
+    this._isOpen = false;
+    this._init();
+  }
+
+  _init() {
+    this.el.btn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      this._toggle();
+    });
+    this.el.refreshBtn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      this._fetchWindows();
+    });
+    document.addEventListener("click", (e) => {
+      if (this._isOpen && !this.el.dropdown.contains(e.target)) {
+        this._close();
+      }
+    });
+    this._updateButton();
+  }
+
+  get targetWindow() {
+    return this.selectedWindow;
+  }
+
+  _loadSelection() {
+    try {
+      return JSON.parse(localStorage.getItem(WindowSelector.STORAGE_KEY));
+    } catch {
+      return null;
+    }
+  }
+
+  _saveSelection() {
+    if (this.selectedWindow) {
+      localStorage.setItem(WindowSelector.STORAGE_KEY, JSON.stringify(this.selectedWindow));
+    } else {
+      localStorage.removeItem(WindowSelector.STORAGE_KEY);
+    }
+  }
+
+  _toggle() {
+    if (this._isOpen) {
+      this._close();
+    } else {
+      this._open();
+    }
+  }
+
+  _open() {
+    this._isOpen = true;
+    this.el.dropdown.classList.remove("hidden");
+    this._fetchWindows();
+  }
+
+  _close() {
+    this._isOpen = false;
+    this.el.dropdown.classList.add("hidden");
+  }
+
+  _updateButton() {
+    if (this.selectedWindow) {
+      this.el.btnLabel.textContent = this.selectedWindow.appName;
+      this.el.btn.classList.add("active");
+    } else {
+      this.el.btnLabel.textContent = "光标位置";
+      this.el.btn.classList.remove("active");
+    }
+  }
+
+  async _fetchWindows() {
+    this.el.list.innerHTML = '<p class="window-list-loading">加载中…</p>';
+    try {
+      const res = await fetch("/api/windows");
+      const data = await res.json();
+      if (!data.ok || !data.windows || data.windows.length === 0) {
+        this.el.list.innerHTML = '<p class="window-list-empty">没有找到可输入的窗口</p>';
+        return;
+      }
+      this._renderWindows(data.windows);
+    } catch {
+      this.el.list.innerHTML = '<p class="window-list-empty">获取窗口失败</p>';
+    }
+  }
+
+  _renderWindows(groups) {
+    this.el.list.innerHTML = "";
+    groups.forEach((group) => {
+      const groupEl = document.createElement("div");
+      groupEl.className = "window-app-group";
+
+      const label = document.createElement("div");
+      label.className = "window-app-label";
+      label.textContent = group.appName;
+      groupEl.appendChild(label);
+
+      group.windows.forEach((win) => {
+        const btn = document.createElement("button");
+        btn.className = "window-item";
+        btn.type = "button";
+
+        const isSelected = this.selectedWindow
+          && this.selectedWindow.appName === group.appName
+          && this.selectedWindow.windowTitle === win.title;
+
+        if (isSelected) {
+          btn.classList.add("selected");
+        }
+
+        const check = document.createElement("span");
+        check.className = "window-item-check";
+        check.textContent = isSelected ? "✓" : "";
+        btn.appendChild(check);
+
+        const title = document.createElement("span");
+        title.className = "window-item-title";
+        title.textContent = win.title;
+        btn.appendChild(title);
+
+        btn.addEventListener("click", (e) => {
+          e.stopPropagation();
+          if (isSelected) {
+            this.selectedWindow = null;
+          } else {
+            this.selectedWindow = {
+              appName: group.appName,
+              windowTitle: win.title
+            };
+          }
+          this._saveSelection();
+          this._updateButton();
+          this._close();
+        });
+
+        groupEl.appendChild(btn);
+      });
+
+      this.el.list.appendChild(groupEl);
+    });
+  }
+}
+
 class PhrasesManager {
   static STORAGE_KEY = "voicebridge_phrases";
 
@@ -111,11 +265,15 @@ class PhrasesManager {
 
   _sendPhrase(text) {
     if (ws && ws.readyState === WebSocket.OPEN) {
-      ws.send(JSON.stringify({
+      const msg = {
         type: "phrase",
         text,
         autoPaste: autoPasteEl.checked
-      }));
+      };
+      if (windowSelector.targetWindow) {
+        msg.targetWindow = windowSelector.targetWindow;
+      }
+      ws.send(JSON.stringify(msg));
       setStatus("已发送常用语到电脑。");
     } else {
       setStatus("发送失败，请检查连接。", true);
@@ -245,6 +403,7 @@ class PhrasesManager {
 }
 
 const phrases = new PhrasesManager();
+const windowSelector = new WindowSelector();
 
 // Quick bar wiring
 const quickBar = document.querySelector("#quickBar");
@@ -262,11 +421,15 @@ quickPanel.addEventListener("click", (e) => {
   const text = btn.dataset.text;
   if (!text) return;
   if (ws && ws.readyState === WebSocket.OPEN) {
-    ws.send(JSON.stringify({
+    const msg = {
       type: "phrase",
       text,
       autoPaste: autoPasteEl.checked
-    }));
+    };
+    if (windowSelector.targetWindow) {
+      msg.targetWindow = windowSelector.targetWindow;
+    }
+    ws.send(JSON.stringify(msg));
     setStatus("已发送快捷指令。");
   } else {
     setStatus("发送失败，请检查连接。", true);
@@ -433,6 +596,10 @@ async function uploadAudio(blob, extension) {
     const formData = new FormData();
     formData.append("audio", blob, `voicebridge.${extension}`);
     formData.append("autoPaste", String(autoPasteEl.checked));
+    if (windowSelector.targetWindow) {
+      formData.append("targetAppName", windowSelector.targetWindow.appName);
+      formData.append("targetWindowTitle", windowSelector.targetWindow.windowTitle);
+    }
 
     const response = await fetch("/api/upload", {
       method: "POST",
