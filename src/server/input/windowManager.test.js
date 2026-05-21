@@ -20,7 +20,7 @@ const mockExecFile = async (cmd, args, opts) => {
   return originalExecFile(cmd, args, opts);
 };
 
-import { listWindows } from "./windowManager.js";
+import { listWindows, activateWindow } from "./windowManager.js";
 
 test.beforeEach(() => {
   osascriptScript = "";
@@ -79,11 +79,36 @@ test("listWindows returns empty array on AppleScript error", async () => {
 
 test("listWindows handles window titles with double quotes", async () => {
   osascriptResult = `{
-    "Chrome": ["He said \\"hello\\""],
+    "Chrome": ["He said \\"hello\\"\"],
     "VS Code": ["project"]
   }`;
 
   const result = await listWindows({ execFileAsync: mockExecFile });
   assert.equal(result.length, 2);
   assert.equal(result[0].windows[0].title, `He said "hello"`);
+});
+
+test("activateWindow returns success false on non-macOS", async () => {
+  const result = await activateWindow("Chrome", "GitHub", { execFileAsync: mockExecFile, platform: "linux" });
+  assert.equal(result.success, false);
+  assert.match(result.error, /macOS/);
+});
+
+test("activateWindow calls osascript with correct app and window", async () => {
+  osascriptResult = "";
+  const result = await activateWindow("Chrome", "GitHub", { execFileAsync: mockExecFile });
+  assert.equal(result.success, true);
+  assert.ok(osascriptScript.includes("Chrome"));
+  assert.ok(osascriptScript.includes("GitHub"));
+});
+
+test("activateWindow returns failure on error", async () => {
+  osascriptError = new Error("window not found");
+  const warns = [];
+  const result = await activateWindow("NoApp", "NoWindow", {
+    execFileAsync: mockExecFile,
+    logger: { warn: (msg) => warns.push(msg) }
+  });
+  assert.equal(result.success, false);
+  assert.ok(warns.length > 0);
 });
