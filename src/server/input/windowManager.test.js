@@ -8,14 +8,14 @@ const originalExecFile = promisify(execFile);
 
 // Stub state
 let osascriptScript = "";
-let osascriptResult = "";
+let osascriptStderr = "";
 let osascriptError = null;
 
 const mockExecFile = async (cmd, args, opts) => {
   if (cmd === "osascript") {
     osascriptScript = args[args.length - 1];
     if (osascriptError) throw osascriptError;
-    return { stdout: osascriptResult, stderr: "" };
+    return { stdout: "", stderr: osascriptStderr };
   }
   return originalExecFile(cmd, args, opts);
 };
@@ -24,7 +24,7 @@ import { listWindows, activateWindow } from "./windowManager.js";
 
 test.beforeEach(() => {
   osascriptScript = "";
-  osascriptResult = "";
+  osascriptStderr = "";
   osascriptError = null;
 });
 
@@ -33,12 +33,14 @@ test("listWindows returns empty array on non-macOS", async () => {
   assert.deepEqual(result, []);
 });
 
-test("listWindows parses AppleScript output into grouped structure", async () => {
-  osascriptResult = `{
-    "Chrome": ["GitHub - Pull Requests", "ChatGPT"],
-    "VS Code": ["VoiceBridge - app.js"],
-    "微信": ["文件传输助手"]
-  }`;
+test("listWindows parses tab-delimited stderr into grouped structure", async () => {
+  // osascript log output goes to stderr, format: "appName\twindowTitle"
+  osascriptStderr = [
+    "Chrome\tGitHub - Pull Requests",
+    "Chrome\tChatGPT",
+    "VS Code\tVoiceBridge - app.js",
+    "微信\t文件传输助手"
+  ].join("\n");
 
   const result = await listWindows({ execFileAsync: mockExecFile });
   assert.equal(result.length, 3);
@@ -50,25 +52,22 @@ test("listWindows parses AppleScript output into grouped structure", async () =>
 });
 
 test("listWindows filters out VoiceBridge itself", async () => {
-  osascriptResult = `{
-    "VoiceBridge": ["Terminal"],
-    "Chrome": ["GitHub"]
-  }`;
+  osascriptStderr = [
+    "VoiceBridge\tTerminal",
+    "Chrome\tGitHub"
+  ].join("\n");
 
   const result = await listWindows({ execFileAsync: mockExecFile });
   assert.equal(result.length, 1);
   assert.equal(result[0].appName, "Chrome");
 });
 
-test("listWindows filters out apps with no windows", async () => {
-  osascriptResult = `{
-    "Chrome": [],
-    "VS Code": ["project"]
-  }`;
+test("listWindows ignores lines without tabs", async () => {
+  osascriptStderr = "some debug output without tabs\nChrome\tGitHub";
 
   const result = await listWindows({ execFileAsync: mockExecFile });
   assert.equal(result.length, 1);
-  assert.equal(result[0].appName, "VS Code");
+  assert.equal(result[0].appName, "Chrome");
 });
 
 test("listWindows returns empty array on AppleScript error", async () => {
@@ -77,15 +76,15 @@ test("listWindows returns empty array on AppleScript error", async () => {
   assert.deepEqual(result, []);
 });
 
-test("listWindows handles window titles with double quotes", async () => {
-  osascriptResult = `{
-    "Chrome": ["He said \\"hello\\"\"],
-    "VS Code": ["project"]
-  }`;
+test("listWindows handles window titles with special characters", async () => {
+  osascriptStderr = [
+    'Chrome\tHe said "hello"',
+    "VS Code\tproject"
+  ].join("\n");
 
   const result = await listWindows({ execFileAsync: mockExecFile });
   assert.equal(result.length, 2);
-  assert.equal(result[0].windows[0].title, `He said "hello"`);
+  assert.equal(result[0].windows[0].title, 'He said "hello"');
 });
 
 test("activateWindow returns success false on non-macOS", async () => {
@@ -95,7 +94,6 @@ test("activateWindow returns success false on non-macOS", async () => {
 });
 
 test("activateWindow calls osascript with correct app and window", async () => {
-  osascriptResult = "";
   const result = await activateWindow("Chrome", "GitHub", { execFileAsync: mockExecFile });
   assert.equal(result.success, true);
   assert.ok(osascriptScript.includes("Chrome"));

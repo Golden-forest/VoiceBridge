@@ -3,50 +3,21 @@ import { promisify } from "node:util";
 
 const execFileAsync = promisify(execFile);
 
-const APPLE_SCRIPT_LIST = `
-tell application "System Events"
-  set output to "{"
-  set appList to name of every process whose visible is true
-  set appCount to count of appList
-  repeat with i from 1 to appCount
-    set appName to item i of appList
-    try
-      tell process appName
-        set winNames to name of every window
-        if (count of winNames) > 0 then
-          if output ≠ "{" then set output to output & ", "
-          set escapedApp to my replaceChars(appName)
-          set output to output & "\"" & escapedApp & "\": ["
-          repeat with j from 1 to count of winNames
-            if j > 1 then set output to output & ", "
-            set escapedWin to my replaceChars(item j of winNames)
-            set output to output & "\"" & escapedWin & "\""
-          end repeat
-          set output to output & "]"
-        end if
-      end tell
-    end try
-  end repeat
-  set output to output & "}"
-end tell
-return output
-
-on replaceChars(txt)
-  set txt to my replaceStr(txt, "\\", "\\\\")
-  set txt to my replaceStr(txt, "\"", "\\\"")
-  return txt
-end replaceChars
-
-on replaceStr(txt, old, newStr)
-  set tid to AppleScript's text item delimiters
-  set AppleScript's text item delimiters to old
-  set txtItems to text items of txt
-  set AppleScript's text item delimiters to newStr
-  set txt to txtItems as text
-  set AppleScript's text item delimiters to tid
-  return txt
-end replaceStr
-`.trim();
+const APPLE_SCRIPT_LIST = `tell application "System Events"
+	set appList to name of every process whose visible is true
+	set appCount to count of appList
+	repeat with i from 1 to appCount
+		set appName to item i of appList
+		try
+			tell process appName
+				set winNames to name of every window
+				repeat with j from 1 to count of winNames
+					log appName & "\\t" & item j of winNames
+				end repeat
+			end tell
+		end try
+	end repeat
+end tell`.trim();
 
 export async function listWindows({ execFileAsync: execAsync = execFileAsync, platform = process.platform } = {}) {
   if (platform !== "darwin") {
@@ -54,24 +25,31 @@ export async function listWindows({ execFileAsync: execAsync = execFileAsync, pl
   }
 
   try {
-    const { stdout } = await execAsync("osascript", ["-e", APPLE_SCRIPT_LIST], {
+    const { stderr } = await execAsync("osascript", ["-e", APPLE_SCRIPT_LIST], {
       timeout: 3000,
       windowsHide: true
     });
 
-    const parsed = JSON.parse(stdout.trim());
+    // osascript log output goes to stderr, format: "appName: \\twindowTitle"
+    const lines = stderr.split("\n").filter((l) => l.includes("\t"));
     const SKIP_APPS = ["VoiceBridge"];
 
-    return Object.entries(parsed)
-      .filter(([appName, windows]) => {
-        if (!SKIP_APPS.some((skip) => appName.includes(skip))) return true;
-        return false;
-      })
-      .filter(([, windows]) => windows && windows.length > 0)
-      .map(([appName, windows]) => ({
-        appName,
-        windows: windows.map((title, index) => ({ title, index: index + 1 }))
-      }));
+    const grouped = new Map();
+    for (const line of lines) {
+      const sep = line.indexOf("\t");
+      if (sep === -1) continue;
+      const appName = line.slice(0, sep).trim();
+      const winTitle = line.slice(sep + 1).trim();
+      if (SKIP_APPS.some((skip) => appName.includes(skip))) continue;
+      if (!winTitle) continue;
+      if (!grouped.has(appName)) grouped.set(appName, []);
+      grouped.get(appName).push(winTitle);
+    }
+
+    return Array.from(grouped.entries()).map(([appName, windows]) => ({
+      appName,
+      windows: windows.map((title, index) => ({ title, index: index + 1 }))
+    }));
   } catch {
     return [];
   }
