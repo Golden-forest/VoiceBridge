@@ -10,7 +10,21 @@
     <main class="shell">
       <section class="panel">
         <header>
-          <p class="eyebrow">VoiceBridge</p>
+          <div class="header-row">
+            <p class="eyebrow">VoiceBridge</p>
+            <div class="window-selector">
+              <button id="windowBtn" class="window-btn" type="button">
+                <span id="windowBtnLabel">光标位置</span>
+                <span class="window-btn-arrow">&#x25BE;</span>
+              </button>
+              <div id="windowDropdown" class="window-dropdown hidden">
+                <div id="windowList" class="window-list">
+                  <p class="window-list-loading">加载中…</p>
+                </div>
+                <button id="windowRefreshBtn" class="window-refresh-btn" type="button">刷新</button>
+              </div>
+            </div>
+          </div>
           <h1>语音输入</h1>
           <p id="status" class="status">正在连接电脑端...</p>
         </header>
