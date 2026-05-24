@@ -228,11 +228,32 @@ h1 {
   font-weight: 700;
 }
 
-#resultText {
+.text-input {
+  width: 100%;
   margin: 8px 0 0;
   min-height: 72px;
+  max-height: 140px;
+  padding: 8px 10px;
+  border: 2px solid #d7dbd8;
+  border-radius: 8px;
+  background: #fffef5;
+  font-size: 15px;
+  font-family: inherit;
   line-height: 1.6;
   word-break: break-word;
+  resize: none;
+  overflow-y: auto;
+  transition: border-color 0.15s;
+  color: inherit;
+}
+
+.text-input:focus {
+  outline: none;
+  border-color: #176b87;
+}
+
+.text-input::placeholder {
+  color: #9aa6ac;
 }
 
 /* Quick bar */
@@ -873,5 +894,19 @@ h1 {
   .window-refresh-btn:hover {
     background: #2b353a;
     color: #b5c0c7;
+  }
+
+  .text-input {
+    background: #1e282d;
+    border-color: #3b454a;
+    color: #f4f4f0;
+  }
+
+  .text-input:focus {
+    border-color: #176b87;
+  }
+
+  .text-input::placeholder {
+    color: #6a7a85;
   }
 }
