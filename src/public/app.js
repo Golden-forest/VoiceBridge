@@ -47,19 +47,6 @@ function sendTextInput() {
   }
 }
 
-function appendToTextInput(text) {
-  if (!text) return;
-  const current = textInput.value;
-  if (!current.trim()) {
-    textInput.value = text;
-  } else {
-    const lastChar = current.trimEnd().slice(-1);
-    const separator = /[，。！？、；：\.\!\?\,\;\:]$/.test(lastChar) ? " " : "";
-    textInput.value = current.trimEnd() + separator + text;
-  }
-  textInput.scrollTop = textInput.scrollHeight;
-}
-
 // === Record Button ===
 const recordButton = document.querySelector("#recordButton");
 const enterButton = document.querySelector("#enterButton");
