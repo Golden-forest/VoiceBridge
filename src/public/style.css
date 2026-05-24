@@ -782,3 +782,68 @@ body {
   background: var(--muted);
   cursor: not-allowed;
 }
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg-page: #1a1918;
+    --bg-card: #2a2928;
+    --bg-input: #2a2928;
+    --bg-tag: #252423;
+    --bg-collapse: #252423;
+    --bg-collapse-header: #2f2e2c;
+
+    --text-primary: #f4f4f0;
+    --text-secondary: #a8a29e;
+    --text-muted: #78716c;
+    --text-placeholder: #78716c;
+
+    --border: #3b3938;
+    --border-focus: #22c55e;
+
+    --accent: #22c55e;
+    --accent-text: #052e16;
+    --danger: #ef4444;
+    --danger-text: #ffffff;
+    --muted: #57534e;
+    --muted-text: #ffffff;
+
+    --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.2);
+  }
+
+  .status-dot.connected { background: #22c55e; }
+  .status-dot.error { background: #ef4444; }
+
+  .window-btn { background: var(--bg-card); }
+  .window-btn.active { background: #052e16; }
+
+  .window-dropdown {
+    background: var(--bg-card);
+    border-color: var(--border);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+  }
+
+  .window-item { color: var(--text-primary); }
+  .window-item:hover { background: var(--bg-tag); }
+  .window-item.selected { background: #052e16; color: #22c55e; }
+
+  .recent-tag { background: var(--bg-card); }
+
+  .text-input { background: var(--bg-input); }
+  .text-input::placeholder { color: var(--text-placeholder); }
+
+  .action-btn { background: var(--bg-card); color: var(--text-muted); }
+
+  .phrases-item { color: var(--text-primary); border-bottom-color: var(--bg-tag); }
+  .phrases-item:active { background: var(--bg-tag); }
+  .phrases-item.editing { background: #2a2510; }
+  .phrases-item-edit-input { background: var(--bg-card); border-color: var(--border); color: var(--text-primary); }
+
+  .phrases-item-delete:hover { background: #3b1515; }
+
+  .add-phrase-content { background: var(--bg-card); }
+  .add-phrase-content h3 { color: var(--text-primary); }
+  .add-phrase-input { background: var(--bg-page); border-color: var(--border); color: var(--text-primary); }
+  .add-phrase-cancel-btn { background: var(--bg-card); border-color: var(--border); color: var(--text-secondary); }
+
+  .toggle-thumb { box-shadow: 0 1px 2px rgba(0, 0, 0, 0.3); }
+}
