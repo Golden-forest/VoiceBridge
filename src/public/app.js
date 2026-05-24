@@ -1,5 +1,55 @@
 const statusEl = document.querySelector("#status");
-const resultEl = document.querySelector("#resultText");
+const textInput = document.querySelector("#textInput");
+
+textInput.addEventListener("input", () => {
+  if (textInput.value.trim()) {
+    phrases.showSaveButton();
+  } else {
+    phrases.hideSaveButton();
+  }
+});
+
+textInput.addEventListener("keydown", (e) => {
+  if (e.key === "Enter" && !e.shiftKey) {
+    e.preventDefault();
+    sendTextInput();
+  }
+});
+
+function sendTextInput() {
+  const text = textInput.value.trim();
+  if (!text) return;
+  if (ws && ws.readyState === WebSocket.OPEN) {
+    const msg = {
+      type: "phrase",
+      text,
+      autoPaste: autoPasteEl.checked
+    };
+    if (windowSelector.targetWindow) {
+      msg.targetWindow = windowSelector.targetWindow;
+    }
+    ws.send(JSON.stringify(msg));
+    textInput.value = "";
+    phrases.hideSaveButton();
+    setStatus("已发送到电脑。");
+  } else {
+    setStatus("发送失败，请检查连接。", true);
+  }
+}
+
+function appendToTextInput(text) {
+  if (!text) return;
+  const current = textInput.value;
+  if (!current.trim()) {
+    textInput.value = text;
+  } else {
+    const lastChar = current.trimEnd().slice(-1);
+    const separator = /[，。！？、；：\.\!\?\,\;\:]$/.test(lastChar) ? " " : "";
+    textInput.value = current.trimEnd() + separator + text;
+  }
+  textInput.scrollTop = textInput.scrollHeight;
+}
+
 const recordButton = document.querySelector("#recordButton");
 const enterButton = document.querySelector("#enterButton");
 const undoButton = document.querySelector("#undoButton");
@@ -469,8 +519,8 @@ undoButton.addEventListener("click", () => {
 });
 
 phrases.el.saveBtn.addEventListener("click", () => {
-  const text = resultEl.textContent.trim();
-  if (text && text !== "等待录音" && text !== "没有识别到文字") {
+  const text = textInput.value.trim();
+  if (text) {
     phrases.addPhrase(text);
     phrases.el.saveBtn.textContent = "已收藏 ✓";
     phrases.el.saveBtn.classList.add("saved");
@@ -611,16 +661,13 @@ async function uploadAudio(blob, extension) {
       throw new Error(payload.error || "上传失败");
     }
 
-    resultEl.textContent = payload.text || "没有识别到文字";
+    appendToTextInput(payload.text || "");
     const output = payload.output || {};
     if (output.pasted) {
       setStatus("已复制并自动粘贴。");
     } else {
       setStatus("已复制到电脑剪切板。");
     }
-    phrases.showSaveButton();
-    phrases.el.saveBtn.classList.remove("saved");
-    phrases.el.saveBtn.innerHTML = '<svg viewBox="0 0 24 24" width="16" height="16"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg> 收藏为常用语';
   } catch (error) {
     setStatus(error.message, true);
   } finally {
@@ -644,7 +691,10 @@ function connectWebSocket() {
     try {
       const payload = JSON.parse(event.data);
       if (payload.type === "result" && payload.text) {
-        resultEl.textContent = payload.text;
+        appendToTextInput(payload.text);
+        phrases.showSaveButton();
+        phrases.el.saveBtn.classList.remove("saved");
+        phrases.el.saveBtn.innerHTML = '<svg viewBox="0 0 24 24" width="16" height="16"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg> 收藏为常用语';
       }
       if (payload.message) {
         setStatus(payload.message, payload.type === "error");
