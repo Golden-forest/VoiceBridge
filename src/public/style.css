@@ -84,7 +84,8 @@ body {
   height: 10px;
   border-radius: 50%;
   border: none;
-  padding: 0;
+  padding: 17px;
+  margin: -17px;
   cursor: pointer;
   transition: background 0.2s;
   flex-shrink: 0;
@@ -123,11 +124,13 @@ body {
   z-index: 200;
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
   pointer-events: none;
+  visibility: hidden;
   opacity: 0;
-  transition: opacity 0.2s;
+  transition: opacity 0.25s, visibility 0.25s;
 }
 
-.toast:not(.hidden) {
+.toast.show {
+  visibility: visible;
   opacity: 1;
 }
 
@@ -270,7 +273,7 @@ body {
 }
 
 .recent-tag {
-  padding: 4px 8px;
+  padding: 6px 10px;
   border: 1px solid var(--border);
   border-radius: var(--radius-tag);
   background: var(--bg-card);
@@ -285,6 +288,7 @@ body {
   text-overflow: ellipsis;
   white-space: nowrap;
   box-shadow: var(--shadow-sm);
+  min-height: 32px;
 }
 
 .recent-tag:active {
@@ -447,7 +451,7 @@ body {
 
 .collapse-toggle {
   width: 100%;
-  min-height: 32px;
+  min-height: 44px;
   border: 0;
   border-radius: var(--radius-sm);
   background: var(--bg-collapse);
@@ -591,6 +595,7 @@ body {
   cursor: default;
   background: #fffde8;
   border-left: 3px solid #eab308;
+  --editing-border: #ca8a04;
 }
 
 .phrases-item-text {
@@ -835,7 +840,7 @@ body {
 
   .phrases-item { color: var(--text-primary); border-bottom-color: var(--bg-tag); }
   .phrases-item:active { background: var(--bg-tag); }
-  .phrases-item.editing { background: #2a2510; }
+  .phrases-item.editing { background: #2a2510; border-left-color: var(--editing-border, #ca8a04); }
   .phrases-item-edit-input { background: var(--bg-card); border-color: var(--border); color: var(--text-primary); }
 
   .phrases-item-delete:hover { background: #3b1515; }

@@ -30,9 +30,7 @@
         </div>
 
         <!-- 最近指令 -->
-        <div id="recentBar" class="recent-bar hidden">
-          <button class="recent-tag" data-text="" type="button"></button>
-        </div>
+        <div id="recentBar" class="recent-bar hidden"></div>
 
         <!-- 文本输入 -->
         <textarea id="textInput" class="text-input" placeholder="输入文字，或语音识别…" enterkeyhint="send" rows="2"></textarea>
@@ -154,7 +152,7 @@
     </main>
 
     <!-- Toast -->
-    <div id="toast" class="toast hidden"></div>
+    <div id="toast" class="toast" role="status" aria-live="polite"></div>
 
     <script src="/app.js" type="module"></script>
 

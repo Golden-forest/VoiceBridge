@@ -11,8 +11,8 @@ function showToast(message, isError = false) {
   clearTimeout(toastTimer);
   toastEl.textContent = message;
   toastEl.classList.toggle("error", isError);
-  toastEl.classList.remove("hidden");
-  toastTimer = setTimeout(() => toastEl.classList.add("hidden"), 2500);
+  toastEl.classList.add("show");
+  toastTimer = setTimeout(() => toastEl.classList.remove("show"), 2500);
 }
 
 // === Status Dot ===
@@ -46,6 +46,9 @@ function sendTextInput() {
     showToast("发送失败，请检查连接。", true);
   }
 }
+
+// === SVG Icons ===
+const starSvg = '<svg viewBox="0 0 24 24" width="14" height="14"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>';
 
 // === Record Button ===
 const recordButton = document.querySelector("#recordButton");
@@ -439,7 +442,7 @@ phrases.el.saveBtn.addEventListener("click", () => {
   const text = textInput.value.trim();
   if (text) {
     phrases.addPhrase(text);
-    phrases.el.saveBtn.innerHTML = '<svg viewBox="0 0 24 24" width="14" height="14"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg> 已收藏 ✓';
+    phrases.el.saveBtn.innerHTML = starSvg + ' 已收藏 ✓';
     phrases.el.saveBtn.classList.add("saved");
   }
 });
@@ -591,7 +594,7 @@ function connectWebSocket() {
         textInput.value = payload.text;
         phrases.showSaveButton();
         phrases.el.saveBtn.classList.remove("saved");
-        phrases.el.saveBtn.innerHTML = '<svg viewBox="0 0 24 24" width="14" height="14"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg> 收藏';
+        phrases.el.saveBtn.innerHTML = starSvg + ' 收藏';
       }
       if (payload.message) {
         showToast(payload.message, payload.type === "error");
@@ -603,7 +606,8 @@ function connectWebSocket() {
       // Ignore malformed messages
     }
   });
-  ws.addEventListener("close", () => {
+  ws.addEventListener("close", (event) => {
+    if (event.code === 1000) return; // Normal closure, no reconnect
     setConnectionStatus("error", "连接已断开，正在重连...");
     setTimeout(connectWebSocket, 1500);
   });
