@@ -1,21 +1,6 @@
 const statusEl = document.querySelector("#status");
 const textInput = document.querySelector("#textInput");
 
-textInput.addEventListener("input", () => {
-  if (textInput.value.trim()) {
-    phrases.showSaveButton();
-  } else {
-    phrases.hideSaveButton();
-  }
-});
-
-textInput.addEventListener("keydown", (e) => {
-  if (e.key === "Enter" && !e.shiftKey) {
-    e.preventDefault();
-    sendTextInput();
-  }
-});
-
 function sendTextInput() {
   const text = textInput.value.trim();
   if (!text) return;
@@ -454,6 +439,21 @@ class PhrasesManager {
 
 const phrases = new PhrasesManager();
 const windowSelector = new WindowSelector();
+
+textInput.addEventListener("input", () => {
+  if (textInput.value.trim()) {
+    phrases.showSaveButton();
+  } else {
+    phrases.hideSaveButton();
+  }
+});
+
+textInput.addEventListener("keydown", (e) => {
+  if (e.key === "Enter" && !e.shiftKey) {
+    e.preventDefault();
+    sendTextInput();
+  }
+});
 
 // Quick bar wiring
 const quickBar = document.querySelector("#quickBar");
