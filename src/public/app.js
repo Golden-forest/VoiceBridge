@@ -1,8 +1,11 @@
 // === Element References ===
 const statusDot = document.querySelector("#statusDot");
+const statusBadge = document.querySelector("#statusBadge");
 const textInput = document.querySelector("#textInput");
+const charCount = document.querySelector("#charCount");
 const autoPasteEl = document.querySelector("#autoPaste");
 const toastEl = document.querySelector("#toast");
+const pageRefreshButton = document.querySelector("#pageRefreshButton");
 
 // === Toast ===
 let toastTimer = null;
@@ -19,13 +22,37 @@ function showToast(message, isError = false) {
 function setConnectionStatus(state, message) {
   statusDot.className = "status-dot " + state;
   statusDot.title = message;
+  if (!statusBadge) return;
+  const labels = {
+    connected: "已连接",
+    error: "未连接",
+    connecting: "连接中"
+  };
+  statusBadge.className = "status-badge " + state;
+  statusBadge.textContent = labels[state] || "连接中";
 }
 
 statusDot.addEventListener("click", () => {
   showToast(statusDot.title);
 });
 
+pageRefreshButton?.addEventListener("click", () => {
+  location.reload();
+});
+
 // === Text Input ===
+function updateTextInputState() {
+  const text = textInput.value.trim();
+  if (charCount) charCount.textContent = `${textInput.value.length}/2000`;
+  if (text) {
+    phrases.showSaveButton();
+    phrases.el.saveBtn.classList.remove("saved");
+    phrases.el.saveBtn.innerHTML = starSvg + " 收藏";
+  } else {
+    phrases.hideSaveButton();
+  }
+}
+
 function sendTextInput() {
   const text = textInput.value.trim();
   if (!text) return;
@@ -40,7 +67,7 @@ function sendTextInput() {
     }
     ws.send(JSON.stringify(msg));
     textInput.value = "";
-    phrases.hideSaveButton();
+    updateTextInputState();
     showToast("已发送到电脑。");
   } else {
     showToast("发送失败，请检查连接。", true);
@@ -52,8 +79,8 @@ const starSvg = '<svg viewBox="0 0 24 24" width="14" height="14"><polygon points
 
 // === Record Button ===
 const recordButton = document.querySelector("#recordButton");
-const enterButton = document.querySelector("#enterButton");
-const undoButton = document.querySelector("#undoButton");
+const submitButton = document.querySelector("#submitButton");
+const clearInputButton = document.querySelector("#clearInputButton");
 const fallbackButton = document.querySelector("#fallbackButton");
 const fallbackFile = document.querySelector("#fallbackFile");
 
@@ -381,10 +408,9 @@ const windowSelector = new WindowSelector();
 const recentCommands = new RecentCommands(document.querySelector("#recentBar"));
 
 // === Text Input Events ===
-textInput.addEventListener("input", () => {
-  if (textInput.value.trim()) phrases.showSaveButton();
-  else phrases.hideSaveButton();
-});
+updateTextInputState();
+
+textInput.addEventListener("input", updateTextInputState);
 
 textInput.addEventListener("keydown", (e) => {
   if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendTextInput(); }
@@ -422,7 +448,7 @@ function sendQuickCommand(text, label) {
     const msg = { type: "phrase", text, autoPaste: autoPasteEl.checked };
     if (windowSelector.targetWindow) msg.targetWindow = windowSelector.targetWindow;
     ws.send(JSON.stringify(msg));
-    recentCommands.record(text, label);
+    recentCommands.record(text, label || text);
     showToast("已发送快捷指令。");
   } else {
     showToast("发送失败，请检查连接。", true);
@@ -430,12 +456,43 @@ function sendQuickCommand(text, label) {
 }
 
 // === Action Buttons ===
-enterButton.addEventListener("click", () => {
-  if (ws && ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ type: "enter" }));
+submitButton.addEventListener("click", () => {
+  sendTextInput();
 });
 
-undoButton.addEventListener("click", () => {
-  if (ws && ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ type: "undo" }));
+clearInputButton.addEventListener("click", () => {
+  textInput.value = "";
+  updateTextInputState();
+  textInput.focus();
+});
+
+// New action buttons
+document.querySelector("#ctrlcButton").addEventListener("click", () => {
+  if (ws && ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ type: "ctrl-c" }));
+});
+
+document.querySelector("#escButton").addEventListener("click", () => {
+  if (ws && ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ type: "escape", twice: true }));
+});
+
+// Capsule phrase buttons (exit, /compact, npm start, copyclaw cli/server)
+document.querySelectorAll(".phrase-btn").forEach(btn => {
+  btn.addEventListener("click", () => {
+    const text = btn.dataset.text;
+    if (!text) return;
+    const label = btn.dataset.label || btn.textContent.trim() || btn.getAttribute("aria-label");
+    sendQuickCommand(text, label);
+  });
+});
+
+// Arrow buttons
+["up", "down", "left", "right"].forEach(dir => {
+  const btn = document.querySelector(`#arrow${dir.charAt(0).toUpperCase() + dir.slice(1)}`);
+  if (btn) {
+    btn.addEventListener("click", () => {
+      if (ws && ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ type: "arrow", direction: dir }));
+    });
+  }
 });
 
 phrases.el.saveBtn.addEventListener("click", () => {
@@ -463,8 +520,8 @@ let ws = null;
 connectWebSocket();
 
 function setActionButtonsDisabled(disabled) {
-  enterButton.disabled = disabled;
-  undoButton.disabled = disabled;
+  submitButton.disabled = disabled;
+  clearInputButton.disabled = disabled;
 }
 
 if (!navigator.mediaDevices?.getUserMedia || !window.MediaRecorder) {
@@ -592,9 +649,7 @@ function connectWebSocket() {
       const payload = JSON.parse(event.data);
       if (payload.type === "result" && payload.text) {
         textInput.value = payload.text;
-        phrases.showSaveButton();
-        phrases.el.saveBtn.classList.remove("saved");
-        phrases.el.saveBtn.innerHTML = starSvg + ' 收藏';
+        updateTextInputState();
       }
       if (payload.message) {
         showToast(payload.message, payload.type === "error");
