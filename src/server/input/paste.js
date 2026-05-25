@@ -94,12 +94,28 @@ export async function pressUndo() {
 }
 
 // --- Generic key press helper ---
+const MAC_KEY_CODES = {
+  escape: 53,
+  up: 126,
+  down: 125,
+  left: 123,
+  right: 124,
+};
+
 function keyCommand(platform, key, modifiers = {}) {
   if (platform === "darwin") {
     const mod = Object.entries(modifiers)
       .map(([mod, on]) => on ? `${mod} down` : "")
       .filter(Boolean).join(" ");
     const using = mod ? ` using {${mod}}` : "";
+
+    if (key in MAC_KEY_CODES) {
+      return {
+        command: "osascript",
+        args: ["-e", `tell application "System Events" to key code ${MAC_KEY_CODES[key]}${using}`]
+      };
+    }
+
     return {
       command: "osascript",
       args: ["-e", `tell application "System Events" to keystroke "${key}"${using}`]
