@@ -476,24 +476,106 @@ document.querySelector("#escButton").addEventListener("click", () => {
 });
 
 // Capsule phrase buttons (exit, /compact, npm start, copyclaw cli/server)
-document.querySelectorAll(".phrase-btn").forEach(btn => {
-  btn.addEventListener("click", () => {
-    const text = btn.dataset.text;
-    if (!text) return;
-    const label = btn.dataset.label || btn.textContent.trim() || btn.getAttribute("aria-label");
-    sendQuickCommand(text, label);
-  });
-});
+const shortcutIcons = {
+  exit: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10 17 15 12l-5-5"/><path d="M15 12H3"/><path d="M14 4h5v16h-5"/></svg>',
+  compact: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m8 3 4 4-4 4"/><path d="M12 7H3"/><path d="m16 21-4-4 4-4"/><path d="M12 17h9"/></svg>'
+};
 
-// Arrow buttons
-["up", "down", "left", "right"].forEach(dir => {
-  const btn = document.querySelector(`#arrow${dir.charAt(0).toUpperCase() + dir.slice(1)}`);
-  if (btn) {
-    btn.addEventListener("click", () => {
-      if (ws && ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ type: "arrow", direction: dir }));
+const arrowBtns = [
+  { id: "arrowUp", dir: "up", label: "↑" },
+  { id: "arrowDown", dir: "down", label: "↓" },
+  { id: "arrowLeft", dir: "left", label: "←" },
+  { id: "arrowRight", dir: "right", label: "→" }
+];
+
+async function loadCommands() {
+  try {
+    const res = await fetch("/commands.json");
+    const data = await res.json();
+
+    // Render shortcuts (exit, compact) into shortcut-grid
+    const shortcutGrid = document.querySelector("#shortcutGrid");
+    if (shortcutGrid && data.shortcuts) {
+      data.shortcuts.forEach(cmd => {
+        const btn = document.createElement("button");
+        btn.className = "shortcut-action phrase-btn";
+        btn.type = "button";
+        btn.title = `输入 ${cmd.label}`;
+        btn.setAttribute("aria-label", cmd.label);
+        btn.dataset.text = cmd.text;
+        btn.dataset.label = cmd.label;
+        btn.innerHTML = shortcutIcons[cmd.icon] || cmd.label;
+        shortcutGrid.appendChild(btn);
+      });
+    }
+
+    // Render arrows into shortcut-grid
+    if (shortcutGrid) {
+      arrowBtns.forEach(item => {
+        const btn = document.createElement("button");
+        btn.id = item.id;
+        btn.className = "shortcut-action";
+        btn.type = "button";
+        btn.title = item.dir;
+        btn.setAttribute("aria-label", item.dir);
+        btn.textContent = item.label;
+        shortcutGrid.appendChild(btn);
+      });
+    }
+
+    // Re-bind arrow buttons
+    arrowBtns.forEach(item => {
+      const btn = document.querySelector(`#${item.id}`);
+      if (btn) {
+        btn.addEventListener("click", () => {
+          if (ws && ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ type: "arrow", direction: item.dir }));
+        });
+      }
     });
+
+    // Render terminal commands
+    const terminalGrid = document.querySelector("#terminalGrid");
+    if (terminalGrid && data.terminal) {
+      data.terminal.forEach(cmd => {
+        const btn = document.createElement("button");
+        btn.className = "terminal-btn phrase-btn";
+        btn.type = "button";
+        btn.dataset.text = cmd.text;
+        btn.dataset.label = cmd.label;
+        btn.innerHTML = `<span class="terminal-icon" aria-hidden="true">›_</span><span>${cmd.label}</span>`;
+        terminalGrid.appendChild(btn);
+      });
+    }
+
+    // Render quick commands
+    const quickBtns = document.querySelector("#quickBtns");
+    if (quickBtns && data.quick) {
+      data.quick.forEach(cmd => {
+        const btn = document.createElement("button");
+        btn.className = "quick-btn";
+        btn.type = "button";
+        btn.dataset.text = cmd.text;
+        btn.textContent = cmd.label;
+        btn.title = cmd.text;
+        quickBtns.appendChild(btn);
+      });
+    }
+  } catch {
+    // Silently fail — static fallback could be added here
   }
-});
+
+  // Bind all phrase-btn after rendering
+  document.querySelectorAll(".phrase-btn").forEach(btn => {
+    btn.addEventListener("click", () => {
+      const text = btn.dataset.text;
+      if (!text) return;
+      const label = btn.dataset.label || btn.textContent.trim() || btn.getAttribute("aria-label");
+      sendQuickCommand(text, label);
+    });
+  });
+}
+
+loadCommands();
 
 phrases.el.saveBtn.addEventListener("click", () => {
   const text = textInput.value.trim();
