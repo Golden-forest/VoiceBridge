@@ -53,9 +53,18 @@ function updateTextInputState() {
   }
 }
 
+let lastAutoPastedText = "";
+
 function sendTextInput() {
   const text = textInput.value.trim();
   if (!text) return;
+  if (text === lastAutoPastedText) {
+    textInput.value = "";
+    updateTextInputState();
+    lastAutoPastedText = "";
+    showToast("该文本已通过语音自动发送。");
+    return;
+  }
   if (ws && ws.readyState === WebSocket.OPEN) {
     const msg = {
       type: "phrase",
@@ -68,6 +77,7 @@ function sendTextInput() {
     ws.send(JSON.stringify(msg));
     textInput.value = "";
     updateTextInputState();
+    lastAutoPastedText = "";
     showToast("已发送到电脑。");
   } else {
     showToast("发送失败，请检查连接。", true);
@@ -80,7 +90,7 @@ const starSvg = '<svg viewBox="0 0 24 24" width="14" height="14"><polygon points
 // === Record Button ===
 const recordButton = document.querySelector("#recordButton");
 const submitButton = document.querySelector("#submitButton");
-const clearInputButton = document.querySelector("#clearInputButton");
+const enterButton = document.querySelector("#enterButton");
 const fallbackButton = document.querySelector("#fallbackButton");
 const fallbackFile = document.querySelector("#fallbackFile");
 
@@ -410,7 +420,10 @@ const recentCommands = new RecentCommands(document.querySelector("#recentBar"));
 // === Text Input Events ===
 updateTextInputState();
 
-textInput.addEventListener("input", updateTextInputState);
+textInput.addEventListener("input", () => {
+  lastAutoPastedText = "";
+  updateTextInputState();
+});
 
 textInput.addEventListener("keydown", (e) => {
   if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendTextInput(); }
@@ -460,10 +473,13 @@ submitButton.addEventListener("click", () => {
   sendTextInput();
 });
 
-clearInputButton.addEventListener("click", () => {
-  textInput.value = "";
-  updateTextInputState();
-  textInput.focus();
+enterButton.addEventListener("click", () => {
+  if (ws && ws.readyState === WebSocket.OPEN) {
+    ws.send(JSON.stringify({ type: "enter" }));
+    showToast("已按回车。");
+  } else {
+    showToast("发送失败，请检查连接。", true);
+  }
 });
 
 // New action buttons
@@ -603,7 +619,7 @@ connectWebSocket();
 
 function setActionButtonsDisabled(disabled) {
   submitButton.disabled = disabled;
-  clearInputButton.disabled = disabled;
+  enterButton.disabled = disabled;
 }
 
 if (!navigator.mediaDevices?.getUserMedia || !window.MediaRecorder) {
@@ -731,6 +747,7 @@ function connectWebSocket() {
       const payload = JSON.parse(event.data);
       if (payload.type === "result" && payload.text) {
         textInput.value = payload.text;
+        lastAutoPastedText = payload.text.trim();
         updateTextInputState();
       }
       if (payload.message) {

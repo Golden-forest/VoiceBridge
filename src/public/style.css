@@ -777,7 +777,7 @@ svg {
 }
 
 #quickPanel {
-  max-height: clamp(136px, 20svh, 190px);
+  max-height: clamp(180px, 28svh, 280px);
 }
 
 #phrasesPanel {
@@ -787,21 +787,21 @@ svg {
 /* === Quick Commands === */
 .quick-btns {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 5px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 6px;
   padding: clamp(8px, 1.1svh, 12px);
   min-width: 0;
 }
 
 .quick-btn {
   min-width: 0;
-  min-height: clamp(24px, 3.4svh, 32px);
-  padding: 0 4px;
+  min-height: clamp(30px, 4.2svh, 40px);
+  padding: 0 6px;
   border: 1px solid var(--border);
   border-radius: 999px;
   background: var(--bg-card);
   color: var(--text-primary);
-  font-size: clamp(11px, 1.5svh, 14px);
+  font-size: clamp(12px, 1.7svh, 15px);
   font-weight: 600;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -1129,7 +1129,7 @@ svg {
   }
 
   .quick-btns {
-    gap: 4px;
+    gap: 5px;
     padding: 6px;
   }
 
@@ -1138,7 +1138,7 @@ svg {
   }
 
   #quickPanel {
-    max-height: 128px;
+    max-height: 170px;
   }
 
   #phrasesPanel {
