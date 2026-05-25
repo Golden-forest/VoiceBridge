@@ -439,12 +439,14 @@ quickToggle.addEventListener("click", () => {
   quickPanel.classList.toggle("hidden");
 });
 
-quickPanel.addEventListener("click", (e) => {
-  const btn = e.target.closest(".quick-btn");
-  if (!btn) return;
-  const text = btn.dataset.text;
-  if (!text) return;
-  sendQuickCommand(text, btn.textContent.trim());
+// === Shortcut Bar (collapse) ===
+const shortcutToggle = document.querySelector("#shortcutToggle");
+const shortcutBar = document.querySelector("#shortcutBar");
+const shortcutPanel = document.querySelector("#shortcutPanel");
+
+shortcutToggle.addEventListener("click", () => {
+  shortcutBar.classList.toggle("open");
+  shortcutPanel.classList.toggle("hidden");
 });
 
 // Recent bar click
@@ -483,18 +485,15 @@ enterButton.addEventListener("click", () => {
 });
 
 // New action buttons
-document.querySelector("#ctrlcButton").addEventListener("click", () => {
-  if (ws && ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ type: "ctrl-c" }));
-});
-
-document.querySelector("#escButton").addEventListener("click", () => {
-  if (ws && ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ type: "escape", twice: true }));
+document.querySelector("#pasteButton").addEventListener("click", () => {
+  if (ws && ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ type: "paste" }));
 });
 
 // Capsule phrase buttons (exit, /compact, npm start, copyclaw cli/server)
 const shortcutIcons = {
   exit: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10 17 15 12l-5-5"/><path d="M15 12H3"/><path d="M14 4h5v16h-5"/></svg>',
-  compact: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m8 3 4 4-4 4"/><path d="M12 7H3"/><path d="m16 21-4-4 4-4"/><path d="M12 17h9"/></svg>'
+  compact: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m8 3 4 4-4 4"/><path d="M12 7H3"/><path d="m16 21-4-4 4-4"/><path d="M12 17h9"/></svg>',
+  escape: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14M12 5l7 7-7 7"/></svg>'
 };
 
 const arrowBtns = [
@@ -509,24 +508,58 @@ async function loadCommands() {
     const res = await fetch("/commands.json");
     const data = await res.json();
 
-    // Render shortcuts (exit, compact) into shortcut-grid
-    const shortcutGrid = document.querySelector("#shortcutGrid");
-    if (shortcutGrid && data.shortcuts) {
-      data.shortcuts.forEach(cmd => {
-        const btn = document.createElement("button");
-        btn.className = "shortcut-action phrase-btn";
-        btn.type = "button";
-        btn.title = `输入 ${cmd.label}`;
-        btn.setAttribute("aria-label", cmd.label);
-        btn.dataset.text = cmd.text;
-        btn.dataset.label = cmd.label;
-        btn.innerHTML = shortcutIcons[cmd.icon] || cmd.label;
-        shortcutGrid.appendChild(btn);
-      });
+    // Render shortcuts + terminal + ESC into quickBtns (更多指令面板)
+    const quickBtns = document.querySelector("#quickBtns");
+    if (quickBtns) {
+      // shortcuts (exit, compact, escape-twice)
+      if (data.shortcuts) {
+        data.shortcuts.forEach(cmd => {
+          const btn = document.createElement("button");
+          btn.className = "quick-btn";
+          btn.type = "button";
+          if (cmd.keyAction) {
+            btn.dataset.keyAction = cmd.keyAction;
+            btn.innerHTML = (shortcutIcons[cmd.icon] || "") + " " + cmd.label;
+            btn.title = cmd.label;
+          } else {
+            btn.dataset.text = cmd.text;
+            btn.dataset.label = cmd.label;
+            btn.innerHTML = (shortcutIcons[cmd.icon] || "") + " " + cmd.label;
+            btn.title = cmd.text;
+          }
+          quickBtns.appendChild(btn);
+        });
+      }
+      // terminal commands
+      if (data.terminal) {
+        data.terminal.forEach(cmd => {
+          const btn = document.createElement("button");
+          btn.className = "quick-btn";
+          btn.type = "button";
+          btn.dataset.text = cmd.text;
+          btn.dataset.label = cmd.label;
+          btn.innerHTML = '<span class="terminal-icon" aria-hidden="true">›_</span> ' + cmd.label;
+          btn.title = cmd.text;
+          quickBtns.appendChild(btn);
+        });
+      }
+      // quick commands
+      if (data.quick) {
+        data.quick.forEach(cmd => {
+          const btn = document.createElement("button");
+          btn.className = "quick-btn";
+          btn.type = "button";
+          btn.dataset.text = cmd.text;
+          btn.textContent = cmd.label;
+          btn.title = cmd.text;
+          quickBtns.appendChild(btn);
+        });
+      }
     }
 
-    // Render arrows into shortcut-grid
-    if (shortcutGrid) {
+    // Render arrows into shortcutArrows
+    const shortcutArrows = document.querySelector("#shortcutArrows");
+    if (shortcutArrows) {
       arrowBtns.forEach(item => {
         const btn = document.createElement("button");
         btn.id = item.id;
@@ -535,7 +568,7 @@ async function loadCommands() {
         btn.title = item.dir;
         btn.setAttribute("aria-label", item.dir);
         btn.textContent = item.label;
-        shortcutGrid.appendChild(btn);
+        shortcutArrows.appendChild(btn);
       });
     }
 
@@ -548,44 +581,23 @@ async function loadCommands() {
         });
       }
     });
-
-    // Render terminal commands
-    const terminalGrid = document.querySelector("#terminalGrid");
-    if (terminalGrid && data.terminal) {
-      data.terminal.forEach(cmd => {
-        const btn = document.createElement("button");
-        btn.className = "terminal-btn phrase-btn";
-        btn.type = "button";
-        btn.dataset.text = cmd.text;
-        btn.dataset.label = cmd.label;
-        btn.innerHTML = `<span class="terminal-icon" aria-hidden="true">›_</span><span>${cmd.label}</span>`;
-        terminalGrid.appendChild(btn);
-      });
-    }
-
-    // Render quick commands
-    const quickBtns = document.querySelector("#quickBtns");
-    if (quickBtns && data.quick) {
-      data.quick.forEach(cmd => {
-        const btn = document.createElement("button");
-        btn.className = "quick-btn";
-        btn.type = "button";
-        btn.dataset.text = cmd.text;
-        btn.textContent = cmd.label;
-        btn.title = cmd.text;
-        quickBtns.appendChild(btn);
-      });
-    }
   } catch {
     // Silently fail — static fallback could be added here
   }
 
-  // Bind all phrase-btn after rendering
-  document.querySelectorAll(".phrase-btn").forEach(btn => {
+  // Bind all quick-btn after rendering (including keyAction support)
+  document.querySelectorAll(".quick-btn").forEach(btn => {
     btn.addEventListener("click", () => {
+      const keyAction = btn.dataset.keyAction;
+      if (keyAction) {
+        if (keyAction === "escape-twice" && ws && ws.readyState === WebSocket.OPEN) {
+          ws.send(JSON.stringify({ type: "escape", twice: true }));
+        }
+        return;
+      }
       const text = btn.dataset.text;
       if (!text) return;
-      const label = btn.dataset.label || btn.textContent.trim() || btn.getAttribute("aria-label");
+      const label = btn.dataset.label || btn.textContent.trim();
       sendQuickCommand(text, label);
     });
   });

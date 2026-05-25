@@ -50,6 +50,11 @@
             </div>
           </div>
           <span id="statusBadge" class="status-badge connecting">连接中</span>
+          <label class="toggle-switch device-toggle">
+            <input id="autoPaste" type="checkbox" checked />
+            <span class="toggle-track toggle-track-sm"><span class="toggle-thumb toggle-thumb-sm"></span></span>
+            <span class="toggle-label toggle-label-sm">自动粘贴</span>
+          </label>
         </section>
 
         <!-- 最近指令 -->
@@ -59,13 +64,9 @@
         <section class="input-card">
           <textarea id="textInput" class="text-input" placeholder="输入文字，或语音识别…" enterkeyhint="send" rows="3" maxlength="2000"></textarea>
           <div class="input-card-footer">
-            <button class="voice-input-hint" type="button" tabindex="-1">
-              <svg viewBox="0 0 24 24" aria-hidden="true">
-                <rect x="9" y="3" width="6" height="11" rx="3" />
-                <path d="M5 10a7 7 0 0 0 14 0" />
-                <path d="M12 19v3" />
-              </svg>
-              语音输入
+            <button id="savePhraseBtn" class="save-btn save-btn-sm hidden" type="button">
+              <svg viewBox="0 0 24 24" width="14" height="14"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+              收藏
             </button>
             <span id="charCount" class="char-count">0/2000</span>
           </div>
@@ -97,20 +98,22 @@
         </section>
 
         <!-- 快捷键 -->
-        <section class="shortcut-card" aria-label="快捷键">
-          <div class="shortcut-grid" id="shortcutGrid">
-            <button id="ctrlcButton" class="shortcut-action" type="button" title="复制" aria-label="复制">
-              <svg viewBox="0 0 24 24" aria-hidden="true">
-                <rect x="8" y="8" width="11" height="11" rx="2" />
-                <path d="M5 16H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
-              </svg>
-            </button>
-            <button id="escButton" class="shortcut-action" type="button" title="Esc×2" aria-label="Esc">
-              <span aria-hidden="true">⎋</span>
-            </button>
+        <div id="shortcutBar" class="collapse-bar">
+          <button id="shortcutToggle" class="collapse-toggle" type="button">
+            <span class="collapse-arrow">&#x25B8;</span> 快捷键
+          </button>
+          <div id="shortcutPanel" class="collapse-panel hidden">
+            <div class="shortcut-grid" id="shortcutGrid">
+              <button id="pasteButton" class="shortcut-action" type="button" title="粘贴" aria-label="粘贴">
+                <svg viewBox="0 0 24 24" aria-hidden="true">
+                  <path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/>
+                  <rect x="8" y="2" width="8" height="4" rx="1" ry="1"/>
+                </svg>
+              </button>
+            </div>
+            <div class="shortcut-arrows" id="shortcutArrows"></div>
           </div>
-          <div class="terminal-grid" id="terminalGrid"></div>
-        </section>
+        </div>
 
         <!-- 兜底上传 -->
         <button id="fallbackButton" class="fallback-button hidden" type="button">录音或选择音频上传</button>
@@ -143,18 +146,6 @@
           </div>
         </div>
 
-        <!-- 底栏 -->
-        <div class="bottom-bar">
-          <button id="savePhraseBtn" class="save-btn hidden" type="button">
-            <svg viewBox="0 0 24 24" width="14" height="14"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
-            收藏
-          </button>
-          <label class="toggle-switch">
-            <input id="autoPaste" type="checkbox" checked />
-            <span class="toggle-track"><span class="toggle-thumb"></span></span>
-            <span class="toggle-label">自动粘贴</span>
-          </label>
-        </div>
       </div>
     </main>
 

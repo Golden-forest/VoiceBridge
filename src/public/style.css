@@ -154,10 +154,11 @@ svg {
   min-height: clamp(44px, 6svh, 58px);
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: clamp(5px, 1.5vw, 10px);
   padding: 6px clamp(8px, 2vw, 12px);
   border: 1px solid var(--border);
-  border-radius: 999px;
+  border-radius: var(--radius-lg);
   background: var(--bg-card);
   box-shadow: var(--shadow-card);
   flex: 0 0 auto;
@@ -483,31 +484,6 @@ svg {
   flex: 0 0 auto;
 }
 
-.voice-input-hint {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  min-height: 30px;
-  padding: 4px 10px;
-  border: 1px solid var(--border);
-  border-radius: 999px;
-  background: var(--bg-card);
-  color: var(--accent);
-  font-size: 13px;
-  font-weight: 600;
-  pointer-events: none;
-}
-
-.voice-input-hint svg {
-  width: 16px;
-  height: 16px;
-  fill: none;
-  stroke: currentColor;
-  stroke-width: 2;
-  stroke-linecap: round;
-  stroke-linejoin: round;
-}
-
 .char-count {
   font-size: 13px;
   font-weight: 600;
@@ -625,23 +601,11 @@ svg {
 }
 
 /* === Shortcut Card === */
-.shortcut-card {
+#shortcutPanel .shortcut-grid {
   display: grid;
-  gap: 6px;
-  padding: clamp(8px, 1.2svh, 12px);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-lg);
-  background: var(--bg-card);
-  box-shadow: var(--shadow-card);
-  flex: 0 0 auto;
-  min-width: 0;
-  overflow: hidden;
-}
-
-.shortcut-grid {
-  display: grid;
-  grid-template-columns: repeat(8, minmax(0, 1fr));
+  grid-template-columns: repeat(5, minmax(0, 1fr));
   gap: clamp(3px, 1vw, 6px);
+  padding: 6px clamp(8px, 1.2svh, 12px);
   min-width: 0;
 }
 
@@ -713,6 +677,15 @@ svg {
   line-height: 1;
 }
 
+/* === Shortcut Arrows (inside shortcut panel) === */
+.shortcut-arrows {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: clamp(3px, 1vw, 6px);
+  padding: 6px clamp(8px, 1.2svh, 12px);
+  min-width: 0;
+}
+
 /* === Fallback Upload === */
 .fallback-button {
   width: 100%;
@@ -777,7 +750,11 @@ svg {
 }
 
 #quickPanel {
-  max-height: clamp(180px, 28svh, 280px);
+  max-height: clamp(220px, 36svh, 360px);
+}
+
+#shortcutPanel {
+  max-height: clamp(100px, 16svh, 180px);
 }
 
 #phrasesPanel {
@@ -923,17 +900,7 @@ svg {
   cursor: pointer;
 }
 
-/* === Bottom Bar === */
-.bottom-bar {
-  min-height: clamp(38px, 5.2svh, 52px);
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-  flex: 0 0 auto;
-  min-width: 0;
-}
-
+/* === Save Button === */
 .save-btn {
   min-height: clamp(36px, 5svh, 48px);
   display: inline-flex;
@@ -960,6 +927,25 @@ svg {
 .save-btn.saved {
   color: var(--text-secondary);
   pointer-events: none;
+}
+
+.save-btn-sm {
+  min-height: 28px;
+  padding: 0 10px;
+  gap: 5px;
+  font-size: 12px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--bg-card);
+  color: var(--accent);
+  font-weight: 650;
+  cursor: pointer;
+  box-shadow: none;
+}
+
+.save-btn-sm svg {
+  width: 14px;
+  height: 14px;
 }
 
 .toggle-switch {
@@ -1006,6 +992,38 @@ svg {
 
 .toggle-switch input:checked + .toggle-track .toggle-thumb {
   transform: translateX(20px);
+}
+
+/* === Compact toggle for device-pill === */
+.toggle-track-sm {
+  width: 36px;
+  height: 20px;
+}
+
+.toggle-thumb-sm {
+  width: 16px;
+  height: 16px;
+  top: 2px;
+  left: 2px;
+}
+
+.toggle-switch input:checked + .toggle-track-sm .toggle-thumb-sm {
+  transform: translateX(16px);
+}
+
+.toggle-label-sm {
+  font-size: clamp(11px, 1.5svh, 13px);
+}
+
+.device-toggle {
+  gap: 6px;
+  margin-left: auto;
+}
+
+.device-toggle svg {
+  width: 14px;
+  height: 14px;
+  flex: 0 0 auto;
 }
 
 /* === Add Phrase Dialog === */
@@ -1119,15 +1137,6 @@ svg {
     padding: 0 4px;
   }
 
-  .shortcut-card {
-    padding: 6px;
-    gap: 4px;
-  }
-
-  .shortcut-grid {
-    gap: 2px;
-  }
-
   .quick-btns {
     gap: 5px;
     padding: 6px;
@@ -1138,7 +1147,7 @@ svg {
   }
 
   #quickPanel {
-    max-height: 170px;
+    max-height: 200px;
   }
 
   #phrasesPanel {
@@ -1170,7 +1179,6 @@ svg {
   .brand-mark,
   .device-pill,
   .input-card,
-  .shortcut-card,
   .collapse-bar,
   .save-btn,
   .side-action-btn,

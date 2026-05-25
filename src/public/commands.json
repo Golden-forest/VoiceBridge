@@ -6,7 +6,8 @@
   ],
   "shortcuts": [
     { "text": "exit", "label": "exit", "icon": "exit" },
-    { "text": "/compact", "label": "/compact", "icon": "compact" }
+    { "text": "/compact", "label": "/compact", "icon": "compact" },
+    { "keyAction": "escape-twice", "label": "Esc\u00d72", "icon": "escape" }
   ],
   "quick": [
     { "text": "可", "label": "可" },
