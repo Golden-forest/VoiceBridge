@@ -494,10 +494,10 @@ svg {
 /* === Main Actions === */
 .primary-actions {
   min-height: clamp(62px, 8.5svh, 84px);
-  display: grid;
-  grid-template-columns: minmax(70px, 1fr) auto minmax(70px, 1fr);
+  display: flex;
   align-items: center;
-  gap: clamp(8px, 3vw, 36px);
+  justify-content: center;
+  gap: clamp(4px, 1.5vw, 8px);
   flex: 0 0 auto;
   min-width: 0;
 }
@@ -600,43 +600,7 @@ svg {
   line-height: 1.1;
 }
 
-/* === Shortcut Card === */
-.shortcut-keys {
-  display: flex;
-  flex-wrap: wrap;
-  gap: clamp(4px, 1vw, 6px);
-  padding: clamp(6px, 1svh, 10px) clamp(8px, 1.2svh, 12px);
-  min-width: 0;
-}
-
-.shortcut-action {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 4px;
-  min-height: clamp(36px, 5svh, 44px);
-  padding: 0 clamp(8px, 2vw, 14px);
-  border: 1px solid var(--border);
-  border-radius: 999px;
-  background: var(--bg-card);
-  color: var(--text-primary);
-  font-size: clamp(13px, 1.8svh, 16px);
-  font-weight: 650;
-  box-shadow: var(--shadow-button);
-  cursor: pointer;
-}
-
-.shortcut-action svg {
-  width: 18px;
-  height: 18px;
-  flex: 0 0 auto;
-  fill: none;
-  stroke: currentColor;
-  stroke-width: 1.9;
-  stroke-linecap: round;
-  stroke-linejoin: round;
-}
-
+/* === Terminal Button === */
 .terminal-btn {
   min-width: 0;
   min-height: clamp(28px, 4svh, 38px);
@@ -739,10 +703,6 @@ svg {
   max-height: clamp(220px, 36svh, 360px);
 }
 
-#shortcutPanel {
-  max-height: clamp(100px, 16svh, 180px);
-}
-
 #phrasesPanel {
   max-height: clamp(96px, 14svh, 140px);
 }
@@ -788,7 +748,6 @@ svg {
 }
 
 .quick-btn:active,
-.shortcut-action:active,
 .terminal-btn:active,
 .side-action-btn:active {
   border-color: var(--accent);
@@ -1124,8 +1083,7 @@ svg {
   }
 
   .primary-actions {
-    grid-template-columns: minmax(60px, 1fr) auto minmax(60px, 1fr);
-    gap: 8px;
+    gap: 4px;
   }
 
   .side-action-btn {
@@ -1183,7 +1141,6 @@ svg {
   .collapse-bar,
   .save-btn,
   .side-action-btn,
-  .shortcut-action,
   .terminal-btn {
     background: var(--bg-card);
   }

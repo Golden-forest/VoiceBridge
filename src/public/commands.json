@@ -5,8 +5,6 @@
     { "text": "copyclaw server", "label": "copyclaw server" }
   ],
   "shortcuts": [
-    { "keyAction": "paste", "label": "粘贴", "icon": "paste" },
-    { "keyAction": "escape-twice", "label": "Esc×2", "icon": "escape" },
     { "text": "exit", "label": "exit", "icon": "exit" },
     { "text": "/compact", "label": "/compact", "icon": "compact" }
   ],
