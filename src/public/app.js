@@ -484,16 +484,12 @@ enterButton.addEventListener("click", () => {
   }
 });
 
-// New action buttons
-document.querySelector("#pasteButton").addEventListener("click", () => {
-  if (ws && ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ type: "paste" }));
-});
-
 // Capsule phrase buttons (exit, /compact, npm start, copyclaw cli/server)
 const shortcutIcons = {
   exit: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10 17 15 12l-5-5"/><path d="M15 12H3"/><path d="M14 4h5v16h-5"/></svg>',
   compact: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m8 3 4 4-4 4"/><path d="M12 7H3"/><path d="m16 21-4-4 4-4"/><path d="M12 17h9"/></svg>',
-  escape: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14M12 5l7 7-7 7"/></svg>'
+  escape: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14M12 5l7 7-7 7"/></svg>',
+  paste: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><rect x="8" y="2" width="8" height="4" rx="1" ry="1"/></svg>'
 };
 
 const arrowBtns = [
@@ -508,25 +504,49 @@ async function loadCommands() {
     const res = await fetch("/commands.json");
     const data = await res.json();
 
-    // Render shortcuts + terminal + ESC into quickBtns (更多指令面板)
-    const quickBtns = document.querySelector("#quickBtns");
-    if (quickBtns) {
-      // shortcuts (exit, compact, escape-twice)
+    // === Render key-action shortcuts into #shortcutKeys (快捷键面板) ===
+    const shortcutKeys = document.querySelector("#shortcutKeys");
+    if (shortcutKeys) {
+      // keyAction shortcuts from commands.json (paste, escape-twice, etc.)
       if (data.shortcuts) {
         data.shortcuts.forEach(cmd => {
+          if (!cmd.keyAction) return; // skip text shortcuts
+          const btn = document.createElement("button");
+          btn.className = "shortcut-action";
+          btn.type = "button";
+          btn.dataset.keyAction = cmd.keyAction;
+          btn.innerHTML = (shortcutIcons[cmd.icon] || "") + (cmd.icon ? " " : "") + cmd.label;
+          btn.title = cmd.label;
+          shortcutKeys.appendChild(btn);
+        });
+      }
+      // arrow keys
+      arrowBtns.forEach(item => {
+        const btn = document.createElement("button");
+        btn.className = "shortcut-action";
+        btn.type = "button";
+        btn.dataset.keyAction = "arrow:" + item.dir;
+        btn.setAttribute("aria-label", item.dir);
+        btn.textContent = item.label;
+        btn.title = item.dir;
+        shortcutKeys.appendChild(btn);
+      });
+    }
+
+    // === Render text commands into #quickBtns (更多指令面板) ===
+    const quickBtns = document.querySelector("#quickBtns");
+    if (quickBtns) {
+      // text-only shortcuts (exit, /compact, etc.)
+      if (data.shortcuts) {
+        data.shortcuts.forEach(cmd => {
+          if (cmd.keyAction) return; // skip key-action shortcuts
           const btn = document.createElement("button");
           btn.className = "quick-btn";
           btn.type = "button";
-          if (cmd.keyAction) {
-            btn.dataset.keyAction = cmd.keyAction;
-            btn.innerHTML = (shortcutIcons[cmd.icon] || "") + " " + cmd.label;
-            btn.title = cmd.label;
-          } else {
-            btn.dataset.text = cmd.text;
-            btn.dataset.label = cmd.label;
-            btn.innerHTML = (shortcutIcons[cmd.icon] || "") + " " + cmd.label;
-            btn.title = cmd.text;
-          }
+          btn.dataset.text = cmd.text;
+          btn.dataset.label = cmd.label;
+          btn.innerHTML = (shortcutIcons[cmd.icon] || "") + " " + cmd.label;
+          btn.title = cmd.text;
           quickBtns.appendChild(btn);
         });
       }
@@ -556,45 +576,28 @@ async function loadCommands() {
         });
       }
     }
-
-    // Render arrows into shortcutArrows
-    const shortcutArrows = document.querySelector("#shortcutArrows");
-    if (shortcutArrows) {
-      arrowBtns.forEach(item => {
-        const btn = document.createElement("button");
-        btn.id = item.id;
-        btn.className = "shortcut-action";
-        btn.type = "button";
-        btn.title = item.dir;
-        btn.setAttribute("aria-label", item.dir);
-        btn.textContent = item.label;
-        shortcutArrows.appendChild(btn);
-      });
-    }
-
-    // Re-bind arrow buttons
-    arrowBtns.forEach(item => {
-      const btn = document.querySelector(`#${item.id}`);
-      if (btn) {
-        btn.addEventListener("click", () => {
-          if (ws && ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ type: "arrow", direction: item.dir }));
-        });
-      }
-    });
   } catch {
-    // Silently fail — static fallback could be added here
+    // Silently fail
   }
 
-  // Bind all quick-btn after rendering (including keyAction support)
+  // === Bind shortcut-action click handlers (快捷键面板) ===
+  document.querySelectorAll(".shortcut-action").forEach(btn => {
+    btn.addEventListener("click", () => {
+      const action = btn.dataset.keyAction;
+      if (!action || ws?.readyState !== WebSocket.OPEN) return;
+      if (action === "paste") {
+        ws.send(JSON.stringify({ type: "paste" }));
+      } else if (action === "escape-twice") {
+        ws.send(JSON.stringify({ type: "escape", twice: true }));
+      } else if (action.startsWith("arrow:")) {
+        ws.send(JSON.stringify({ type: "arrow", direction: action.slice(6) }));
+      }
+    });
+  });
+
+  // === Bind quick-btn click handlers (更多指令面板) ===
   document.querySelectorAll(".quick-btn").forEach(btn => {
     btn.addEventListener("click", () => {
-      const keyAction = btn.dataset.keyAction;
-      if (keyAction) {
-        if (keyAction === "escape-twice" && ws && ws.readyState === WebSocket.OPEN) {
-          ws.send(JSON.stringify({ type: "escape", twice: true }));
-        }
-        return;
-      }
       const text = btn.dataset.text;
       if (!text) return;
       const label = btn.dataset.label || btn.textContent.trim();

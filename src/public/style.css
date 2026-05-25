@@ -601,45 +601,40 @@ svg {
 }
 
 /* === Shortcut Card === */
-#shortcutPanel .shortcut-grid {
-  display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
-  gap: clamp(3px, 1vw, 6px);
-  padding: 6px clamp(8px, 1.2svh, 12px);
+.shortcut-keys {
+  display: flex;
+  flex-wrap: wrap;
+  gap: clamp(4px, 1vw, 6px);
+  padding: clamp(6px, 1svh, 10px) clamp(8px, 1.2svh, 12px);
   min-width: 0;
 }
 
 .shortcut-action {
-  width: 100%;
-  aspect-ratio: 1;
-  min-height: 24px;
-  display: grid;
-  place-items: center;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  min-height: clamp(36px, 5svh, 44px);
+  padding: 0 clamp(8px, 2vw, 14px);
   border: 1px solid var(--border);
-  border-radius: clamp(8px, 1.8vw, 12px);
+  border-radius: 999px;
   background: var(--bg-card);
   color: var(--text-primary);
-  font-size: clamp(15px, 2.3svh, 22px);
+  font-size: clamp(13px, 1.8svh, 16px);
   font-weight: 650;
   box-shadow: var(--shadow-button);
   cursor: pointer;
 }
 
 .shortcut-action svg {
-  width: 58%;
-  height: 58%;
+  width: 18px;
+  height: 18px;
+  flex: 0 0 auto;
   fill: none;
   stroke: currentColor;
   stroke-width: 1.9;
   stroke-linecap: round;
   stroke-linejoin: round;
-}
-
-.terminal-grid {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: clamp(4px, 1.4vw, 8px);
-  min-width: 0;
 }
 
 .terminal-btn {
@@ -675,15 +670,6 @@ svg {
   color: var(--accent);
   font-size: 10px;
   line-height: 1;
-}
-
-/* === Shortcut Arrows (inside shortcut panel) === */
-.shortcut-arrows {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: clamp(3px, 1vw, 6px);
-  padding: 6px clamp(8px, 1.2svh, 12px);
-  min-width: 0;
 }
 
 /* === Fallback Upload === */
@@ -773,6 +759,10 @@ svg {
 .quick-btn {
   min-width: 0;
   min-height: clamp(30px, 4.2svh, 40px);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
   padding: 0 6px;
   border: 1px solid var(--border);
   border-radius: 999px;
@@ -784,6 +774,17 @@ svg {
   text-overflow: ellipsis;
   white-space: nowrap;
   cursor: pointer;
+}
+
+.quick-btn svg {
+  width: 14px;
+  height: 14px;
+  flex: 0 0 auto;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.9;
+  stroke-linecap: round;
+  stroke-linejoin: round;
 }
 
 .quick-btn:active,
