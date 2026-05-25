@@ -22,7 +22,7 @@
   --radius-lg: 22px;
   --radius-md: 18px;
   --radius-sm: 14px;
-  --gap: clamp(7px, 1svh, 11px);
+  --gap: clamp(6px, 0.9svh, 10px);
   color-scheme: light dark;
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   background: var(--bg-page);
@@ -73,12 +73,12 @@ svg {
   height: 100svh;
   display: grid;
   place-items: center;
-  padding: max(10px, env(safe-area-inset-top)) max(12px, env(safe-area-inset-right)) max(10px, env(safe-area-inset-bottom)) max(12px, env(safe-area-inset-left));
+  padding: max(8px, env(safe-area-inset-top)) max(10px, env(safe-area-inset-right)) max(8px, env(safe-area-inset-bottom)) max(10px, env(safe-area-inset-left));
   overflow: hidden;
 }
 
 .panel {
-  width: min(calc(100vw - 24px), 430px);
+  width: min(calc(100vw - 20px), 420px);
   max-width: 100%;
   height: 100%;
   min-width: 0;
@@ -90,17 +90,17 @@ svg {
 
 /* === Header === */
 .app-header {
-  min-height: clamp(38px, 5.2svh, 52px);
+  min-height: clamp(36px, 5svh, 48px);
   display: grid;
   grid-template-columns: auto 1fr auto;
   align-items: center;
-  gap: 12px;
+  gap: 8px;
   flex: 0 0 auto;
 }
 
 .brand-mark {
-  width: clamp(32px, 4.8svh, 44px);
-  height: clamp(32px, 4.8svh, 44px);
+  width: clamp(28px, 4.2svh, 38px);
+  height: clamp(28px, 4.2svh, 38px);
   display: grid;
   place-items: center;
   border-radius: 12px;
@@ -121,15 +121,15 @@ svg {
 
 .brand {
   min-width: 0;
-  font-size: clamp(24px, 3.2svh, 34px);
+  font-size: clamp(20px, 2.8svh, 30px);
   font-weight: 750;
   letter-spacing: 0;
   color: var(--text-primary);
 }
 
 .refresh-button {
-  width: clamp(34px, 4.8svh, 44px);
-  height: clamp(34px, 4.8svh, 44px);
+  width: clamp(30px, 4.2svh, 40px);
+  height: clamp(30px, 4.2svh, 40px);
   display: grid;
   place-items: center;
   border: 0;
@@ -151,11 +151,11 @@ svg {
 
 /* === Target Device === */
 .device-pill {
-  min-height: clamp(48px, 6.5svh, 62px);
+  min-height: clamp(44px, 6svh, 58px);
   display: flex;
   align-items: center;
-  gap: clamp(7px, 2vw, 12px);
-  padding: 8px clamp(9px, 2.6vw, 14px);
+  gap: clamp(5px, 1.5vw, 10px);
+  padding: 6px clamp(8px, 2vw, 12px);
   border: 1px solid var(--border);
   border-radius: 999px;
   background: var(--bg-card);
@@ -165,8 +165,8 @@ svg {
 }
 
 .device-icon {
-  width: clamp(40px, 5.8svh, 54px);
-  height: clamp(40px, 5.8svh, 54px);
+  width: clamp(34px, 5svh, 46px);
+  height: clamp(34px, 5svh, 46px);
   display: grid;
   place-items: center;
   flex: 0 0 auto;
@@ -186,8 +186,8 @@ svg {
 }
 
 .status-dot {
-  width: 10px;
-  height: 10px;
+  width: 8px;
+  height: 8px;
   flex: 0 0 auto;
   padding: 0;
   border: 0;
@@ -217,12 +217,12 @@ svg {
 
 .status-badge {
   flex: 0 0 auto;
-  padding: 5px 10px;
+  padding: 3px 8px;
   border: 1px solid #d7eadc;
   border-radius: 999px;
   background: var(--accent-soft);
   color: var(--accent-deep);
-  font-size: clamp(12px, 1.55svh, 14px);
+  font-size: clamp(11px, 1.4svh, 13px);
   font-weight: 650;
   white-space: nowrap;
 }
@@ -256,7 +256,7 @@ svg {
   border: 0;
   background: transparent;
   color: var(--text-primary);
-  font-size: clamp(15px, 2.15svh, 19px);
+  font-size: clamp(13px, 2svh, 17px);
   font-weight: 600;
   text-align: left;
   cursor: pointer;
@@ -440,10 +440,10 @@ svg {
 
 /* === Input === */
 .input-card {
-  min-height: clamp(104px, 14svh, 142px);
+  min-height: clamp(96px, 13svh, 132px);
   display: flex;
   flex-direction: column;
-  padding: clamp(12px, 2svh, 18px);
+  padding: clamp(10px, 1.6svh, 16px);
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
   background: var(--bg-card);
@@ -517,28 +517,28 @@ svg {
 
 /* === Main Actions === */
 .primary-actions {
-  min-height: clamp(68px, 9.5svh, 92px);
+  min-height: clamp(62px, 8.5svh, 84px);
   display: grid;
-  grid-template-columns: minmax(76px, 1fr) auto minmax(76px, 1fr);
+  grid-template-columns: minmax(70px, 1fr) auto minmax(70px, 1fr);
   align-items: center;
-  gap: clamp(10px, 3.8vw, 40px);
+  gap: clamp(8px, 3vw, 36px);
   flex: 0 0 auto;
   min-width: 0;
 }
 
 .side-action-btn {
   min-width: 0;
-  min-height: clamp(48px, 6.5svh, 62px);
+  min-height: clamp(44px, 6svh, 58px);
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 7px;
-  padding: 0 clamp(10px, 2.6vw, 20px);
+  gap: 5px;
+  padding: 0 clamp(8px, 2.2vw, 18px);
   border: 1px solid var(--border);
   border-radius: 999px;
   background: var(--bg-card);
   color: var(--text-primary);
-  font-size: clamp(15px, 2.1svh, 20px);
+  font-size: clamp(14px, 2svh, 18px);
   font-weight: 650;
   box-shadow: var(--shadow-button);
   cursor: pointer;
@@ -556,8 +556,8 @@ svg {
 }
 
 .record-button {
-  width: clamp(68px, 9.5svh, 86px);
-  height: clamp(68px, 9.5svh, 86px);
+  width: clamp(62px, 8.5svh, 80px);
+  height: clamp(62px, 8.5svh, 80px);
   display: grid;
   place-items: center;
   align-content: center;
@@ -627,8 +627,8 @@ svg {
 /* === Shortcut Card === */
 .shortcut-card {
   display: grid;
-  gap: 8px;
-  padding: clamp(10px, 1.5svh, 14px);
+  gap: 6px;
+  padding: clamp(8px, 1.2svh, 12px);
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
   background: var(--bg-card);
@@ -641,21 +641,21 @@ svg {
 .shortcut-grid {
   display: grid;
   grid-template-columns: repeat(8, minmax(0, 1fr));
-  gap: clamp(4px, 1.4vw, 8px);
+  gap: clamp(3px, 1vw, 6px);
   min-width: 0;
 }
 
 .shortcut-action {
   width: 100%;
   aspect-ratio: 1;
-  min-height: 28px;
+  min-height: 24px;
   display: grid;
   place-items: center;
   border: 1px solid var(--border);
-  border-radius: clamp(10px, 2vw, 14px);
+  border-radius: clamp(8px, 1.8vw, 12px);
   background: var(--bg-card);
   color: var(--text-primary);
-  font-size: clamp(18px, 2.7svh, 26px);
+  font-size: clamp(15px, 2.3svh, 22px);
   font-weight: 650;
   box-shadow: var(--shadow-button);
   cursor: pointer;
@@ -674,23 +674,23 @@ svg {
 .terminal-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: clamp(6px, 2vw, 10px);
+  gap: clamp(4px, 1.4vw, 8px);
   min-width: 0;
 }
 
 .terminal-btn {
   min-width: 0;
-  min-height: clamp(32px, 4.5svh, 42px);
+  min-height: clamp(28px, 4svh, 38px);
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 7px;
-  padding: 0 8px;
+  gap: 5px;
+  padding: 0 6px;
   border: 1px solid var(--border);
   border-radius: 999px;
   background: var(--bg-card);
   color: var(--text-primary);
-  font-size: clamp(11px, 1.7svh, 15px);
+  font-size: clamp(10px, 1.5svh, 14px);
   font-weight: 600;
   box-shadow: var(--shadow-button);
   cursor: pointer;
@@ -705,11 +705,11 @@ svg {
 
 .terminal-icon {
   flex: 0 0 auto;
-  padding: 1px 4px;
+  padding: 1px 3px;
   border: 1px solid #9fd5aa;
   border-radius: 4px;
   color: var(--accent);
-  font-size: 11px;
+  font-size: 10px;
   line-height: 1;
 }
 
@@ -788,20 +788,20 @@ svg {
 .quick-btns {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 7px;
-  padding: clamp(10px, 1.4svh, 14px);
+  gap: 5px;
+  padding: clamp(8px, 1.1svh, 12px);
   min-width: 0;
 }
 
 .quick-btn {
   min-width: 0;
-  min-height: clamp(28px, 3.8svh, 36px);
-  padding: 0 6px;
+  min-height: clamp(24px, 3.4svh, 32px);
+  padding: 0 4px;
   border: 1px solid var(--border);
   border-radius: 999px;
   background: var(--bg-card);
   color: var(--text-primary);
-  font-size: clamp(12px, 1.7svh, 15px);
+  font-size: clamp(11px, 1.5svh, 14px);
   font-weight: 600;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -1081,35 +1081,60 @@ svg {
   color: var(--accent-text);
 }
 
-@media (max-width: 360px), (max-height: 760px) {
+@media (max-width: 395px), (max-height: 760px) {
   :root {
-    --gap: 6px;
+    --gap: 5px;
   }
 
   .shell {
-    padding: max(8px, env(safe-area-inset-top)) 10px max(8px, env(safe-area-inset-bottom));
+    padding: max(6px, env(safe-area-inset-top)) 8px max(6px, env(safe-area-inset-bottom));
+  }
+
+  .panel {
+    width: calc(100vw - 16px);
   }
 
   .device-pill {
-    padding: 7px 10px;
+    padding: 5px 8px;
+    gap: 4px;
   }
 
   .status-badge {
-    padding: 4px 8px;
+    padding: 2px 6px;
+    font-size: 10px;
   }
 
   .primary-actions {
-    grid-template-columns: minmax(68px, 1fr) auto minmax(68px, 1fr);
-    gap: 10px;
+    grid-template-columns: minmax(60px, 1fr) auto minmax(60px, 1fr);
+    gap: 8px;
   }
 
   .side-action-btn {
-    padding: 0 10px;
+    padding: 0 8px;
+    font-size: 13px;
   }
 
   .terminal-btn {
-    gap: 5px;
-    padding: 0 6px;
+    gap: 4px;
+    padding: 0 4px;
+  }
+
+  .shortcut-card {
+    padding: 6px;
+    gap: 4px;
+  }
+
+  .shortcut-grid {
+    gap: 2px;
+  }
+
+  .quick-btns {
+    gap: 4px;
+    padding: 6px;
+  }
+
+  .input-card {
+    padding: 10px;
   }
 
   #quickPanel {
