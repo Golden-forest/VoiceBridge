@@ -74,27 +74,6 @@
 
         <!-- 主操作 -->
         <section class="primary-actions">
-          <button id="submitButton" class="side-action-btn" type="button">
-            <svg viewBox="0 0 24 24" aria-hidden="true">
-              <path d="m22 2-7 20-4-9-9-4 20-7Z" />
-              <path d="M22 2 11 13" />
-            </svg>
-            <span>发送</span>
-          </button>
-          <button id="recordButton" class="record-button" type="button">
-            <span class="record-icon record-icon-mic">
-              <svg viewBox="0 0 24 24"><rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 10a7 7 0 0014 0"/><line x1="12" y1="19" x2="12" y2="22"/></svg>
-            </span>
-            <span class="record-label">录音</span>
-          </button>
-          <button id="enterButton" class="side-action-btn" type="button">
-            <svg viewBox="0 0 24 24" aria-hidden="true">
-              <path d="M12 15V3" />
-              <path d="M8 7l4-4 4 4" />
-              <path d="M3 12v6a3 3 0 003 3h12a3 3 0 003-3v-6" />
-            </svg>
-            <span>回车</span>
-          </button>
           <button id="pasteButton" class="side-action-btn" type="button">
             <svg viewBox="0 0 24 24" aria-hidden="true">
               <path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2" />
@@ -109,28 +88,45 @@
             </svg>
             <span>撤销</span>
           </button>
+          <button id="recordButton" class="record-button" type="button">
+            <span class="record-icon record-icon-mic">
+              <svg viewBox="0 0 24 24"><rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 10a7 7 0 0014 0"/><line x1="12" y1="19" x2="12" y2="22"/></svg>
+            </span>
+            <span class="record-label">录音</span>
+          </button>
+          <button id="submitButton" class="side-action-btn" type="button">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="m22 2-7 20-4-9-9-4 20-7Z" />
+              <path d="M22 2 11 13" />
+            </svg>
+            <span>发送</span>
+          </button>
+          <button id="enterButton" class="side-action-btn" type="button">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M12 15V3" />
+              <path d="M8 7l4-4 4 4" />
+              <path d="M3 12v6a3 3 0 003 3h12a3 3 0 003-3v-6" />
+            </svg>
+            <span>回车</span>
+          </button>
         </section>
 
         <!-- 兜底上传 -->
         <button id="fallbackButton" class="fallback-button hidden" type="button">录音或选择音频上传</button>
         <input id="fallbackFile" class="hidden" type="file" accept="audio/*" capture />
 
-        <!-- 折叠栏：更多指令 -->
-        <div id="quickBar" class="collapse-bar open">
-          <button id="quickToggle" class="collapse-toggle" type="button">
-            <span class="collapse-arrow">&#x25B8;</span> 更多指令
-          </button>
-          <div id="quickPanel" class="collapse-panel">
+        <!-- 底部 Tab 面板 -->
+        <nav class="tab-bar">
+          <button id="tabQuick" class="tab-btn active" type="button">更多指令</button>
+          <button id="tabPhrases" class="tab-btn" type="button">常用语 <span id="phrasesCount">(0)</span></button>
+        </nav>
+
+        <!-- Tab 内容区 -->
+        <div class="tab-content">
+          <div id="quickPanel" class="tab-panel">
             <div class="quick-btns" id="quickBtns"></div>
           </div>
-        </div>
-
-        <!-- 折叠栏：常用语 -->
-        <div id="phrasesDrawer" class="collapse-bar open">
-          <button id="phrasesToggle" class="collapse-toggle" type="button">
-            <span class="collapse-arrow">&#x25B8;</span> 常用语 <span id="phrasesCount">(0)</span>
-          </button>
-          <div id="phrasesPanel" class="collapse-panel">
+          <div id="phrasesPanel" class="tab-panel hidden">
             <div class="phrases-header">
               <span>常用语 <span id="phrasesPanelCount">(0)</span></span>
               <div class="phrases-header-actions">

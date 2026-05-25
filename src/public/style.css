@@ -283,7 +283,7 @@ svg {
 .window-dropdown {
   position: absolute;
   top: calc(100% + 12px);
-  right: max(-86px, calc((100vw - 320px) * -1));
+  left: 0;
   width: min(320px, calc(100vw - 28px));
   max-height: min(340px, 55svh);
   border: 1px solid var(--border);
@@ -649,62 +649,55 @@ svg {
   flex: 0 0 auto;
 }
 
-/* === Collapsible Cards === */
-.collapse-bar {
+/* === Tab Bar === */
+.tab-bar {
   display: flex;
-  flex-direction: column;
   min-width: 0;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--bg-soft);
+  overflow: hidden;
+  flex: 0 0 auto;
+}
+
+.tab-btn {
+  flex: 1;
+  min-height: clamp(36px, 5svh, 44px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  padding: 0 clamp(10px, 2vw, 16px);
+  border: 0;
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: clamp(14px, 2svh, 17px);
+  font-weight: 700;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+
+.tab-btn.active {
+  background: var(--bg-card);
+  color: var(--text-primary);
+  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.06);
+}
+
+/* === Tab Content === */
+.tab-content {
+  flex: 1 1 auto;
   min-height: 0;
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
   background: var(--bg-card);
   box-shadow: var(--shadow-card);
   overflow: hidden;
-  flex: 0 1 auto;
 }
 
-.collapse-toggle {
-  width: 100%;
-  min-height: clamp(38px, 5svh, 48px);
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  padding: 0 clamp(14px, 3vw, 20px);
-  border: 0;
-  background: transparent;
-  color: var(--text-primary);
-  font-size: clamp(17px, 2.4svh, 22px);
-  font-weight: 750;
-  text-align: left;
-  cursor: pointer;
-}
-
-.collapse-arrow {
-  margin-left: auto;
-  order: 2;
-  color: var(--text-secondary);
-  font-size: 14px;
-  transition: transform 0.2s;
-}
-
-.collapse-bar.open .collapse-arrow {
-  transform: rotate(90deg);
-}
-
-.collapse-panel {
-  min-height: 0;
-  border-top: 1px solid var(--border);
+.tab-panel {
+  height: 100%;
   overflow-y: auto;
   overflow-x: hidden;
-}
-
-#quickPanel {
-  max-height: clamp(220px, 36svh, 360px);
-}
-
-#phrasesPanel {
-  max-height: clamp(96px, 14svh, 140px);
 }
 
 /* === Quick Commands === */
@@ -791,7 +784,6 @@ svg {
   list-style: none;
   margin: 0;
   padding: 0;
-  max-height: clamp(62px, 9.5svh, 98px);
   overflow-y: auto;
   overflow-x: hidden;
 }
@@ -1104,14 +1096,6 @@ svg {
   .input-card {
     padding: 10px;
   }
-
-  #quickPanel {
-    max-height: 200px;
-  }
-
-  #phrasesPanel {
-    max-height: 94px;
-  }
 }
 
 @media (prefers-color-scheme: dark) {
@@ -1138,7 +1122,7 @@ svg {
   .brand-mark,
   .device-pill,
   .input-card,
-  .collapse-bar,
+  .tab-content,
   .save-btn,
   .side-action-btn,
   .terminal-btn {

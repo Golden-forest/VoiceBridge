@@ -257,8 +257,6 @@ class PhrasesManager {
 
   constructor() {
     this.el = {
-      drawer: document.querySelector("#phrasesDrawer"),
-      toggle: document.querySelector("#phrasesToggle"),
       panel: document.querySelector("#phrasesPanel"),
       list: document.querySelector("#phrasesList"),
       count: document.querySelector("#phrasesCount"),
@@ -277,7 +275,6 @@ class PhrasesManager {
   }
 
   _init() {
-    this.el.toggle.addEventListener("click", () => this._toggle());
     this.el.addBtn.addEventListener("click", () => this._openAddDialog());
     this.el.dialogCancel.addEventListener("click", () => this._closeDialog());
     this.el.dialogOverlay.addEventListener("click", () => this._closeDialog());
@@ -293,12 +290,6 @@ class PhrasesManager {
     const n = this._phrases.length;
     this.el.count.textContent = `(${n})`;
     this.el.panelCount.textContent = `(${n})`;
-  }
-
-  _toggle() {
-    this.el.drawer.classList.toggle("open");
-    this.el.panel.classList.toggle("hidden");
-    if (this.el.drawer.classList.contains("open")) this._exitEditMode();
   }
 
   _render() {
@@ -429,14 +420,24 @@ textInput.addEventListener("keydown", (e) => {
   if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendTextInput(); }
 });
 
-// === Quick Bar (collapse) ===
-const quickBar = document.querySelector("#quickBar");
-const quickToggle = document.querySelector("#quickToggle");
+// === Tab Navigation ===
+const tabQuick = document.querySelector("#tabQuick");
+const tabPhrases = document.querySelector("#tabPhrases");
 const quickPanel = document.querySelector("#quickPanel");
+const phrasesPanel = document.querySelector("#phrasesPanel");
 
-quickToggle.addEventListener("click", () => {
-  quickBar.classList.toggle("open");
-  quickPanel.classList.toggle("hidden");
+tabQuick.addEventListener("click", () => {
+  tabQuick.classList.add("active");
+  tabPhrases.classList.remove("active");
+  quickPanel.classList.remove("hidden");
+  phrasesPanel.classList.add("hidden");
+});
+
+tabPhrases.addEventListener("click", () => {
+  tabPhrases.classList.add("active");
+  tabQuick.classList.remove("active");
+  phrasesPanel.classList.remove("hidden");
+  quickPanel.classList.add("hidden");
 });
 
 // === Paste & Undo Buttons ===
