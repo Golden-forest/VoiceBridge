@@ -1,5 +1,5 @@
 import { WebSocket, WebSocketServer } from "ws";
-import { pressEnter, pressUndo } from "./input/paste.js";
+import { pressEnter, pressUndo, pressCtrlC, pressEscape, pressArrow } from "./input/paste.js";
 import { outputText } from "./input/outputText.js";
 
 export function createWebSocketHub(server) {
@@ -24,6 +24,16 @@ export function createWebSocketHub(server) {
         }
         if (payload.type === "undo") {
           await pressUndo();
+        }
+        if (payload.type === "ctrl-c") {
+          await pressCtrlC();
+        }
+        if (payload.type === "escape") {
+          await pressEscape();
+          if (payload.twice) await pressEscape();
+        }
+        if (payload.type === "arrow" && payload.direction) {
+          await pressArrow(payload.direction);
         }
         if (payload.type === "phrase" && typeof payload.text === "string") {
           const result = await outputText(payload.text, {

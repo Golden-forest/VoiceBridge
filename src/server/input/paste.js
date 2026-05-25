@@ -92,3 +92,50 @@ export async function pressUndo() {
   const { command, args } = getUndoCommand();
   await execFileAsync(command, args, { windowsHide: true });
 }
+
+// --- Generic key press helper ---
+function keyCommand(platform, key, modifiers = {}) {
+  if (platform === "darwin") {
+    const mod = Object.entries(modifiers)
+      .map(([mod, on]) => on ? `${mod} down` : "")
+      .filter(Boolean).join(" ");
+    const using = mod ? ` using {${mod}}` : "";
+    return {
+      command: "osascript",
+      args: ["-e", `tell application "System Events" to keystroke "${key}"${using}`]
+    };
+  }
+  if (platform === "win32") {
+    let sendKey = key;
+    if (modifiers.ctrl) sendKey = `^${sendKey}`;
+    if (modifiers.alt) sendKey = `%${sendKey}`;
+    if (modifiers.shift) sendKey = `+${sendKey}`;
+    return {
+      command: "powershell.exe",
+      args: ["-NoProfile", "-Command", `[System.Windows.Forms.SendKeys]::SendWait('${sendKey}')`]
+    };
+  }
+  const parts = [];
+  if (modifiers.ctrl) parts.push("ctrl");
+  if (modifiers.alt) parts.push("alt");
+  if (modifiers.shift) parts.push("shift");
+  parts.push(key);
+  return { command: "xdotool", args: ["key", parts.join("+")] };
+}
+
+export async function pressCtrlC() {
+  const { command, args } = keyCommand(process.platform, "c", { ctrl: true });
+  await execFileAsync(command, args, { windowsHide: true });
+}
+
+export async function pressEscape() {
+  const { command, args } = keyCommand(process.platform, "escape");
+  await execFileAsync(command, args, { windowsHide: true });
+}
+
+export async function pressArrow(direction) {
+  const keyMap = { up: "up", down: "down", left: "left", right: "right" };
+  const key = keyMap[direction] || direction;
+  const { command, args } = keyCommand(process.platform, key);
+  await execFileAsync(command, args, { windowsHide: true });
+}
