@@ -519,7 +519,7 @@ async function loadCommands() {
           btn.type = "button";
           btn.dataset.text = cmd.text;
           btn.dataset.label = cmd.label;
-          btn.innerHTML = (shortcutIcons[cmd.icon] || "") + " " + cmd.label;
+          btn.innerHTML = cmd.label;
           btn.title = cmd.text;
           quickBtns.appendChild(btn);
         });
@@ -532,7 +532,7 @@ async function loadCommands() {
           btn.type = "button";
           btn.dataset.text = cmd.text;
           btn.dataset.label = cmd.label;
-          btn.innerHTML = '<span class="terminal-icon" aria-hidden="true">›_</span> ' + cmd.label;
+          btn.innerHTML = cmd.label;
           btn.title = cmd.text;
           quickBtns.appendChild(btn);
         });
