@@ -651,11 +651,12 @@ svg {
   border: 1px solid var(--border);
   border-radius: 999px;
   background: var(--bg-card);
-  color: var(--text-primary);
+  color: var(--text-secondary);
   font-size: clamp(10px, 1.5svh, 14px);
   font-weight: 600;
   box-shadow: var(--shadow-button);
   cursor: pointer;
+  transition: all 0.2s var(--ease-bounce);
 }
 
 .terminal-btn span:last-child {
@@ -668,7 +669,7 @@ svg {
 .terminal-icon {
   flex: 0 0 auto;
   padding: 1px 3px;
-  border: 1px solid #9fd5aa;
+  border: 1px solid rgba(232, 121, 58, 0.3);
   border-radius: 4px;
   color: var(--accent);
   font-size: 10px;
@@ -694,7 +695,9 @@ svg {
   min-width: 0;
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
-  background: var(--bg-soft);
+  background: rgba(255, 255, 255, 0.6);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
   overflow: hidden;
   flex: 0 0 auto;
 }
@@ -709,17 +712,17 @@ svg {
   padding: 0 clamp(10px, 2vw, 16px);
   border: 0;
   background: transparent;
-  color: var(--text-secondary);
+  color: var(--text-muted);
   font-size: clamp(14px, 2svh, 17px);
   font-weight: 700;
   cursor: pointer;
-  transition: background 0.15s, color 0.15s;
+  transition: background 0.25s var(--ease-smooth), color 0.25s var(--ease-smooth), box-shadow 0.25s var(--ease-smooth);
 }
 
 .tab-btn.active {
   background: var(--bg-card);
-  color: var(--text-primary);
-  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.06);
+  color: var(--accent);
+  box-shadow: 0 1px 6px rgba(0, 0, 0, 0.06);
 }
 
 /* === Tab Content === */
@@ -756,16 +759,18 @@ svg {
   justify-content: center;
   gap: 3px;
   padding: 0 6px;
-  border: 1px solid var(--border);
+  border: 1.5px solid var(--border);
   border-radius: 999px;
   background: var(--bg-card);
-  color: var(--text-primary);
+  color: var(--text-secondary);
   font-size: clamp(12px, 1.7svh, 15px);
   font-weight: 600;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
   cursor: pointer;
+  transition: all 0.2s var(--ease-bounce);
+  box-shadow: var(--shadow-button);
 }
 
 .quick-btn svg {
@@ -819,6 +824,7 @@ svg {
   cursor: pointer;
   padding: 0;
   white-space: nowrap;
+  transition: opacity 0.2s var(--ease-smooth);
 }
 
 .phrases-list {
@@ -856,8 +862,8 @@ svg {
 }
 
 .phrases-item.editing {
-  background: #fff8df;
-  border-left: 3px solid #d99b12;
+  background: var(--accent-soft);
+  border-left: 3px solid var(--accent);
 }
 
 .phrases-item-text {
@@ -914,7 +920,7 @@ svg {
   width: 20px;
   height: 20px;
   flex: 0 0 auto;
-  color: var(--accent-deep);
+  color: var(--accent);
 }
 
 .save-btn.saved {
@@ -927,9 +933,9 @@ svg {
   padding: 0 10px;
   gap: 5px;
   font-size: 12px;
-  border: 1px solid var(--border);
+  border: 1px solid rgba(232, 121, 58, 0.2);
   border-radius: 999px;
-  background: var(--bg-card);
+  background: var(--accent-soft);
   color: var(--accent);
   font-weight: 650;
   cursor: pointer;
@@ -1029,7 +1035,9 @@ svg {
 .add-phrase-overlay {
   position: fixed;
   inset: 0;
-  background: rgba(0, 0, 0, 0.3);
+  background: rgba(200, 120, 50, 0.15);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
 }
 
 .add-phrase-content {
@@ -1088,8 +1096,9 @@ svg {
 
 .add-phrase-confirm-btn {
   border: 0;
-  background: var(--accent);
+  background: var(--accent-gradient);
   color: var(--accent-text);
+  box-shadow: var(--shadow-accent);
 }
 
 @media (max-width: 395px), (max-height: 760px) {
