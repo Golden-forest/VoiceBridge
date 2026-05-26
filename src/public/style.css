@@ -114,9 +114,9 @@ svg {
   display: grid;
   place-items: center;
   border-radius: 12px;
-  background: var(--bg-card);
-  color: var(--accent-deep);
-  box-shadow: var(--shadow-button);
+  background: var(--accent-gradient);
+  color: var(--accent-text);
+  box-shadow: var(--shadow-accent);
 }
 
 .brand-mark svg {
@@ -144,9 +144,14 @@ svg {
   place-items: center;
   border: 0;
   border-radius: 999px;
-  background: transparent;
-  color: var(--text-primary);
+  background: var(--accent-soft);
+  color: var(--accent);
   cursor: pointer;
+  transition: background 0.2s var(--ease-smooth), transform 0.2s var(--ease-bounce);
+}
+
+.refresh-button:active {
+  transform: scale(0.9);
 }
 
 .refresh-button svg {
@@ -167,7 +172,7 @@ svg {
   flex-wrap: wrap;
   gap: clamp(5px, 1.5vw, 10px);
   padding: 6px clamp(8px, 2vw, 12px);
-  border: 1px solid var(--border);
+  border: 1px solid rgba(232, 121, 58, 0.12);
   border-radius: var(--radius-lg);
   background: var(--bg-card);
   box-shadow: var(--shadow-card);
@@ -182,8 +187,9 @@ svg {
   place-items: center;
   flex: 0 0 auto;
   border-radius: 999px;
-  background: var(--accent);
+  background: var(--accent-gradient);
   color: var(--accent-text);
+  box-shadow: var(--shadow-accent);
 }
 
 .device-icon svg {
@@ -209,6 +215,7 @@ svg {
 
 .status-dot.connected {
   background: var(--accent);
+  box-shadow: 0 0 6px rgba(232, 121, 58, 0.4);
 }
 
 .status-dot.error {
@@ -229,7 +236,7 @@ svg {
 .status-badge {
   flex: 0 0 auto;
   padding: 3px 8px;
-  border: 1px solid #d7eadc;
+  border: 1px solid rgba(232, 121, 58, 0.15);
   border-radius: 999px;
   background: var(--accent-soft);
   color: var(--accent-deep);
@@ -299,7 +306,7 @@ svg {
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
   background: var(--bg-card);
-  box-shadow: 0 14px 34px rgba(15, 23, 42, 0.16);
+  box-shadow: 0 14px 34px rgba(200, 120, 50, 0.12), 0 4px 12px rgba(0, 0, 0, 0.06);
   flex-direction: column;
   z-index: 100;
   overflow: hidden;
@@ -433,7 +440,7 @@ svg {
   border: 1px solid var(--border);
   border-radius: 999px;
   background: var(--bg-card);
-  color: var(--text-primary);
+  color: var(--text-secondary);
   font-size: 12px;
   font-weight: 600;
   overflow: hidden;
@@ -441,12 +448,15 @@ svg {
   white-space: nowrap;
   box-shadow: var(--shadow-button);
   cursor: pointer;
+  transition: all 0.2s var(--ease-bounce);
 }
 
 .recent-tag:active {
+  transform: scale(0.94);
   border-color: var(--accent);
   background: var(--accent);
   color: var(--accent-text);
+  box-shadow: var(--shadow-accent);
 }
 
 /* === Input === */
@@ -455,12 +465,17 @@ svg {
   display: flex;
   flex-direction: column;
   padding: clamp(10px, 1.6svh, 16px);
-  border: 1px solid var(--border);
+  border: 1px solid rgba(255, 255, 255, 0.8);
   border-radius: var(--radius-lg);
   background: var(--bg-card);
   box-shadow: var(--shadow-card);
   flex: 0 0 auto;
   min-width: 0;
+  transition: box-shadow 0.3s var(--ease-smooth);
+}
+
+.input-card:focus-within {
+  box-shadow: var(--shadow-button-hover);
 }
 
 .text-input {
@@ -524,13 +539,18 @@ svg {
   gap: 3px;
   padding: 6px 0;
   border: 1px solid var(--border);
-  border-radius: 999px;
+  border-radius: var(--radius-sm);
   background: var(--bg-card);
-  color: var(--text-primary);
+  color: var(--text-secondary);
   font-size: clamp(11px, 1.5svh, 14px);
   font-weight: 650;
   box-shadow: var(--shadow-button);
   cursor: pointer;
+  transition: all 0.2s var(--ease-bounce);
+}
+
+.side-action-btn:hover {
+  box-shadow: var(--shadow-button-hover);
 }
 
 .side-action-btn svg {
@@ -553,12 +573,18 @@ svg {
   gap: 2px;
   border: 0;
   border-radius: 999px;
-  background: var(--accent);
+  background: var(--accent-gradient);
   color: var(--accent-text);
-  box-shadow: 0 12px 28px rgba(21, 128, 61, 0.24);
+  box-shadow: var(--shadow-accent-lg);
   cursor: pointer;
   touch-action: manipulation;
   user-select: none;
+  transition: transform 0.2s var(--ease-bounce), box-shadow 0.2s var(--ease-smooth);
+}
+
+.record-button:active:not(:disabled) {
+  transform: scale(0.9);
+  box-shadow: var(--shadow-accent);
 }
 
 .record-button:disabled {
@@ -569,7 +595,7 @@ svg {
 
 .record-button.recording {
   background: var(--danger);
-  box-shadow: 0 12px 28px rgba(185, 28, 28, 0.24);
+  box-shadow: 0 12px 28px rgba(239, 68, 68, 0.35);
 }
 
 .record-icon {
@@ -756,9 +782,11 @@ svg {
 .quick-btn:active,
 .terminal-btn:active,
 .side-action-btn:active {
+  transform: scale(0.92);
   border-color: var(--accent);
   background: var(--accent);
   color: var(--accent-text);
+  box-shadow: var(--shadow-accent);
 }
 
 /* === Phrases === */
