@@ -1156,23 +1156,29 @@ svg {
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --bg-page: #181817;
-    --bg-card: #272624;
-    --bg-soft: #201f1e;
-    --bg-chip: #222b24;
-    --text-primary: #f4f4ef;
+    --bg-page: #181716;
+    --bg-card: #272523;
+    --bg-soft: #201e1c;
+    --bg-chip: #2a2418;
+    --text-primary: #f4f1ed;
     --text-secondary: #c1bdb7;
     --text-muted: #8c8781;
     --text-placeholder: #77716b;
-    --border: #3b3936;
-    --border-strong: #4a4742;
-    --accent: #22c55e;
-    --accent-deep: #86efac;
-    --accent-soft: #0f2b1a;
-    --accent-text: #052e16;
+    --border: rgba(255, 255, 255, 0.08);
+    --border-strong: rgba(255, 255, 255, 0.12);
+    --accent: #f97316;
+    --accent-deep: #fdba74;
+    --accent-soft: #2a1f14;
+    --accent-softer: #231a12;
+    --accent-gradient: linear-gradient(135deg, #f97316, #ea580c);
+    --accent-glow: rgba(249, 115, 22, 0.3);
+    --accent-text: #ffffff;
     --danger: #ef4444;
     --shadow-card: 0 12px 28px rgba(0, 0, 0, 0.28);
     --shadow-button: 0 4px 14px rgba(0, 0, 0, 0.22);
+    --shadow-accent: 0 2px 10px rgba(249, 115, 22, 0.25);
+    --shadow-accent-lg: 0 4px 16px rgba(249, 115, 22, 0.3);
+    --shadow-button-hover: 0 6px 20px rgba(0, 0, 0, 0.35);
   }
 
   .brand-mark,
@@ -1186,7 +1192,7 @@ svg {
   }
 
   .status-badge {
-    border-color: #255f39;
+    border-color: rgba(249, 115, 22, 0.2);
     background: var(--accent-soft);
     color: var(--accent-deep);
   }
@@ -1209,7 +1215,7 @@ svg {
   }
 
   .phrases-item.editing {
-    background: #2b2412;
+    background: var(--accent-soft);
   }
 
   .phrases-item-delete {
@@ -1219,5 +1225,18 @@ svg {
 
   .add-phrase-input {
     background: var(--bg-soft);
+  }
+
+  body {
+    background: linear-gradient(165deg, #181716 0%, #1f1c18 40%, #1a1816 100%);
+    background-attachment: fixed;
+  }
+
+  .tab-bar {
+    background: rgba(39, 37, 35, 0.6);
+  }
+
+  .tab-btn.active {
+    color: var(--accent);
   }
 }
