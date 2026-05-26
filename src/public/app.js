@@ -201,7 +201,7 @@ class WindowSelector {
 // === RecentCommands ===
 class RecentCommands {
   static STORAGE_KEY = "voicebridge_recent_commands";
-  static MAX_ITEMS = 6;
+  static MAX_ITEMS = 12;
   static MAX_LABEL_LEN = 8;
 
   constructor(containerEl) {
