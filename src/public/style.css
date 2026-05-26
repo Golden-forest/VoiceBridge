@@ -493,36 +493,39 @@ svg {
 
 /* === Main Actions === */
 .primary-actions {
-  min-height: clamp(62px, 8.5svh, 84px);
+  min-height: clamp(62px, 9svh, 84px);
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: clamp(4px, 1.5vw, 8px);
+  gap: clamp(5px, 1.5vw, 8px);
   flex: 0 0 auto;
   min-width: 0;
 }
 
 .side-action-btn {
+  flex: 1 1 0;
   min-width: 0;
-  min-height: clamp(44px, 6svh, 58px);
+  min-height: clamp(48px, 7svh, 64px);
+  max-width: 76px;
   display: inline-flex;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 5px;
-  padding: 0 clamp(8px, 2.2vw, 18px);
+  gap: 3px;
+  padding: 6px 0;
   border: 1px solid var(--border);
   border-radius: 999px;
   background: var(--bg-card);
   color: var(--text-primary);
-  font-size: clamp(14px, 2svh, 18px);
+  font-size: clamp(11px, 1.5svh, 14px);
   font-weight: 650;
   box-shadow: var(--shadow-button);
   cursor: pointer;
 }
 
 .side-action-btn svg {
-  width: 21px;
-  height: 21px;
+  width: clamp(20px, 3svh, 24px);
+  height: clamp(20px, 3svh, 24px);
   flex: 0 0 auto;
   fill: none;
   stroke: currentColor;
@@ -1079,8 +1082,14 @@ svg {
   }
 
   .side-action-btn {
-    padding: 0 8px;
-    font-size: 13px;
+    min-height: 44px;
+    padding: 4px 0;
+    font-size: 10px;
+  }
+
+  .side-action-btn svg {
+    width: 18px;
+    height: 18px;
   }
 
   .terminal-btn {
