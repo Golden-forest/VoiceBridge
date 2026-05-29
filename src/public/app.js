@@ -7,6 +7,25 @@ const autoPasteEl = document.querySelector("#autoPaste");
 const toastEl = document.querySelector("#toast");
 const pageRefreshButton = document.querySelector("#pageRefreshButton");
 
+// === Phone Clipboard ===
+async function copyToPhoneClipboard(text) {
+  try {
+    await navigator.clipboard.writeText(text);
+  } catch {
+    try {
+      const ta = document.createElement("textarea");
+      ta.value = text;
+      ta.style.cssText = "position:fixed;left:-9999px;opacity:0";
+      document.body.appendChild(ta);
+      ta.select();
+      document.execCommand("copy");
+      document.body.removeChild(ta);
+    } catch {
+      // 静默失败，不影响主流程
+    }
+  }
+}
+
 // === Toast ===
 let toastTimer = null;
 
@@ -16,6 +35,29 @@ function showToast(message, isError = false) {
   toastEl.classList.toggle("error", isError);
   toastEl.classList.add("show");
   toastTimer = setTimeout(() => toastEl.classList.remove("show"), 2500);
+}
+
+function showCopyToast(message, copyText) {
+  clearTimeout(toastTimer);
+  toastEl.classList.remove("error");
+  toastEl.innerHTML = "";
+  const span = document.createElement("span");
+  span.textContent = message;
+  toastEl.appendChild(span);
+  const btn = document.createElement("button");
+  btn.className = "toast-copy-btn";
+  btn.type = "button";
+  btn.textContent = "复制到手机";
+  btn.addEventListener("click", () => {
+    copyToPhoneClipboard(copyText);
+    btn.disabled = true;
+    btn.textContent = "已复制";
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => toastEl.classList.remove("show"), 1500);
+  });
+  toastEl.appendChild(btn);
+  toastEl.classList.add("show");
+  toastTimer = setTimeout(() => toastEl.classList.remove("show"), 4000);
 }
 
 // === Status Dot ===
@@ -74,6 +116,7 @@ function sendTextInput() {
     if (windowSelector.targetWindow) {
       msg.targetWindow = windowSelector.targetWindow;
     }
+    copyToPhoneClipboard(text);
     ws.send(JSON.stringify(msg));
     textInput.value = "";
     updateTextInputState();
@@ -317,6 +360,7 @@ class PhrasesManager {
     if (ws && ws.readyState === WebSocket.OPEN) {
       const msg = { type: "phrase", text, autoPaste: autoPasteEl.checked };
       if (windowSelector.targetWindow) msg.targetWindow = windowSelector.targetWindow;
+      copyToPhoneClipboard(text);
       ws.send(JSON.stringify(msg));
       showToast("已发送常用语到电脑。");
     } else {
@@ -475,6 +519,7 @@ function sendQuickCommand(text, label) {
   if (ws && ws.readyState === WebSocket.OPEN) {
     const msg = { type: "phrase", text, autoPaste: autoPasteEl.checked };
     if (windowSelector.targetWindow) msg.targetWindow = windowSelector.targetWindow;
+    copyToPhoneClipboard(text);
     ws.send(JSON.stringify(msg));
     recentCommands.record(text, label || text);
     showToast("已发送快捷指令。");
@@ -697,7 +742,11 @@ async function uploadAudio(blob, extension) {
     const payload = await response.json();
     if (!response.ok || !payload.ok) throw new Error(payload.error || "上传失败");
     const output = payload.output || {};
-    showToast(output.pasted ? "已复制并自动粘贴。" : "已复制到电脑剪切板。");
+    if (output.pasted) {
+      showToast("已复制并自动粘贴。");
+    } else {
+      showCopyToast("已复制到电脑剪切板。", payload.text || "");
+    }
   } catch (error) {
     showToast(error.message, true);
   } finally {
@@ -730,7 +779,11 @@ function connectWebSocket() {
         showToast(payload.message, payload.type === "error");
       }
       if (payload.type === "output" && payload.copied && !payload.pasted) {
-        showToast(payload.pasteError ? "已复制，自动粘贴失败。" : "已复制到剪切板。", Boolean(payload.pasteError));
+        if (payload.pasteError) {
+          showToast("已复制，自动粘贴失败。", true);
+        } else if (payload.text) {
+          showCopyToast("已复制到剪切板。", payload.text);
+        }
       }
     } catch {
       // Ignore malformed messages
