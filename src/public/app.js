@@ -358,7 +358,7 @@ class CommandLibrary {
       const res = await fetch("/api/commands");
       this.commands = await res.json();
       this.render();
-      this._migrateLocalStoragePhrases();
+      await this._migrateLocalStoragePhrases();
     } catch {
       this.container.innerHTML = '<p style="padding:12px;color:var(--text-muted);text-align:center;">加载指令失败</p>';
     }
@@ -429,6 +429,9 @@ class CommandLibrary {
           btn.type = "button";
           btn.dataset.id = cmd.id;
           btn.title = cmd.text;
+          if (cmd.text.startsWith("/") || /^(npm|node|copyclaw|npx)\b/.test(cmd.text)) {
+            btn.classList.add("slash");
+          }
           if (this.editingId === cmd.id) {
             btn.classList.add("editing");
             const input = document.createElement("span");
@@ -617,7 +620,7 @@ class CommandLibrary {
     return d.innerHTML;
   }
 
-  _migrateLocalStoragePhrases() {
+  async _migrateLocalStoragePhrases() {
     const STORAGE_KEY = "voicebridge_phrases";
     try {
       const raw = localStorage.getItem(STORAGE_KEY);
@@ -628,7 +631,7 @@ class CommandLibrary {
       if (localStorage.getItem(migratedKey)) return;
       for (const phrase of phrases) {
         if (phrase.text) {
-          fetch("/api/commands", {
+          await fetch("/api/commands", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
@@ -640,7 +643,9 @@ class CommandLibrary {
         }
       }
       localStorage.setItem(migratedKey, "true");
-      fetch("/api/commands").then(r => r.json()).then(cmds => { this.commands = cmds; this.render(); }).catch(() => {});
+      const res = await fetch("/api/commands");
+      this.commands = await res.json();
+      this.render();
     } catch { }
   }
 }

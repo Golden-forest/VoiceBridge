@@ -908,6 +908,14 @@ svg {
   box-shadow: var(--shadow-accent);
 }
 
+.cmd-btn.slash {
+  background: var(--accent-dim);
+  color: var(--accent);
+  border-color: rgba(255, 140, 66, 0.3);
+  font-family: "SF Mono", Menlo, "Courier New", monospace;
+  font-size: 12px;
+}
+
 .cmd-btn.dimmed {
   opacity: 0.35;
   pointer-events: none;
