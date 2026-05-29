@@ -447,6 +447,328 @@ class PhrasesManager {
   hideSaveButton() { this.el.saveBtn.classList.add("hidden"); }
 }
 
+// === CommandLibrary ===
+class CommandLibrary {
+  constructor(containerEl) {
+    this.container = containerEl;
+    this.commands = [];
+    this.filter = "";
+    this.editingId = null;
+    this.collapsedCategories = new Set();
+    this._longPressTimer = null;
+    this._longPressTriggered = false;
+    this._bindContainerEvents();
+    this.load();
+  }
+
+  _bindContainerEvents() {
+    this.container.addEventListener("click", (e) => {
+      // Category header toggle
+      const header = e.target.closest(".category-header");
+      if (header) {
+        const cat = header.dataset.category;
+        this.toggleCategory(cat);
+        return;
+      }
+      // Command button click
+      const btn = e.target.closest(".cmd-btn");
+      if (!btn) return;
+      const id = btn.dataset.id;
+      if (this.editingId) {
+        if (btn.classList.contains("cmd-delete-btn")) {
+          this._deleteCommand(id);
+        } else if (btn.classList.contains("cmd-done-btn")) {
+          this._exitEditMode();
+        }
+        return;
+      }
+      const cmd = this.commands.find(c => c.id === id);
+      if (!cmd) return;
+      sendQuickCommand(cmd.text, cmd.label);
+      this.touchCommand(id);
+    });
+    // Long press for edit mode
+    this.container.addEventListener("pointerdown", (e) => {
+      const btn = e.target.closest(".cmd-btn");
+      if (!btn || this.editingId) return;
+      const id = btn.dataset.id;
+      this._longPressTriggered = false;
+      this._longPressTimer = setTimeout(() => {
+        this._longPressTriggered = true;
+        this._enterEditMode(id);
+      }, 500);
+    });
+    this.container.addEventListener("pointerup", () => { clearTimeout(this._longPressTimer); });
+    this.container.addEventListener("pointerleave", () => { clearTimeout(this._longPressTimer); });
+    this.container.addEventListener("pointermove", (e) => {
+      if (this._longPressTimer) clearTimeout(this._longPressTimer);
+    });
+  }
+
+  async load() {
+    try {
+      const res = await fetch("/api/commands");
+      this.commands = await res.json();
+      this.render();
+    } catch {
+      this.container.innerHTML = '<p style="padding:12px;color:var(--text-muted);text-align:center;">加载指令失败</p>';
+    }
+  }
+
+  _getCategories() {
+    const map = {};
+    this.commands.forEach(cmd => {
+      const cat = cmd.category || "未分类";
+      if (!map[cat]) map[cat] = [];
+      map[cat].push(cmd);
+    });
+    // Sort each category's commands by lastUsedAt (most recent first)
+    Object.values(map).forEach(cmds => {
+      cmds.sort((a, b) => new Date(b.lastUsedAt || 0) - new Date(a.lastUsedAt || 0));
+    });
+    // Sort categories by most recent lastUsedAt across all commands
+    const sorted = Object.entries(map).sort((a, b) => {
+      const aMax = Math.max(...a[1].map(c => new Date(c.lastUsedAt || 0)));
+      const bMax = Math.max(...b[1].map(c => new Date(c.lastUsedAt || 0)));
+      return bMax - aMax;
+    });
+    return sorted;
+  }
+
+  render(filter) {
+    this.filter = filter || this.filter;
+    const cats = this._getCategories();
+    const q = this.filter.toLowerCase();
+    this.container.innerHTML = "";
+
+    if (cats.length === 0) {
+      this.container.innerHTML = '<p style="padding:12px;color:var(--text-muted);text-align:center;">暂无指令</p>';
+      return;
+    }
+
+    let hasVisible = false;
+    cats.forEach(([category, cmds]) => {
+      const filtered = q
+        ? cmds.filter(c => (c.label || "").toLowerCase().includes(q) || (c.text || "").toLowerCase().includes(q))
+        : cmds;
+      if (filtered.length === 0) return;
+      hasVisible = true;
+
+      const group = document.createElement("div");
+      group.className = "category-group";
+
+      const isCollapsed = this.collapsedCategories.has(category);
+
+      const header = document.createElement("div");
+      header.className = "category-header";
+      header.dataset.category = category;
+      header.innerHTML = `
+        <div class="category-left">
+          <span class="category-arrow${isCollapsed ? "" : " open"}">&#x25BE;</span>
+          <span class="category-name">${this._escHtml(category)}</span>
+          <span class="category-count">${filtered.length}</span>
+        </div>
+      `;
+      group.appendChild(header);
+
+      if (!isCollapsed) {
+        const grid = document.createElement("div");
+        grid.className = "cmd-grid";
+        filtered.forEach(cmd => {
+          const btn = document.createElement("button");
+          btn.className = "cmd-btn";
+          btn.type = "button";
+          btn.dataset.id = cmd.id;
+          btn.title = cmd.text;
+          if (this.editingId === cmd.id) {
+            btn.classList.add("editing");
+            const input = document.createElement("span");
+            input.className = "cmd-edit-label";
+            input.contentEditable = "true";
+            input.textContent = cmd.label;
+            btn.appendChild(input);
+            // Delete and Done buttons
+            const actions = document.createElement("span");
+            actions.className = "cmd-edit-actions";
+            const delBtn = document.createElement("span");
+            delBtn.className = "cmd-btn cmd-delete-btn";
+            delBtn.dataset.id = cmd.id;
+            delBtn.textContent = "删除";
+            actions.appendChild(delBtn);
+            const doneBtn = document.createElement("span");
+            doneBtn.className = "cmd-btn cmd-done-btn";
+            doneBtn.textContent = "完成";
+            actions.appendChild(doneBtn);
+            btn.appendChild(actions);
+            // Stop event propagation on inner buttons
+            delBtn.addEventListener("pointerdown", e => e.stopPropagation());
+            doneBtn.addEventListener("pointerdown", e => e.stopPropagation());
+          } else {
+            if (this.editingId) btn.classList.add("dimmed");
+            const labelSpan = document.createElement("span");
+            labelSpan.className = "cmd-label";
+            labelSpan.textContent = cmd.label;
+            btn.appendChild(labelSpan);
+          }
+          grid.appendChild(btn);
+        });
+        group.appendChild(grid);
+      }
+
+      this.container.appendChild(group);
+    });
+
+    if (!hasVisible) {
+      this.container.innerHTML = '<p style="padding:12px;color:var(--text-muted);text-align:center;">没有匹配的指令</p>';
+    }
+  }
+
+  toggleCategory(category) {
+    if (this.collapsedCategories.has(category)) {
+      this.collapsedCategories.delete(category);
+    } else {
+      this.collapsedCategories.add(category);
+    }
+    this.render();
+  }
+
+  _enterEditMode(id) {
+    this.editingId = id;
+    this.render();
+  }
+
+  _exitEditMode() {
+    if (!this.editingId) return;
+    // Save label changes
+    const editInput = this.container.querySelector(`.cmd-btn.editing .cmd-edit-label`);
+    if (editInput) {
+      const newLabel = editInput.textContent.trim();
+      if (newLabel) {
+        this._updateCommand(this.editingId, { label: newLabel });
+      }
+    }
+    this.editingId = null;
+    this.render();
+  }
+
+  async _deleteCommand(id) {
+    try {
+      await fetch(`/api/commands/${id}`, { method: "DELETE" });
+      this.commands = this.commands.filter(c => c.id !== id);
+      this.editingId = null;
+      showToast("已删除指令。");
+      this.render();
+    } catch {
+      showToast("删除失败。", true);
+    }
+  }
+
+  async _updateCommand(id, updates) {
+    try {
+      const res = await fetch(`/api/commands/${id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(updates)
+      });
+      const updated = await res.json();
+      const idx = this.commands.findIndex(c => c.id === id);
+      if (idx !== -1) this.commands[idx] = updated;
+    } catch {
+      // silently fail, stale data will refresh on next load
+    }
+  }
+
+  async touchCommand(id) {
+    try {
+      const res = await fetch(`/api/commands/${id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ lastUsedAt: new Date().toISOString() })
+      });
+      const updated = await res.json();
+      const idx = this.commands.findIndex(c => c.id === id);
+      if (idx !== -1) this.commands[idx] = updated;
+      this.render();
+    } catch {
+      // silently fail
+    }
+  }
+
+  async addCommand(text, category) {
+    try {
+      const res = await fetch("/api/commands", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          text,
+          label: text.length > 8 ? text.slice(0, 8) + "\u2026" : text,
+          category: category || "通用"
+        })
+      });
+      const created = await res.json();
+      this.commands.unshift(created);
+      this.render();
+      showToast("已添加指令。");
+    } catch {
+      showToast("添加失败。", true);
+    }
+  }
+
+  getUniqueCategories() {
+    return new Set(this.commands.map(c => c.category || "未分类"));
+  }
+
+  openAddDialog(preText) {
+    const dialog = document.getElementById("addCommandDialog");
+    const input = document.getElementById("addCommandInput");
+    const select = document.getElementById("addCommandCategory");
+    const newCatInput = document.getElementById("addCommandNewCategory");
+    if (preText) input.value = preText;
+    else input.value = "";
+    newCatInput.value = "";
+    // Populate category select
+    select.innerHTML = "";
+    this.getUniqueCategories().forEach(cat => {
+      const opt = document.createElement("option");
+      opt.value = cat;
+      opt.textContent = cat;
+      select.appendChild(opt);
+    });
+    // Add "新分类..." option
+    const newOpt = document.createElement("option");
+    newOpt.value = "__new__";
+    newOpt.textContent = "新分类…";
+    select.appendChild(newOpt);
+    select.value = select.options[0].value;
+    newCatInput.classList.add("hidden");
+    dialog.classList.remove("hidden");
+    input.focus();
+  }
+
+  closeAddDialog() {
+    document.getElementById("addCommandDialog").classList.add("hidden");
+  }
+
+  async confirmAdd() {
+    const input = document.getElementById("addCommandInput");
+    const select = document.getElementById("addCommandCategory");
+    const newCatInput = document.getElementById("addCommandNewCategory");
+    const text = input.value.trim();
+    if (!text) return;
+    const category = select.value === "__new__"
+      ? (newCatInput.value.trim() || "通用")
+      : select.value;
+    await this.addCommand(text, category);
+    this.closeAddDialog();
+  }
+
+  _escHtml(str) {
+    const d = document.createElement("div");
+    d.textContent = str;
+    return d.innerHTML;
+  }
+}
+
 // === Initialize ===
 const phrases = new PhrasesManager();
 const windowSelector = new WindowSelector();
@@ -547,70 +869,6 @@ const shortcutIcons = {
   exit: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10 17 15 12l-5-5"/><path d="M15 12H3"/><path d="M14 4h5v16h-5"/></svg>',
   compact: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m8 3 4 4-4 4"/><path d="M12 7H3"/><path d="m16 21-4-4 4-4"/><path d="M12 17h9"/></svg>'
 };
-
-async function loadCommands() {
-  try {
-    const res = await fetch("/commands.json");
-    const data = await res.json();
-
-    // === Render text commands into #quickBtns (更多指令面板) ===
-    const quickBtns = document.querySelector("#quickBtns");
-    if (quickBtns) {
-      // text shortcuts (exit, /compact, etc.)
-      if (data.shortcuts) {
-        data.shortcuts.forEach(cmd => {
-          const btn = document.createElement("button");
-          btn.className = "quick-btn";
-          btn.type = "button";
-          btn.dataset.text = cmd.text;
-          btn.dataset.label = cmd.label;
-          btn.innerHTML = cmd.label;
-          btn.title = cmd.text;
-          quickBtns.appendChild(btn);
-        });
-      }
-      // terminal commands
-      if (data.terminal) {
-        data.terminal.forEach(cmd => {
-          const btn = document.createElement("button");
-          btn.className = "quick-btn";
-          btn.type = "button";
-          btn.dataset.text = cmd.text;
-          btn.dataset.label = cmd.label;
-          btn.innerHTML = cmd.label;
-          btn.title = cmd.text;
-          quickBtns.appendChild(btn);
-        });
-      }
-      // quick commands
-      if (data.quick) {
-        data.quick.forEach(cmd => {
-          const btn = document.createElement("button");
-          btn.className = "quick-btn";
-          btn.type = "button";
-          btn.dataset.text = cmd.text;
-          btn.textContent = cmd.label;
-          btn.title = cmd.text;
-          quickBtns.appendChild(btn);
-        });
-      }
-    }
-  } catch {
-    // Silently fail
-  }
-
-  // === Bind quick-btn click handlers (更多指令面板) ===
-  document.querySelectorAll(".quick-btn").forEach(btn => {
-    btn.addEventListener("click", () => {
-      const text = btn.dataset.text;
-      if (!text) return;
-      const label = btn.dataset.label || btn.textContent.trim();
-      sendQuickCommand(text, label);
-    });
-  });
-}
-
-loadCommands();
 
 phrases.el.saveBtn.addEventListener("click", () => {
   const text = textInput.value.trim();
