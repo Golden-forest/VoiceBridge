@@ -242,59 +242,6 @@ class WindowSelector {
   }
 }
 
-// === RecentCommands ===
-class RecentCommands {
-  static STORAGE_KEY = "voicebridge_recent_commands";
-  static MAX_ITEMS = 12;
-  static MAX_LABEL_LEN = 8;
-
-  constructor(containerEl) {
-    this.container = containerEl;
-    this._commands = this._load();
-    this._render();
-  }
-
-  _load() {
-    try { return JSON.parse(localStorage.getItem(RecentCommands.STORAGE_KEY)) || []; } catch { return []; }
-  }
-
-  _save() {
-    localStorage.setItem(RecentCommands.STORAGE_KEY, JSON.stringify(this._commands));
-  }
-
-  record(text, label) {
-    const entry = { text, label, ts: Date.now() };
-    this._commands = this._commands.filter((c) => c.text !== text);
-    this._commands.unshift(entry);
-    this._commands = this._commands.slice(0, RecentCommands.MAX_ITEMS);
-    this._save();
-    this._render();
-  }
-
-  _truncate(str) {
-    if (str.length <= RecentCommands.MAX_LABEL_LEN) return str;
-    return str.slice(0, RecentCommands.MAX_LABEL_LEN) + "…";
-  }
-
-  _render() {
-    this.container.innerHTML = "";
-    if (this._commands.length === 0) {
-      this.container.classList.add("hidden");
-      return;
-    }
-    this.container.classList.remove("hidden");
-    this._commands.forEach((cmd) => {
-      const btn = document.createElement("button");
-      btn.className = "recent-tag";
-      btn.type = "button";
-      btn.dataset.text = cmd.text;
-      btn.textContent = this._truncate(cmd.label);
-      btn.title = cmd.text;
-      this.container.appendChild(btn);
-    });
-  }
-}
-
 // === CommandLibrary ===
 class CommandLibrary {
   constructor(containerEl) {
@@ -303,7 +250,7 @@ class CommandLibrary {
     this.commands = [];
     this.filter = "";
     this.editingId = null;
-    this.activeCategory = null;
+    this.activeCategory = "最近";
     this._longPressTimer = null;
     this._longPressTriggered = false;
     this._bindContainerEvents();
@@ -360,7 +307,12 @@ class CommandLibrary {
     try {
       const res = await fetch("/api/commands");
       this.commands = await res.json();
-      // Set default active category to the most recently used category
+      // If "最近" is active but no commands have been used, fall back to first category
+      if (this.activeCategory === "最近" && !this.commands.some(c => c.lastUsedAt)) {
+        const cats = this._getCategories();
+        if (cats.length > 0) this.activeCategory = cats[0][0];
+      }
+      // Set default active category if still null
       if (!this.activeCategory) {
         const cats = this._getCategories();
         if (cats.length > 0) this.activeCategory = cats[0][0];
@@ -396,6 +348,22 @@ class CommandLibrary {
   renderTabs() {
     this.tabScroll.innerHTML = "";
     const cats = this._getCategories();
+    // Render "最近" virtual tab first
+    const recentCount = this.commands.filter(c => c.lastUsedAt).length;
+    if (recentCount > 0) {
+      const recentBtn = document.createElement("button");
+      recentBtn.className = "tab-item" + (this.activeCategory === "最近" ? " active" : "");
+      recentBtn.type = "button";
+      recentBtn.dataset.category = "最近";
+      const recentNameSpan = document.createElement("span");
+      recentNameSpan.textContent = "最近";
+      recentBtn.appendChild(recentNameSpan);
+      const recentCountSpan = document.createElement("span");
+      recentCountSpan.className = "tab-count";
+      recentCountSpan.textContent = recentCount > 12 ? "12+" : String(recentCount);
+      recentBtn.appendChild(recentCountSpan);
+      this.tabScroll.appendChild(recentBtn);
+    }
     cats.forEach(([category, cmds]) => {
       const btn = document.createElement("button");
       btn.className = "tab-item" + (category === this.activeCategory ? " active" : "");
@@ -428,9 +396,19 @@ class CommandLibrary {
     }
 
     // When searching, show results across all categories
-    const cmdsToShow = q
-      ? this.commands.filter(c => (c.label || "").toLowerCase().includes(q) || (c.text || "").toLowerCase().includes(q))
-      : this.commands.filter(c => (c.category || "未分类") === this.activeCategory);
+    let cmdsToShow;
+    if (q) {
+      cmdsToShow = this.commands.filter(c => (c.label || "").toLowerCase().includes(q) || (c.text || "").toLowerCase().includes(q));
+    } else if (this.activeCategory === "最近") {
+      // Show recently used commands across all categories, deduplicated, sorted by lastUsedAt desc, max 12
+      const seen = new Set();
+      cmdsToShow = this.commands
+        .filter(c => c.lastUsedAt && !seen.has(c.id) && (seen.add(c.id), true))
+        .sort((a, b) => new Date(b.lastUsedAt || 0) - new Date(a.lastUsedAt || 0))
+        .slice(0, 12);
+    } else {
+      cmdsToShow = this.commands.filter(c => (c.category || "未分类") === this.activeCategory);
+    }
 
     // Sort by lastUsedAt
     cmdsToShow.sort((a, b) => new Date(b.lastUsedAt || 0) - new Date(a.lastUsedAt || 0));
@@ -662,7 +640,6 @@ class CommandLibrary {
 
 // === Initialize ===
 const windowSelector = new WindowSelector();
-const recentCommands = new RecentCommands(document.querySelector("#recentBar"));
 const commandLibrary = new CommandLibrary(document.getElementById("commandLibrary"));
 
 // === Text Input Events ===
@@ -699,22 +676,12 @@ undoButton.addEventListener("click", () => {
   }
 });
 
-// Recent bar click
-document.querySelector("#recentBar").addEventListener("click", (e) => {
-  const tag = e.target.closest(".recent-tag");
-  if (!tag) return;
-  const text = tag.dataset.text;
-  if (!text) return;
-  sendQuickCommand(text, tag.textContent);
-});
-
 function sendQuickCommand(text, label) {
   if (ws && ws.readyState === WebSocket.OPEN) {
     const msg = { type: "phrase", text, autoPaste: autoPasteEl.checked };
     if (windowSelector.targetWindow) msg.targetWindow = windowSelector.targetWindow;
     copyToPhoneClipboard(text);
     ws.send(JSON.stringify(msg));
-    recentCommands.record(text, label || text);
     showToast("已发送快捷指令。");
   } else {
     showToast("发送失败，请检查连接。", true);

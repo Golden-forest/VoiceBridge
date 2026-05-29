@@ -442,41 +442,6 @@ svg {
   cursor: default;
 }
 
-/* === Recent Commands === */
-.recent-bar {
-  display: flex;
-  gap: 6px;
-  flex-wrap: wrap;
-  flex: 0 0 auto;
-  min-width: 0;
-}
-
-.recent-tag {
-  max-width: 120px;
-  min-height: 30px;
-  padding: 5px 10px;
-  border: 1px solid var(--border);
-  border-radius: 999px;
-  background: var(--bg-card);
-  color: var(--text-secondary);
-  font-size: 12px;
-  font-weight: 600;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  box-shadow: var(--shadow-button);
-  cursor: pointer;
-  transition: all 0.2s var(--ease-bounce);
-}
-
-.recent-tag:active {
-  transform: scale(0.94);
-  border-color: var(--accent);
-  background: var(--accent);
-  color: var(--accent-text);
-  box-shadow: var(--shadow-accent);
-}
-
 /* === Input === */
 .input-card {
   min-height: clamp(96px, 13svh, 132px);
