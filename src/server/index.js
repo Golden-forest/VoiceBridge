@@ -16,11 +16,11 @@ import { createWebSocketHub } from "./ws.js";
 import { ensureCertificates } from "./certs.js";
 import { listWindows } from "./input/windowManager.js";
 
-dotenv.config();
-
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const rootDir = path.resolve(__dirname, "../..");
+
+dotenv.config({ path: path.join(rootDir, ".env") });
 const publicDir = path.join(rootDir, "src/public");
 const tmpDir = path.join(rootDir, "tmp");
 
