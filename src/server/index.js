@@ -11,6 +11,7 @@ import qrcode from "qrcode-terminal";
 import { loadConfig } from "./config.js";
 import { getLocalIp } from "./network/getLocalIp.js";
 import { createUploadRouter } from "./routes/upload.js";
+import { createCommandsRouter } from "./routes/commands.js";
 import { createWebSocketHub } from "./ws.js";
 import { ensureCertificates } from "./certs.js";
 import { listWindows } from "./input/windowManager.js";
@@ -33,6 +34,7 @@ const app = express();
 const tlsServer = https.createServer({ key, cert }, app);
 const wsHub = createWebSocketHub(tlsServer);
 
+app.use(express.json());
 app.use(express.static(publicDir));
 app.get("/api/health", (_req, res) => {
   res.json({
@@ -53,6 +55,7 @@ app.get("/api/windows", async (_req, res) => {
   }
 });
 app.use("/api", createUploadRouter({ config, wsHub, tmpDir }));
+app.use("/api", createCommandsRouter());
 
 // ---- HTTP → HTTPS 重定向服务 ----
 const redirectApp = express();
