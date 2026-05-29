@@ -606,6 +606,8 @@ class CommandLibrary {
 
   closeAddDialog() {
     document.getElementById("addCommandDialog").classList.add("hidden");
+    // Prevent iOS zoom bug
+    document.activeElement?.blur();
   }
 
   async confirmAdd() {
@@ -752,7 +754,6 @@ savePhraseBtn.addEventListener("click", () => {
 const cmdSearchToggle = document.querySelector("#cmdSearchToggle");
 const cmdSearchBar = document.querySelector("#cmdSearchBar");
 const cmdSearchInput = document.querySelector("#cmdSearchInput");
-const cmdAddBtn = document.querySelector("#cmdAddBtn");
 const addCmdCancelBtn = document.querySelector("#addCmdCancelBtn");
 const addCmdConfirmBtn = document.querySelector("#addCmdConfirmBtn");
 const addCommandCategory = document.querySelector("#addCommandCategory");
@@ -771,10 +772,6 @@ cmdSearchToggle.addEventListener("click", () => {
 
 cmdSearchInput.addEventListener("input", () => {
   commandLibrary.render(cmdSearchInput.value);
-});
-
-cmdAddBtn.addEventListener("click", () => {
-  commandLibrary.openAddDialog();
 });
 
 addCmdCancelBtn.addEventListener("click", () => {
