@@ -86,12 +86,13 @@ pageRefreshButton?.addEventListener("click", () => {
 function updateTextInputState() {
   const text = textInput.value.trim();
   if (charCount) charCount.textContent = `${textInput.value.length}/2000`;
+  const saveBtn = document.querySelector("#savePhraseBtn");
   if (text) {
-    phrases.showSaveButton();
-    phrases.el.saveBtn.classList.remove("saved");
-    phrases.el.saveBtn.innerHTML = starSvg + " 收藏";
+    saveBtn.classList.remove("hidden");
+    saveBtn.classList.remove("saved");
+    saveBtn.innerHTML = starSvg + " 收藏";
   } else {
-    phrases.hideSaveButton();
+    saveBtn.classList.add("hidden");
   }
 }
 
@@ -292,159 +293,6 @@ class RecentCommands {
       this.container.appendChild(btn);
     });
   }
-}
-
-// === PhrasesManager (unchanged) ===
-class PhrasesManager {
-  static STORAGE_KEY = "voicebridge_phrases";
-
-  constructor() {
-    this.el = {
-      panel: document.querySelector("#phrasesPanel"),
-      list: document.querySelector("#phrasesList"),
-      count: document.querySelector("#phrasesCount"),
-      panelCount: document.querySelector("#phrasesPanelCount"),
-      addBtn: document.querySelector("#phrasesAddBtn"),
-      editDoneBtn: document.querySelector("#phrasesEditDoneBtn"),
-      saveBtn: document.querySelector("#savePhraseBtn"),
-      dialog: document.querySelector("#addPhraseDialog"),
-      dialogOverlay: document.querySelector(".add-phrase-overlay"),
-      dialogInput: document.querySelector("#addPhraseInput"),
-      dialogCancel: document.querySelector("#addPhraseCancelBtn"),
-      dialogConfirm: document.querySelector("#addPhraseConfirmBtn"),
-    };
-    this.editingId = null;
-    this._init();
-  }
-
-  _init() {
-    this.el.addBtn.addEventListener("click", () => this._openAddDialog());
-    this.el.dialogCancel.addEventListener("click", () => this._closeDialog());
-    this.el.dialogOverlay.addEventListener("click", () => this._closeDialog());
-    this.el.dialogConfirm.addEventListener("click", () => this._confirmAdd());
-    this.el.editDoneBtn.addEventListener("click", () => this._exitEditMode());
-    this._render();
-  }
-
-  get _phrases() { try { return JSON.parse(localStorage.getItem(PhrasesManager.STORAGE_KEY)) || []; } catch { return []; } }
-  set _phrases(arr) { localStorage.setItem(PhrasesManager.STORAGE_KEY, JSON.stringify(arr)); }
-
-  _updateCounts() {
-    const n = this._phrases.length;
-    this.el.count.textContent = `(${n})`;
-    this.el.panelCount.textContent = `(${n})`;
-  }
-
-  _render() {
-    const phrases = this._phrases;
-    this._updateCounts();
-    this.el.list.innerHTML = "";
-    phrases.forEach((phrase) => {
-      const li = document.createElement("li");
-      li.className = "phrases-item";
-      li.dataset.id = phrase.id;
-      const textSpan = document.createElement("span");
-      textSpan.className = "phrases-item-text";
-      textSpan.textContent = phrase.text;
-      li.appendChild(textSpan);
-      li.addEventListener("click", () => { if (!this.editingId) this._sendPhrase(phrase.text); });
-      let longPressTimer;
-      li.addEventListener("pointerdown", () => { longPressTimer = setTimeout(() => { this._enterEditMode(phrase.id); longPressTimer = null; }, 500); });
-      li.addEventListener("pointerup", () => { if (longPressTimer) clearTimeout(longPressTimer); });
-      li.addEventListener("pointerleave", () => { if (longPressTimer) clearTimeout(longPressTimer); });
-      this.el.list.appendChild(li);
-    });
-  }
-
-  _sendPhrase(text) {
-    if (ws && ws.readyState === WebSocket.OPEN) {
-      const msg = { type: "phrase", text, autoPaste: autoPasteEl.checked };
-      if (windowSelector.targetWindow) msg.targetWindow = windowSelector.targetWindow;
-      copyToPhoneClipboard(text);
-      ws.send(JSON.stringify(msg));
-      showToast("已发送常用语到电脑。");
-    } else {
-      showToast("发送失败，请检查连接。", true);
-    }
-  }
-
-  _enterEditMode(editId) {
-    this.editingId = editId;
-    this.el.addBtn.classList.add("hidden");
-    this.el.editDoneBtn.classList.remove("hidden");
-    const items = this.el.list.querySelectorAll(".phrases-item");
-    items.forEach((li) => {
-      const id = li.dataset.id;
-      const textSpan = li.querySelector(".phrases-item-text");
-      const phrase = this._phrases.find((p) => p.id === id);
-      if (!phrase) return;
-      if (id === editId) {
-        li.classList.add("editing");
-        textSpan.classList.add("hidden");
-        const input = document.createElement("textarea");
-        input.className = "phrases-item-edit-input";
-        input.rows = 2;
-        input.value = phrase.text;
-        li.insertBefore(input, textSpan.nextSibling);
-        const deleteBtn = document.createElement("button");
-        deleteBtn.className = "phrases-item-delete";
-        deleteBtn.type = "button";
-        deleteBtn.textContent = "删除";
-        deleteBtn.addEventListener("click", (e) => { e.stopPropagation(); this._deletePhrase(id); });
-        li.appendChild(deleteBtn);
-      } else {
-        li.style.opacity = "0.4";
-        li.style.pointerEvents = "none";
-      }
-    });
-  }
-
-  _exitEditMode() {
-    if (!this.editingId) return;
-    this.editingId = null;
-    this.el.addBtn.classList.remove("hidden");
-    this.el.editDoneBtn.classList.add("hidden");
-    this._saveEditChanges();
-    this._render();
-  }
-
-  _saveEditChanges() {
-    const editedInput = this.el.list.querySelector(".phrases-item.editing .phrases-item-edit-input");
-    if (!editedInput) return;
-    const editedId = editedInput.closest(".phrases-item").dataset.id;
-    const newText = editedInput.value.trim();
-    if (!newText) { this._deletePhrase(editedId); return; }
-    const phrase = this._phrases.find((p) => p.id === editedId);
-    if (phrase) { phrase.text = newText; this._phrases = this._phrases; }
-  }
-
-  _deletePhrase(id) { this._phrases = this._phrases.filter((p) => p.id !== id); this._render(); }
-
-  _openAddDialog() { this.el.dialogInput.value = ""; this.el.dialog.classList.remove("hidden"); this.el.dialogInput.focus(); }
-  _closeDialog() { this.el.dialog.classList.add("hidden"); }
-
-  _confirmAdd() {
-    const text = this.el.dialogInput.value.trim();
-    if (!text) return;
-    const phrases = this._phrases;
-    phrases.unshift({ id: crypto.randomUUID(), text, createdAt: Date.now() });
-    this._phrases = phrases;
-    this._render();
-    this._closeDialog();
-  }
-
-  addPhrase(text) {
-    const exists = this._phrases.some((p) => p.text === text);
-    if (exists) { showToast("该常用语已存在。"); return; }
-    const phrases = this._phrases;
-    phrases.unshift({ id: crypto.randomUUID(), text, createdAt: Date.now() });
-    this._phrases = phrases;
-    this._render();
-    showToast("已收藏为常用语。");
-  }
-
-  showSaveButton() { this.el.saveBtn.classList.remove("hidden"); }
-  hideSaveButton() { this.el.saveBtn.classList.add("hidden"); }
 }
 
 // === CommandLibrary ===
@@ -770,9 +618,9 @@ class CommandLibrary {
 }
 
 // === Initialize ===
-const phrases = new PhrasesManager();
 const windowSelector = new WindowSelector();
 const recentCommands = new RecentCommands(document.querySelector("#recentBar"));
+const commandLibrary = new CommandLibrary(document.getElementById("commandLibrary"));
 
 // === Text Input Events ===
 updateTextInputState();
@@ -784,26 +632,6 @@ textInput.addEventListener("input", () => {
 
 textInput.addEventListener("keydown", (e) => {
   if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendTextInput(); }
-});
-
-// === Tab Navigation ===
-const tabQuick = document.querySelector("#tabQuick");
-const tabPhrases = document.querySelector("#tabPhrases");
-const quickPanel = document.querySelector("#quickPanel");
-const phrasesPanel = document.querySelector("#phrasesPanel");
-
-tabQuick.addEventListener("click", () => {
-  tabQuick.classList.add("active");
-  tabPhrases.classList.remove("active");
-  quickPanel.classList.remove("hidden");
-  phrasesPanel.classList.add("hidden");
-});
-
-tabPhrases.addEventListener("click", () => {
-  tabPhrases.classList.add("active");
-  tabQuick.classList.remove("active");
-  phrasesPanel.classList.remove("hidden");
-  quickPanel.classList.add("hidden");
 });
 
 // === Paste & Undo Buttons ===
@@ -870,13 +698,62 @@ const shortcutIcons = {
   compact: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m8 3 4 4-4 4"/><path d="M12 7H3"/><path d="m16 21-4-4 4-4"/><path d="M12 17h9"/></svg>'
 };
 
-phrases.el.saveBtn.addEventListener("click", () => {
+// === Save / Add Command Button ===
+const savePhraseBtn = document.querySelector("#savePhraseBtn");
+savePhraseBtn.addEventListener("click", () => {
   const text = textInput.value.trim();
   if (text) {
-    phrases.addPhrase(text);
-    phrases.el.saveBtn.innerHTML = starSvg + ' 已收藏 ✓';
-    phrases.el.saveBtn.classList.add("saved");
+    commandLibrary.openAddDialog(text);
   }
+});
+
+// === Command Library Events ===
+const cmdSearchToggle = document.querySelector("#cmdSearchToggle");
+const cmdSearchBar = document.querySelector("#cmdSearchBar");
+const cmdSearchInput = document.querySelector("#cmdSearchInput");
+const cmdAddBtn = document.querySelector("#cmdAddBtn");
+const addCmdCancelBtn = document.querySelector("#addCmdCancelBtn");
+const addCmdConfirmBtn = document.querySelector("#addCmdConfirmBtn");
+const addCommandCategory = document.querySelector("#addCommandCategory");
+const addCommandNewCategory = document.querySelector("#addCommandNewCategory");
+
+cmdSearchToggle.addEventListener("click", () => {
+  cmdSearchBar.classList.toggle("hidden");
+  if (!cmdSearchBar.classList.contains("hidden")) {
+    cmdSearchInput.focus();
+  } else {
+    cmdSearchInput.value = "";
+    commandLibrary.render("");
+  }
+});
+
+cmdSearchInput.addEventListener("input", () => {
+  commandLibrary.render(cmdSearchInput.value);
+});
+
+cmdAddBtn.addEventListener("click", () => {
+  commandLibrary.openAddDialog();
+});
+
+addCmdCancelBtn.addEventListener("click", () => {
+  commandLibrary.closeAddDialog();
+});
+
+addCmdConfirmBtn.addEventListener("click", () => {
+  commandLibrary.confirmAdd();
+});
+
+addCommandCategory.addEventListener("change", () => {
+  if (addCommandCategory.value === "__new__") {
+    addCommandNewCategory.classList.remove("hidden");
+    addCommandNewCategory.focus();
+  } else {
+    addCommandNewCategory.classList.add("hidden");
+  }
+});
+
+document.querySelector(".add-cmd-overlay").addEventListener("click", () => {
+  commandLibrary.closeAddDialog();
 });
 
 // === Recording ===
