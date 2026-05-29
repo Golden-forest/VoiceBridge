@@ -155,6 +155,8 @@ class WindowSelector {
     };
     this.selectedWindow = this._loadSelection();
     this._isOpen = false;
+    this._windowCache = null;
+    this._windowCacheTime = 0;
     this._init();
   }
 
@@ -190,6 +192,11 @@ class WindowSelector {
   }
 
   async _fetchWindows() {
+    const now = Date.now();
+    if (this._windowCache && now - this._windowCacheTime < 5000) {
+      this._renderWindows(this._windowCache);
+      return;
+    }
     this.el.list.innerHTML = '<p class="window-list-loading">加载中…</p>';
     try {
       const res = await fetch("/api/windows");
@@ -199,6 +206,8 @@ class WindowSelector {
         return;
       }
       this._renderWindows(data.windows);
+      this._windowCache = data.windows;
+      this._windowCacheTime = Date.now();
     } catch {
       this.el.list.innerHTML = '<p class="window-list-empty">获取窗口失败</p>';
     }
@@ -253,6 +262,8 @@ class CommandLibrary {
     this.activeCategory = "最近";
     this._longPressTimer = null;
     this._longPressTriggered = false;
+    this._longPressStartX = 0;
+    this._longPressStartY = 0;
     this._bindContainerEvents();
     this.load();
   }
@@ -291,6 +302,8 @@ class CommandLibrary {
       if (!btn || this.editingId) return;
       const id = btn.dataset.id;
       this._longPressTriggered = false;
+      this._longPressStartX = e.clientX;
+      this._longPressStartY = e.clientY;
       this._longPressTimer = setTimeout(() => {
         this._longPressTriggered = true;
         this._enterEditMode(id);
@@ -299,7 +312,11 @@ class CommandLibrary {
     this.container.addEventListener("pointerup", () => { clearTimeout(this._longPressTimer); });
     this.container.addEventListener("pointerleave", () => { clearTimeout(this._longPressTimer); });
     this.container.addEventListener("pointermove", (e) => {
-      if (this._longPressTimer) clearTimeout(this._longPressTimer);
+      if (this._longPressTimer) {
+        const dx = e.clientX - this._longPressStartX;
+        const dy = e.clientY - this._longPressStartY;
+        if (dx * dx + dy * dy > 100) clearTimeout(this._longPressTimer);
+      }
     });
   }
 
@@ -601,12 +618,6 @@ class CommandLibrary {
     this.closeAddDialog();
   }
 
-  _escHtml(str) {
-    const d = document.createElement("div");
-    d.textContent = str;
-    return d.innerHTML;
-  }
-
   async _migrateLocalStoragePhrases() {
     const STORAGE_KEY = "voicebridge_phrases";
     try {
@@ -701,12 +712,6 @@ enterButton.addEventListener("click", () => {
     showToast("发送失败，请检查连接。", true);
   }
 });
-
-// Capsule phrase buttons (exit, /compact, npm start, copyclaw cli/server)
-const shortcutIcons = {
-  exit: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10 17 15 12l-5-5"/><path d="M15 12H3"/><path d="M14 4h5v16h-5"/></svg>',
-  compact: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m8 3 4 4-4 4"/><path d="M12 7H3"/><path d="m16 21-4-4 4-4"/><path d="M12 17h9"/></svg>'
-};
 
 // === Save / Add Command Button ===
 const savePhraseBtn = document.querySelector("#savePhraseBtn");
@@ -905,9 +910,13 @@ function finishUpload() {
 // === WebSocket ===
 function connectWebSocket() {
   const protocol = location.protocol === "https:" ? "wss" : "ws";
+  let wsRetryDelay = 1500;
   ws = new WebSocket(`${protocol}://${location.host}/ws`);
 
-  ws.addEventListener("open", () => setConnectionStatus("connected", "已连接电脑端"));
+  ws.addEventListener("open", () => {
+    wsRetryDelay = 1500;
+    setConnectionStatus("connected", "已连接电脑端");
+  });
   ws.addEventListener("message", (event) => {
     try {
       const payload = JSON.parse(event.data);
@@ -933,7 +942,8 @@ function connectWebSocket() {
   ws.addEventListener("close", (event) => {
     if (event.code === 1000) return; // Normal closure, no reconnect
     setConnectionStatus("error", "连接已断开，正在重连...");
-    setTimeout(connectWebSocket, 1500);
+    setTimeout(connectWebSocket, wsRetryDelay);
+    wsRetryDelay = Math.min(wsRetryDelay * 2, 60000);
   });
 }
 

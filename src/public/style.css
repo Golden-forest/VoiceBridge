@@ -622,43 +622,6 @@ svg {
   line-height: 1.1;
 }
 
-/* === Terminal Button === */
-.terminal-btn {
-  min-width: 0;
-  min-height: clamp(28px, 4svh, 38px);
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 5px;
-  padding: 0 6px;
-  border: 1px solid var(--border);
-  border-radius: 999px;
-  background: var(--bg-card);
-  color: var(--text-secondary);
-  font-size: clamp(10px, 1.5svh, 14px);
-  font-weight: 600;
-  box-shadow: var(--shadow-button);
-  cursor: pointer;
-  transition: all 0.2s var(--ease-bounce);
-}
-
-.terminal-btn span:last-child {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.terminal-icon {
-  flex: 0 0 auto;
-  padding: 1px 3px;
-  border: 1px solid rgba(232, 121, 58, 0.3);
-  border-radius: 4px;
-  color: var(--accent);
-  font-size: 10px;
-  line-height: 1;
-}
-
 /* === Fallback Upload === */
 .fallback-button {
   width: 100%;
@@ -1028,7 +991,7 @@ svg {
   border-radius: var(--radius-sm);
   background: var(--bg-soft);
   color: var(--text-primary);
-  font-size: 15px;
+  font-size: 16px;
   line-height: 1.45;
   resize: none;
   margin-bottom: 14px;
@@ -1254,11 +1217,6 @@ svg {
     height: 18px;
   }
 
-  .terminal-btn {
-    gap: 4px;
-    padding: 0 4px;
-  }
-
   .cmd-grid {
     gap: 5px;
     padding: 2px 6px 6px;
@@ -1301,8 +1259,7 @@ svg {
   .input-card,
   .library-panel,
   .save-btn,
-  .side-action-btn,
-  .terminal-btn {
+  .side-action-btn {
     background: var(--bg-card);
   }
 
