@@ -114,27 +114,21 @@
         <button id="fallbackButton" class="fallback-button hidden" type="button">录音或选择音频上传</button>
         <input id="fallbackFile" class="hidden" type="file" accept="audio/*" capture />
 
-        <!-- 底部 Tab 面板 -->
-        <nav class="tab-bar">
-          <button id="tabQuick" class="tab-btn active" type="button">更多指令</button>
-          <button id="tabPhrases" class="tab-btn" type="button">常用语 <span id="phrasesCount">(0)</span></button>
-        </nav>
-
-        <!-- Tab 内容区 -->
-        <div class="tab-content">
-          <div id="quickPanel" class="tab-panel">
-            <div class="quick-btns" id="quickBtns"></div>
-          </div>
-          <div id="phrasesPanel" class="tab-panel hidden">
-            <div class="phrases-header">
-              <span>常用语 <span id="phrasesPanelCount">(0)</span></span>
-              <div class="phrases-header-actions">
-                <button id="phrasesAddBtn" class="phrases-add-btn" type="button">+ 新增</button>
-                <button id="phrasesEditDoneBtn" class="phrases-edit-done-btn hidden" type="button">完成</button>
-              </div>
+        <!-- 指令库面板 -->
+        <div class="library-panel">
+          <div class="library-header">
+            <span class="library-title">指令库</span>
+            <div class="library-actions">
+              <button id="cmdSearchToggle" class="icon-btn" type="button" title="搜索">
+                <svg viewBox="0 0 24 24" width="18" height="18"><circle cx="11" cy="11" r="8" fill="none" stroke="currentColor" stroke-width="2"/><line x1="21" y1="21" x2="16.65" y2="16.65" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+              </button>
+              <button id="cmdAddBtn" class="icon-btn add-btn" type="button"><span>+</span> 新增</button>
             </div>
-            <ul id="phrasesList" class="phrases-list"></ul>
           </div>
+          <div id="cmdSearchBar" class="cmd-search-bar hidden">
+            <input id="cmdSearchInput" class="cmd-search-input" type="text" placeholder="搜索指令…" />
+          </div>
+          <div id="commandLibrary" class="command-library"></div>
         </div>
 
       </div>
@@ -145,15 +139,20 @@
 
     <script src="/app.js" type="module"></script>
 
-    <!-- 新增常用语弹窗 -->
-    <div id="addPhraseDialog" class="add-phrase-dialog hidden">
-      <div class="add-phrase-overlay"></div>
-      <div class="add-phrase-content">
-        <h3>新增常用语</h3>
-        <textarea id="addPhraseInput" class="add-phrase-input" rows="3" placeholder="输入常用语内容…"></textarea>
-        <div class="add-phrase-actions">
-          <button id="addPhraseCancelBtn" class="add-phrase-cancel-btn" type="button">取消</button>
-          <button id="addPhraseConfirmBtn" class="add-phrase-confirm-btn" type="button">保存</button>
+    <!-- 新增指令弹窗 -->
+    <div id="addCommandDialog" class="add-cmd-dialog hidden">
+      <div class="add-cmd-overlay"></div>
+      <div class="add-cmd-sheet">
+        <div class="add-cmd-handle"></div>
+        <div class="add-cmd-title">新增指令</div>
+        <div class="add-cmd-label">指令内容</div>
+        <textarea id="addCommandInput" class="add-cmd-textarea" rows="3" placeholder="输入指令内容…"></textarea>
+        <div class="add-cmd-label">分类</div>
+        <select id="addCommandCategory" class="add-cmd-select"></select>
+        <input id="addCommandNewCategory" class="add-cmd-new-cat hidden" type="text" placeholder="输入新分类名称…" />
+        <div class="add-cmd-actions">
+          <button id="addCmdCancelBtn" class="add-cmd-cancel" type="button">取消</button>
+          <button id="addCmdConfirmBtn" class="add-cmd-confirm" type="button">保存</button>
         </div>
       </div>
     </div>
