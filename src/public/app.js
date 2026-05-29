@@ -299,10 +299,11 @@ class RecentCommands {
 class CommandLibrary {
   constructor(containerEl) {
     this.container = containerEl;
+    this.tabScroll = document.getElementById("tabScroll");
     this.commands = [];
     this.filter = "";
     this.editingId = null;
-    this.collapsedCategories = new Set();
+    this.activeCategory = null;
     this._longPressTimer = null;
     this._longPressTriggered = false;
     this._bindContainerEvents();
@@ -310,14 +311,16 @@ class CommandLibrary {
   }
 
   _bindContainerEvents() {
+    // Tab click delegation
+    this.tabScroll.addEventListener("click", (e) => {
+      const tab = e.target.closest(".tab-item");
+      if (!tab) return;
+      this.activeCategory = tab.dataset.category;
+      this.renderTabs();
+      this.render();
+    });
+
     this.container.addEventListener("click", (e) => {
-      // Category header toggle
-      const header = e.target.closest(".category-header");
-      if (header) {
-        const cat = header.dataset.category;
-        this.toggleCategory(cat);
-        return;
-      }
       // Command button click
       const btn = e.target.closest(".cmd-btn");
       if (!btn) return;
@@ -357,6 +360,12 @@ class CommandLibrary {
     try {
       const res = await fetch("/api/commands");
       this.commands = await res.json();
+      // Set default active category to the most recently used category
+      if (!this.activeCategory) {
+        const cats = this._getCategories();
+        if (cats.length > 0) this.activeCategory = cats[0][0];
+      }
+      this.renderTabs();
       this.render();
       await this._migrateLocalStoragePhrases();
     } catch {
@@ -384,104 +393,97 @@ class CommandLibrary {
     return sorted;
   }
 
+  renderTabs() {
+    this.tabScroll.innerHTML = "";
+    const cats = this._getCategories();
+    cats.forEach(([category, cmds]) => {
+      const btn = document.createElement("button");
+      btn.className = "tab-item" + (category === this.activeCategory ? " active" : "");
+      btn.type = "button";
+      btn.dataset.category = category;
+      const nameSpan = document.createElement("span");
+      nameSpan.textContent = category;
+      btn.appendChild(nameSpan);
+      const countSpan = document.createElement("span");
+      countSpan.className = "tab-count";
+      countSpan.textContent = cmds.length;
+      btn.appendChild(countSpan);
+      this.tabScroll.appendChild(btn);
+    });
+    // Scroll active tab into view
+    const activeTab = this.tabScroll.querySelector(".tab-item.active");
+    if (activeTab) {
+      activeTab.scrollIntoView({ behavior: "smooth", inline: "center", block: "nearest" });
+    }
+  }
+
   render(filter) {
     this.filter = filter || this.filter;
-    const cats = this._getCategories();
     const q = this.filter.toLowerCase();
     this.container.innerHTML = "";
 
-    if (cats.length === 0) {
+    if (this.commands.length === 0) {
       this.container.innerHTML = '<p style="padding:12px;color:var(--text-muted);text-align:center;">暂无指令</p>';
       return;
     }
 
-    let hasVisible = false;
-    cats.forEach(([category, cmds]) => {
-      const filtered = q
-        ? cmds.filter(c => (c.label || "").toLowerCase().includes(q) || (c.text || "").toLowerCase().includes(q))
-        : cmds;
-      if (filtered.length === 0) return;
-      hasVisible = true;
+    // When searching, show results across all categories
+    const cmdsToShow = q
+      ? this.commands.filter(c => (c.label || "").toLowerCase().includes(q) || (c.text || "").toLowerCase().includes(q))
+      : this.commands.filter(c => (c.category || "未分类") === this.activeCategory);
 
-      const group = document.createElement("div");
-      group.className = "category-group";
+    // Sort by lastUsedAt
+    cmdsToShow.sort((a, b) => new Date(b.lastUsedAt || 0) - new Date(a.lastUsedAt || 0));
 
-      const isCollapsed = this.collapsedCategories.has(category);
-
-      const header = document.createElement("div");
-      header.className = "category-header";
-      header.dataset.category = category;
-      header.innerHTML = `
-        <div class="category-left">
-          <span class="category-arrow${isCollapsed ? "" : " open"}">&#x25BE;</span>
-          <span class="category-name">${this._escHtml(category)}</span>
-          <span class="category-count">${filtered.length}</span>
-        </div>
-      `;
-      group.appendChild(header);
-
-      if (!isCollapsed) {
-        const grid = document.createElement("div");
-        grid.className = "cmd-grid";
-        filtered.forEach(cmd => {
-          const btn = document.createElement("button");
-          btn.className = "cmd-btn";
-          btn.type = "button";
-          btn.dataset.id = cmd.id;
-          btn.title = cmd.text;
-          if (cmd.text.startsWith("/") || /^(npm|node|copyclaw|npx)\b/.test(cmd.text)) {
-            btn.classList.add("slash");
-          }
-          if (this.editingId === cmd.id) {
-            btn.classList.add("editing");
-            const input = document.createElement("span");
-            input.className = "cmd-edit-label";
-            input.contentEditable = "true";
-            input.textContent = cmd.label;
-            btn.appendChild(input);
-            // Delete and Done buttons
-            const actions = document.createElement("span");
-            actions.className = "cmd-edit-actions";
-            const delBtn = document.createElement("span");
-            delBtn.className = "cmd-btn cmd-delete-btn";
-            delBtn.dataset.id = cmd.id;
-            delBtn.textContent = "删除";
-            actions.appendChild(delBtn);
-            const doneBtn = document.createElement("span");
-            doneBtn.className = "cmd-btn cmd-done-btn";
-            doneBtn.textContent = "完成";
-            actions.appendChild(doneBtn);
-            btn.appendChild(actions);
-            // Stop event propagation on inner buttons
-            delBtn.addEventListener("pointerdown", e => e.stopPropagation());
-            doneBtn.addEventListener("pointerdown", e => e.stopPropagation());
-          } else {
-            if (this.editingId) btn.classList.add("dimmed");
-            const labelSpan = document.createElement("span");
-            labelSpan.className = "cmd-label";
-            labelSpan.textContent = cmd.label;
-            btn.appendChild(labelSpan);
-          }
-          grid.appendChild(btn);
-        });
-        group.appendChild(grid);
-      }
-
-      this.container.appendChild(group);
-    });
-
-    if (!hasVisible) {
+    if (cmdsToShow.length === 0) {
       this.container.innerHTML = '<p style="padding:12px;color:var(--text-muted);text-align:center;">没有匹配的指令</p>';
+      return;
     }
-  }
 
-  toggleCategory(category) {
-    if (this.collapsedCategories.has(category)) {
-      this.collapsedCategories.delete(category);
-    } else {
-      this.collapsedCategories.add(category);
-    }
-    this.render();
+    const grid = document.createElement("div");
+    grid.className = "cmd-grid";
+    cmdsToShow.forEach(cmd => {
+      const btn = document.createElement("button");
+      btn.className = "cmd-btn";
+      btn.type = "button";
+      btn.dataset.id = cmd.id;
+      btn.title = cmd.text;
+      if (cmd.text.startsWith("/") || /^(npm|node|copyclaw|npx)\b/.test(cmd.text)) {
+        btn.classList.add("slash");
+      }
+      if (this.editingId === cmd.id) {
+        btn.classList.add("editing");
+        const input = document.createElement("span");
+        input.className = "cmd-edit-label";
+        input.contentEditable = "true";
+        input.textContent = cmd.label;
+        btn.appendChild(input);
+        // Delete and Done buttons
+        const actions = document.createElement("span");
+        actions.className = "cmd-edit-actions";
+        const delBtn = document.createElement("span");
+        delBtn.className = "cmd-btn cmd-delete-btn";
+        delBtn.dataset.id = cmd.id;
+        delBtn.textContent = "删除";
+        actions.appendChild(delBtn);
+        const doneBtn = document.createElement("span");
+        doneBtn.className = "cmd-btn cmd-done-btn";
+        doneBtn.textContent = "完成";
+        actions.appendChild(doneBtn);
+        btn.appendChild(actions);
+        // Stop event propagation on inner buttons
+        delBtn.addEventListener("pointerdown", e => e.stopPropagation());
+        doneBtn.addEventListener("pointerdown", e => e.stopPropagation());
+      } else {
+        if (this.editingId) btn.classList.add("dimmed");
+        const labelSpan = document.createElement("span");
+        labelSpan.className = "cmd-label";
+        labelSpan.textContent = cmd.label;
+        btn.appendChild(labelSpan);
+      }
+      grid.appendChild(btn);
+    });
+    this.container.appendChild(grid);
   }
 
   _enterEditMode(id) {
@@ -509,6 +511,7 @@ class CommandLibrary {
       this.commands = this.commands.filter(c => c.id !== id);
       this.editingId = null;
       showToast("已删除指令。");
+      this.renderTabs();
       this.render();
     } catch {
       showToast("删除失败。", true);
@@ -540,6 +543,7 @@ class CommandLibrary {
       const updated = await res.json();
       const idx = this.commands.findIndex(c => c.id === id);
       if (idx !== -1) this.commands[idx] = updated;
+      this.renderTabs();
       this.render();
     } catch {
       // silently fail
@@ -559,6 +563,9 @@ class CommandLibrary {
       });
       const created = await res.json();
       this.commands.unshift(created);
+      // Switch to the category of the newly added command
+      this.activeCategory = created.category || "未分类";
+      this.renderTabs();
       this.render();
       showToast("已添加指令。");
     } catch {
@@ -645,6 +652,7 @@ class CommandLibrary {
       localStorage.setItem(migratedKey, "true");
       const res = await fetch("/api/commands");
       this.commands = await res.json();
+      this.renderTabs();
       this.render();
     } catch { }
   }
@@ -756,7 +764,8 @@ cmdSearchToggle.addEventListener("click", () => {
     cmdSearchInput.focus();
   } else {
     cmdSearchInput.value = "";
-    commandLibrary.render("");
+    commandLibrary.filter = "";
+    commandLibrary.render();
   }
 });
 
