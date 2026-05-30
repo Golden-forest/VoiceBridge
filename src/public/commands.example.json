@@ -6,7 +6,7 @@
       "label": "/compact",
       "category": "斜杠指令",
       "createdAt": 1780076867692,
-      "lastUsedAt": "2026-05-30T12:51:04.334Z"
+      "lastUsedAt": "2026-05-30T13:28:30.253Z"
     },
     {
       "id": "026554d8-3184-4d13-8236-1ce7d1f5471c",
@@ -14,7 +14,7 @@
       "label": "/clear",
       "category": "斜杠指令",
       "createdAt": 1780076867692,
-      "lastUsedAt": "2026-05-30T06:36:00.227Z"
+      "lastUsedAt": "2026-05-30T13:29:32.009Z"
     },
     {
       "id": "cd5667d7-0b49-4f82-8657-4623c80d5842",
@@ -22,7 +22,7 @@
       "label": "/git-commit",
       "category": "斜杠指令",
       "createdAt": 1780076867692,
-      "lastUsedAt": "2026-05-30T06:08:58.371Z"
+      "lastUsedAt": "2026-05-30T13:29:26.439Z"
     },
     {
       "id": "2017ebeb-ed6c-4344-882b-751f8f30391c",
@@ -303,6 +303,334 @@
       "category": "AI绘图",
       "createdAt": 1780150000000,
       "lastUsedAt": 1780150000000
+    },
+    {
+      "id": "cc-sep-write",
+      "text": "",
+      "label": "── 写作 ──",
+      "category": "CopyClaw",
+      "createdAt": 1780160000000,
+      "lastUsedAt": 1780160000000
+    },
+    {
+      "id": "cc-writing-001",
+      "text": "WeMedia skill：帮我写篇公众号长文。",
+      "label": "公众号写作",
+      "category": "CopyClaw",
+      "createdAt": 1780160000000,
+      "lastUsedAt": 1780160000000
+    },
+    {
+      "id": "cc-writing-002",
+      "text": "writing-topic-ideation skill：帮我梳理写作选题和切入角度。",
+      "label": "选题方向",
+      "category": "CopyClaw",
+      "createdAt": 1780160000000,
+      "lastUsedAt": 1780160000000
+    },
+    {
+      "id": "cc-writing-003",
+      "text": "writing-style-guard skill：统一文章的口吻、语气和表达边界。",
+      "label": "文风检查",
+      "category": "CopyClaw",
+      "createdAt": 1780160000000,
+      "lastUsedAt": 1780160000000
+    },
+    {
+      "id": "cc-writing-004",
+      "text": "writing-review skill：审查文章的结构、逻辑和清晰度。",
+      "label": "稿件审查",
+      "category": "CopyClaw",
+      "createdAt": 1780160000000,
+      "lastUsedAt": 1780160000000
+    },
+    {
+      "id": "cc-sep-invest",
+      "text": "",
+      "label": "── 投资 ──",
+      "category": "CopyClaw",
+      "createdAt": 1780160000000,
+      "lastUsedAt": 1780160000000
+    },
+    {
+      "id": "cc-invest-001",
+      "text": "buffett skill：用巴菲特投资框架分析这家公司。",
+      "label": "巴菲特分析",
+      "category": "CopyClaw",
+      "createdAt": 1780160000000,
+      "lastUsedAt": 1780160000000
+    },
+    {
+      "id": "cc-invest-002",
+      "text": "stock_analysis skill：分析A股股票基本面和技术面。",
+      "label": "A股投研",
+      "category": "CopyClaw",
+      "createdAt": 1780160000000,
+      "lastUsedAt": 1780160000000
+    },
+    {
+      "id": "cc-sep-kb",
+      "text": "",
+      "label": "── 知识库 ──",
+      "category": "CopyClaw",
+      "createdAt": 1780160000000,
+      "lastUsedAt": 1780160000000
+    },
+    {
+      "id": "cc-kb-001",
+      "text": "second-brain skill：管理知识库，摄入素材、查询知识、健康检查。",
+      "label": "知识库管理",
+      "category": "CopyClaw",
+      "createdAt": 1780160000000,
+      "lastUsedAt": 1780160000000
+    },
+    {
+      "id": "cc-kb-002",
+      "text": "second-brain skill：设置新的Obsidian知识库。",
+      "label": "初始化知识库",
+      "category": "CopyClaw",
+      "createdAt": 1780160000000,
+      "lastUsedAt": 1780160000000
+    },
+    {
+      "id": "cc-kb-003",
+      "text": "second-brain-ingest skill：将文档处理为结构化wiki页面。",
+      "label": "存入知识库",
+      "category": "CopyClaw",
+      "createdAt": 1780160000000,
+      "lastUsedAt": 1780160000000
+    },
+    {
+      "id": "cc-kb-004",
+      "text": "second-brain-query skill：搜索知识库回答问题。",
+      "label": "查询知识库",
+      "category": "CopyClaw",
+      "createdAt": 1780160000000,
+      "lastUsedAt": 1780160000000
+    },
+    {
+      "id": "cc-kb-005",
+      "text": "second-brain-lint skill：检测知识库矛盾和孤立页面。",
+      "label": "知识库体检",
+      "category": "CopyClaw",
+      "createdAt": 1780160000000,
+      "lastUsedAt": 1780160000000
+    },
+    {
+      "id": "cc-kb-006",
+      "text": "second-brain-write skill：润色内容并保存到知识库。",
+      "label": "写入知识库",
+      "category": "CopyClaw",
+      "createdAt": 1780160000000,
+      "lastUsedAt": 1780160000000
+    },
+    {
+      "id": "cc-sep-search",
+      "text": "",
+      "label": "── 搜索 ──",
+      "category": "CopyClaw",
+      "createdAt": 1780160000000,
+      "lastUsedAt": 1780160000000
+    },
+    {
+      "id": "cc-search-001",
+      "text": "tavily_search skill：联网搜索。",
+      "label": "联网搜索",
+      "category": "CopyClaw",
+      "createdAt": 1780160000000,
+      "lastUsedAt": 1780160000000
+    },
+    {
+      "id": "cc-search-002",
+      "text": "yt2md skill：下载视频字幕并整理为Markdown笔记。",
+      "label": "视频笔记",
+      "category": "CopyClaw",
+      "createdAt": 1780160000000,
+      "lastUsedAt": 1780160000000
+    },
+    {
+      "id": "cc-sep-media",
+      "text": "",
+      "label": "── 媒体 ──",
+      "category": "CopyClaw",
+      "createdAt": 1780160000000,
+      "lastUsedAt": 1780160000000
+    },
+    {
+      "id": "cc-media-001",
+      "text": "video2audio skill：下载B站视频音频（m4a）。",
+      "label": "视频下载",
+      "category": "CopyClaw",
+      "createdAt": 1780160000000,
+      "lastUsedAt": 1780160000000
+    },
+    {
+      "id": "cc-media-002",
+      "text": "tts skill：文本转语音（GPT-SoVITS）。",
+      "label": "语音合成",
+      "category": "CopyClaw",
+      "createdAt": 1780160000000,
+      "lastUsedAt": 1780160000000
+    },
+    {
+      "id": "cc-media-003",
+      "text": "screenshot_beautifier skill：美化截图，加渐变背景和圆角。",
+      "label": "截图美化",
+      "category": "CopyClaw",
+      "createdAt": 1780160000000,
+      "lastUsedAt": 1780160000000
+    },
+    {
+      "id": "cc-media-004",
+      "text": "md_to_docx skill：Markdown转Word文档。",
+      "label": "MD转Word",
+      "category": "CopyClaw",
+      "createdAt": 1780160000000,
+      "lastUsedAt": 1780160000000
+    },
+    {
+      "id": "cc-media-005",
+      "text": "academic_format skill：Markdown论文排版为中文核心期刊Word。",
+      "label": "学术排版",
+      "category": "CopyClaw",
+      "createdAt": 1780160000000,
+      "lastUsedAt": 1780160000000
+    },
+    {
+      "id": "cc-media-006",
+      "text": "web_report skill：整理内容为固定版式网页汇报。",
+      "label": "网页汇报",
+      "category": "CopyClaw",
+      "createdAt": 1780160000000,
+      "lastUsedAt": 1780160000000
+    },
+    {
+      "id": "cc-sep-assist",
+      "text": "",
+      "label": "── 助手 ──",
+      "category": "CopyClaw",
+      "createdAt": 1780160000000,
+      "lastUsedAt": 1780160000000
+    },
+    {
+      "id": "cc-assist-001",
+      "text": "morning_briefing skill：早安推送（黄历、天气、任务）。",
+      "label": "早安推送",
+      "category": "CopyClaw",
+      "createdAt": 1780160000000,
+      "lastUsedAt": 1780160000000
+    },
+    {
+      "id": "cc-assist-002",
+      "text": "daily_diary skill：对话式日记。",
+      "label": "写日记",
+      "category": "CopyClaw",
+      "createdAt": 1780160000000,
+      "lastUsedAt": 1780160000000
+    },
+    {
+      "id": "cc-assist-003",
+      "text": "boss skill：查看和管理任务。",
+      "label": "老板催工",
+      "category": "CopyClaw",
+      "createdAt": 1780160000000,
+      "lastUsedAt": 1780160000000
+    },
+    {
+      "id": "cc-assist-004",
+      "text": "secretary skill：日程规划和提醒。",
+      "label": "小秘书",
+      "category": "CopyClaw",
+      "createdAt": 1780160000000,
+      "lastUsedAt": 1780160000000
+    },
+    {
+      "id": "cc-assist-005",
+      "text": "proactive_assistant skill：管理定时任务和推送。",
+      "label": "主动助理",
+      "category": "CopyClaw",
+      "createdAt": 1780160000000,
+      "lastUsedAt": 1780160000000
+    },
+    {
+      "id": "cc-assist-006",
+      "text": "dashboard_idea skill：添加或删除灵感。",
+      "label": "灵感库",
+      "category": "CopyClaw",
+      "createdAt": 1780160000000,
+      "lastUsedAt": 1780160000000
+    },
+    {
+      "id": "cc-sep-academic",
+      "text": "",
+      "label": "── 学术 ──",
+      "category": "CopyClaw",
+      "createdAt": 1780160000000,
+      "lastUsedAt": 1780160000000
+    },
+    {
+      "id": "cc-academic-001",
+      "text": "exam_analysis skill：分析考试成绩生成报告。",
+      "label": "考试分析",
+      "category": "CopyClaw",
+      "createdAt": 1780160000000,
+      "lastUsedAt": 1780160000000
+    },
+    {
+      "id": "cc-academic-002",
+      "text": "proposal_writing skill：NSFC基金申请全流程。",
+      "label": "基金申请",
+      "category": "CopyClaw",
+      "createdAt": 1780160000000,
+      "lastUsedAt": 1780160000000
+    },
+    {
+      "id": "cc-sep-life",
+      "text": "",
+      "label": "── 生活 ──",
+      "category": "CopyClaw",
+      "createdAt": 1780160000000,
+      "lastUsedAt": 1780160000000
+    },
+    {
+      "id": "cc-life-001",
+      "text": "fortune_teller skill：道师兄看运势、择吉日、风水分析。",
+      "label": "风水命理",
+      "category": "CopyClaw",
+      "createdAt": 1780160000000,
+      "lastUsedAt": 1780160000000
+    },
+    {
+      "id": "cc-sep-tool",
+      "text": "",
+      "label": "── 工具 ──",
+      "category": "CopyClaw",
+      "createdAt": 1780160000000,
+      "lastUsedAt": 1780160000000
+    },
+    {
+      "id": "cc-tool-001",
+      "text": "chrome_cdp skill：通过CDP控制Chrome浏览器。",
+      "label": "浏览器控制",
+      "category": "CopyClaw",
+      "createdAt": 1780160000000,
+      "lastUsedAt": 1780160000000
+    },
+    {
+      "id": "cc-tool-002",
+      "text": "darwin_skill skill：8维度评估优化skill。",
+      "label": "技能优化",
+      "category": "CopyClaw",
+      "createdAt": 1780160000000,
+      "lastUsedAt": 1780160000000
+    },
+    {
+      "id": "cc-tool-003",
+      "text": "github-harvester skill：搜索分析GitHub仓库。",
+      "label": "GitHub搜索",
+      "category": "CopyClaw",
+      "createdAt": 1780160000000,
+      "lastUsedAt": 1780160000000
     }
   ]
 }

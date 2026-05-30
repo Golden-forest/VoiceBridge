@@ -817,6 +817,14 @@ svg {
   min-width: 0;
 }
 
+.cmd-separator {
+  grid-column: 1 / -1;
+  height: 1px;
+  background: var(--border);
+  margin: 4px 0 2px;
+  opacity: 0.5;
+}
+
 .cmd-btn {
   min-width: 0;
   min-height: clamp(30px, 4.2svh, 40px);

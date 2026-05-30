@@ -438,6 +438,13 @@ class CommandLibrary {
     const grid = document.createElement("div");
     grid.className = "cmd-grid";
     cmdsToShow.forEach(cmd => {
+      // Separator: label starts with ── or ---
+      if (/^[──\-]{2,}/.test(cmd.label)) {
+        const sep = document.createElement("div");
+        sep.className = "cmd-separator";
+        grid.appendChild(sep);
+        return;
+      }
       const btn = document.createElement("button");
       btn.className = "cmd-btn";
       btn.type = "button";
