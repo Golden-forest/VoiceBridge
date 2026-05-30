@@ -515,8 +515,8 @@ svg {
 
 .util-key-btn {
   flex: 1 1 0;
-  max-width: 88px;
-  min-height: 36px;
+  max-width: 104px;
+  min-height: 44px;
   border-radius: 10px;
   background: var(--bg-card);
   border: 1px solid var(--border);
@@ -554,11 +554,33 @@ svg {
   color: #f97316;
 }
 
+.util-key-sep {
+  flex: 1 1 0;
+  max-width: 8px;
+}
+
+/* Pink accent — reuses cmd-recent colors */
+.util-key-btn.pink-key {
+  border-color: rgba(253, 110, 158, 0.3);
+  color: #F53F80;
+}
+.util-key-btn.pink-key svg {
+  stroke: #F53F80;
+}
+.side-action-btn.pink-accent {
+  background: rgba(253, 110, 158, 0.12);
+  border-color: rgba(253, 110, 158, 0.3);
+  color: #F53F80;
+}
+.side-action-btn.pink-accent svg {
+  stroke: #F53F80;
+}
+
 .side-action-btn {
   flex: 1 1 0;
   min-width: 0;
-  min-height: clamp(48px, 7svh, 64px);
-  max-width: 76px;
+  min-height: clamp(54px, 8svh, 72px);
+  max-width: 96px;
   display: inline-flex;
   flex-direction: column;
   align-items: center;
@@ -1275,14 +1297,14 @@ svg {
   }
 
   .side-action-btn {
-    min-height: 44px;
+    min-height: 48px;
     padding: 4px 0;
     font-size: 10px;
   }
 
   .side-action-btn svg {
-    width: 18px;
-    height: 18px;
+    width: 20px;
+    height: 20px;
   }
 
   .cmd-grid {
