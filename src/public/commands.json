@@ -14,7 +14,7 @@
       "label": "/compact",
       "category": "斜杠指令",
       "createdAt": 1780076867692,
-      "lastUsedAt": "2026-05-29T19:14:00.863Z"
+      "lastUsedAt": "2026-05-30T04:17:16.499Z"
     },
     {
       "id": "15212807-5ad9-4225-8d1e-149dac8d0d00",
@@ -62,7 +62,7 @@
       "label": "commit",
       "category": "斜杠指令",
       "createdAt": 1780076867692,
-      "lastUsedAt": "2026-05-29T19:22:47.832Z"
+      "lastUsedAt": "2026-05-30T04:17:12.480Z"
     },
     {
       "id": "2017ebeb-ed6c-4344-882b-751f8f30391c",
@@ -86,7 +86,7 @@
       "label": "问清再改",
       "category": "开发协作",
       "createdAt": 1780076867692,
-      "lastUsedAt": 1780076867692
+      "lastUsedAt": "2026-05-29T19:53:59.305Z"
     },
     {
       "id": "18bcd597-43ab-4b3f-a9f2-f1bd2ca15fa5",
@@ -206,7 +206,7 @@
       "label": "最小化修改",
       "category": "通用",
       "createdAt": 1780076867692,
-      "lastUsedAt": "2026-05-29T18:20:32.505Z"
+      "lastUsedAt": "2026-05-30T04:13:07.149Z"
     },
     {
       "id": "6e9c0f6f-758d-4783-9f68-e5d074489fec",
@@ -214,7 +214,7 @@
       "label": "sub执行",
       "category": "通用",
       "createdAt": 1780076867692,
-      "lastUsedAt": "2026-05-29T18:20:23.907Z"
+      "lastUsedAt": "2026-05-30T04:13:01.630Z"
     },
     {
       "id": "844c81db-c335-44e7-b5ef-81f22215baad",
@@ -222,7 +222,7 @@
       "label": "我们来头脑风暴一…",
       "category": "通用",
       "createdAt": 1780078043784,
-      "lastUsedAt": "2026-05-29T18:20:26.215Z"
+      "lastUsedAt": "2026-05-30T03:31:29.246Z"
     }
   ]
 }
