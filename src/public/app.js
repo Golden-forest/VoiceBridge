@@ -439,13 +439,13 @@ class CommandLibrary {
 
     const grid = document.createElement("div");
     grid.className = "cmd-grid";
-    // Compute top-4 recently used IDs for highlight (category tabs only)
+    // Compute global top-16 recently used IDs for highlight (all tabs, not during search)
     const recentIds = new Set();
-    if (!q && this.activeCategory !== "最近") {
-      cmdsToShow
+    if (!q) {
+      this.commands
         .filter(c => c.lastUsedAt && !/^[──\-]{2,}/.test(c.label))
         .sort((a, b) => new Date(b.lastUsedAt || 0) - new Date(a.lastUsedAt || 0))
-        .slice(0, 4)
+        .slice(0, 16)
         .forEach(c => recentIds.add(c.id));
     }
     cmdsToShow.forEach(cmd => {

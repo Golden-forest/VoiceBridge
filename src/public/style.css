@@ -856,10 +856,9 @@ svg {
 }
 
 .cmd-btn.cmd-recent {
-  background: #d946ef;
-  border-color: #d946ef;
-  color: #fff;
-  box-shadow: 0 1px 4px rgba(217, 70, 239, 0.35);
+  background: rgba(253, 110, 158, 0.12);
+  color: #F53F80;
+  border-color: rgba(253, 110, 158, 0.3);
 }
 
 .cmd-btn.slash {
