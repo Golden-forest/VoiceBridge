@@ -96,6 +96,7 @@ export async function pressUndo() {
 // --- Generic key press helper ---
 const MAC_KEY_CODES = {
   escape: 53,
+  delete: 51,
   up: 126,
   down: 125,
   left: 123,
@@ -146,6 +147,11 @@ export async function pressCtrlC() {
 
 export async function pressEscape() {
   const { command, args } = keyCommand(process.platform, "escape");
+  await execFileAsync(command, args, { windowsHide: true });
+}
+
+export async function pressDelete() {
+  const { command, args } = keyCommand(process.platform, "delete");
   await execFileAsync(command, args, { windowsHide: true });
 }
 

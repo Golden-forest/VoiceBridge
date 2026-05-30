@@ -687,6 +687,8 @@ textInput.addEventListener("keydown", (e) => {
 // === Paste & Undo Buttons ===
 const pasteButton = document.querySelector("#pasteButton");
 const undoButton = document.querySelector("#undoButton");
+const escButton = document.querySelector("#escButton");
+const deleteButton = document.querySelector("#deleteButton");
 
 pasteButton.addEventListener("click", () => {
   if (ws && ws.readyState === WebSocket.OPEN) {
@@ -701,6 +703,24 @@ undoButton.addEventListener("click", () => {
   if (ws && ws.readyState === WebSocket.OPEN) {
     ws.send(JSON.stringify({ type: "undo" }));
     showToast("已撤销。");
+  } else {
+    showToast("发送失败，请检查连接。", true);
+  }
+});
+
+escButton.addEventListener("click", () => {
+  if (ws && ws.readyState === WebSocket.OPEN) {
+    ws.send(JSON.stringify({ type: "escape" }));
+    showToast("已按 Esc。");
+  } else {
+    showToast("发送失败，请检查连接。", true);
+  }
+});
+
+deleteButton.addEventListener("click", () => {
+  if (ws && ws.readyState === WebSocket.OPEN) {
+    ws.send(JSON.stringify({ type: "delete" }));
+    showToast("已按删除。");
   } else {
     showToast("发送失败，请检查连接。", true);
   }
@@ -806,6 +826,8 @@ function setActionButtonsDisabled(disabled) {
   enterButton.disabled = disabled;
   pasteButton.disabled = disabled;
   undoButton.disabled = disabled;
+  escButton.disabled = disabled;
+  deleteButton.disabled = disabled;
 }
 
 if (!navigator.mediaDevices?.getUserMedia || !window.MediaRecorder) {

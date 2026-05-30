@@ -503,6 +503,57 @@ svg {
   min-width: 0;
 }
 
+/* === Utility Keys === */
+.utility-keys {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 4px 0 8px;
+  flex: 0 0 auto;
+}
+
+.util-key-btn {
+  flex: 1 1 0;
+  max-width: 88px;
+  min-height: 36px;
+  border-radius: 10px;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  color: var(--text-secondary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  font-size: 11px;
+  font-weight: 650;
+  cursor: pointer;
+  padding: 0 10px;
+  box-shadow: 0 2px 0 var(--bg-page);
+  transition: all 0.15s;
+}
+
+.util-key-btn svg {
+  width: 14px;
+  height: 14px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  flex: 0 0 auto;
+}
+
+.util-key-btn:active {
+  box-shadow: 0 0 0 var(--bg-page);
+  transform: translateY(2px);
+}
+
+.util-key-btn.new-key {
+  border-color: rgba(249, 115, 22, 0.4);
+  color: #f97316;
+}
+
 .side-action-btn {
   flex: 1 1 0;
   min-width: 0;
@@ -1211,6 +1262,16 @@ svg {
 
   .primary-actions {
     gap: 4px;
+  }
+
+  .utility-keys {
+    gap: 4px;
+  }
+
+  .util-key-btn {
+    min-height: 32px;
+    font-size: 10px;
+    padding: 0 8px;
   }
 
   .side-action-btn {
