@@ -37,7 +37,7 @@ function migrateOldFormat(data) {
           label: cmd.label,
           category: "斜杠指令",
           createdAt: now,
-          lastUsedAt: now,
+          lastUsedAt: null,
         });
       }
     }
@@ -49,7 +49,7 @@ function migrateOldFormat(data) {
           label: cmd.label,
           category: "终端",
           createdAt: now,
-          lastUsedAt: now,
+          lastUsedAt: null,
         });
       }
     }
@@ -67,7 +67,7 @@ function migrateOldFormat(data) {
           label: cmd.label,
           category,
           createdAt: now,
-          lastUsedAt: now,
+          lastUsedAt: null,
         });
       }
     }
@@ -113,7 +113,7 @@ export function createCommandsRouter() {
         label,
         category,
         createdAt: now,
-        lastUsedAt: now,
+        lastUsedAt: null,
       };
       const data = await ensureCommandsFile();
       data.commands.push(cmd);
