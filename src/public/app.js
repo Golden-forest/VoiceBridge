@@ -366,7 +366,7 @@ class CommandLibrary {
     this.tabScroll.innerHTML = "";
     const cats = this._getCategories();
     // Render "最近" virtual tab first
-    const recentCount = this.commands.filter(c => c.lastUsedAt).length;
+    const recentCount = this.commands.filter(c => c.lastUsedAt && !/^[──\-]{2,}/.test(c.label)).length;
     if (recentCount > 0) {
       const recentBtn = document.createElement("button");
       recentBtn.className = "tab-item" + (this.activeCategory === "最近" ? " active" : "");
@@ -377,7 +377,7 @@ class CommandLibrary {
       recentBtn.appendChild(recentNameSpan);
       const recentCountSpan = document.createElement("span");
       recentCountSpan.className = "tab-count";
-      recentCountSpan.textContent = recentCount > 12 ? "12+" : String(recentCount);
+      recentCountSpan.textContent = recentCount > 16 ? "16+" : String(recentCount);
       recentBtn.appendChild(recentCountSpan);
       this.tabScroll.appendChild(recentBtn);
     }
@@ -417,18 +417,20 @@ class CommandLibrary {
     if (q) {
       cmdsToShow = this.commands.filter(c => (c.label || "").toLowerCase().includes(q) || (c.text || "").toLowerCase().includes(q));
     } else if (this.activeCategory === "最近") {
-      // Show recently used commands across all categories, deduplicated, sorted by lastUsedAt desc, max 12
+      // Show recently used commands across all categories, deduplicated, sorted by lastUsedAt desc, max 16
       const seen = new Set();
       cmdsToShow = this.commands
-        .filter(c => c.lastUsedAt && !seen.has(c.id) && (seen.add(c.id), true))
+        .filter(c => c.lastUsedAt && !/^[──\-]{2,}/.test(c.label) && !seen.has(c.id) && (seen.add(c.id), true))
         .sort((a, b) => new Date(b.lastUsedAt || 0) - new Date(a.lastUsedAt || 0))
-        .slice(0, 12);
+        .slice(0, 16);
     } else {
       cmdsToShow = this.commands.filter(c => (c.category || "未分类") === this.activeCategory);
     }
 
-    // Sort by lastUsedAt
-    cmdsToShow.sort((a, b) => new Date(b.lastUsedAt || 0) - new Date(a.lastUsedAt || 0));
+    // Sort by lastUsedAt only for "最近" and search
+    if (q || this.activeCategory === "最近") {
+      cmdsToShow.sort((a, b) => new Date(b.lastUsedAt || 0) - new Date(a.lastUsedAt || 0));
+    }
 
     if (cmdsToShow.length === 0) {
       this.container.innerHTML = '<p style="padding:12px;color:var(--text-muted);text-align:center;">没有匹配的指令</p>';
@@ -437,6 +439,15 @@ class CommandLibrary {
 
     const grid = document.createElement("div");
     grid.className = "cmd-grid";
+    // Compute top-4 recently used IDs for highlight (category tabs only)
+    const recentIds = new Set();
+    if (!q && this.activeCategory !== "最近") {
+      cmdsToShow
+        .filter(c => c.lastUsedAt && !/^[──\-]{2,}/.test(c.label))
+        .sort((a, b) => new Date(b.lastUsedAt || 0) - new Date(a.lastUsedAt || 0))
+        .slice(0, 4)
+        .forEach(c => recentIds.add(c.id));
+    }
     cmdsToShow.forEach(cmd => {
       // Separator: label starts with ── or ---
       if (/^[──\-]{2,}/.test(cmd.label)) {
@@ -447,6 +458,7 @@ class CommandLibrary {
       }
       const btn = document.createElement("button");
       btn.className = "cmd-btn";
+      if (recentIds.has(cmd.id)) btn.classList.add("cmd-recent");
       btn.type = "button";
       btn.dataset.id = cmd.id;
       btn.title = cmd.text;

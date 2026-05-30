@@ -855,6 +855,13 @@ svg {
   box-shadow: var(--shadow-accent);
 }
 
+.cmd-btn.cmd-recent {
+  background: #d946ef;
+  border-color: #d946ef;
+  color: #fff;
+  box-shadow: 0 1px 4px rgba(217, 70, 239, 0.35);
+}
+
 .cmd-btn.slash {
   background: var(--accent-dim);
   color: var(--accent);
