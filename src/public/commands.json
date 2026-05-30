@@ -14,7 +14,7 @@
       "label": "/compact",
       "category": "斜杠指令",
       "createdAt": 1780076867692,
-      "lastUsedAt": "2026-05-30T04:17:16.499Z"
+      "lastUsedAt": "2026-05-30T04:34:13.060Z"
     },
     {
       "id": "15212807-5ad9-4225-8d1e-149dac8d0d00",
@@ -46,7 +46,7 @@
       "label": "可",
       "category": "通用",
       "createdAt": 1780076867692,
-      "lastUsedAt": "2026-05-29T18:18:00.733Z"
+      "lastUsedAt": "2026-05-30T04:56:40.872Z"
     },
     {
       "id": "026554d8-3184-4d13-8236-1ce7d1f5471c",
@@ -62,7 +62,7 @@
       "label": "commit",
       "category": "斜杠指令",
       "createdAt": 1780076867692,
-      "lastUsedAt": "2026-05-30T04:17:12.480Z"
+      "lastUsedAt": "2026-05-30T06:08:58.371Z"
     },
     {
       "id": "2017ebeb-ed6c-4344-882b-751f8f30391c",
@@ -78,7 +78,7 @@
       "label": "代码关联",
       "category": "开发协作",
       "createdAt": 1780076867692,
-      "lastUsedAt": 1780076867692
+      "lastUsedAt": "2026-05-30T04:38:26.416Z"
     },
     {
       "id": "ebe01bd6-0275-47dd-a4df-4e5cf3749754",
@@ -110,7 +110,7 @@
       "label": "需求确认",
       "category": "开发协作",
       "createdAt": 1780076867692,
-      "lastUsedAt": "2026-05-29T18:00:04.120Z"
+      "lastUsedAt": "2026-05-30T04:54:52.577Z"
     },
     {
       "id": "19d495d5-38f9-49e7-bcae-eb260829a315",
@@ -206,7 +206,7 @@
       "label": "最小化修改",
       "category": "通用",
       "createdAt": 1780076867692,
-      "lastUsedAt": "2026-05-30T04:13:07.149Z"
+      "lastUsedAt": "2026-05-30T04:56:43.901Z"
     },
     {
       "id": "6e9c0f6f-758d-4783-9f68-e5d074489fec",
@@ -223,6 +223,14 @@
       "category": "通用",
       "createdAt": 1780078043784,
       "lastUsedAt": "2026-05-30T03:31:29.246Z"
+    },
+    {
+      "id": "0b701cfd-d90a-46bb-9447-4a3c8354d4c4",
+      "text": "先系统查看相关代码找到根本原因。",
+      "label": "先系统查看相关代…",
+      "category": "开发协作",
+      "createdAt": 1780117272075,
+      "lastUsedAt": 1780117272075
     }
   ]
 }
