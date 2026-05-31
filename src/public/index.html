@@ -156,6 +156,30 @@
     <!-- Toast -->
     <div id="toast" class="toast" role="status" aria-live="polite"></div>
 
+    <div id="authOverlay" class="auth-overlay hidden">
+      <form id="authForm" class="auth-card">
+        <img src="/icons/icon-192.png" alt="" class="auth-logo" width="48" height="48" />
+        <h2 class="auth-title">VoiceBridge</h2>
+        <p id="authModeLabel" class="auth-subtitle">登录以连接你的设备</p>
+        <label class="auth-label" for="authEmail">邮箱</label>
+        <input id="authEmail" class="auth-input" type="email" autocomplete="email" required />
+        <label class="auth-label" for="authPassword">密码</label>
+        <input id="authPassword" class="auth-input" type="password" autocomplete="current-password" minlength="6" required />
+        <button id="authSubmitBtn" class="auth-submit-btn" type="submit">登录</button>
+        <button id="authSwitchBtn" class="auth-switch-btn" type="button">创建账号</button>
+        <p id="authMessage" class="auth-message" role="status"></p>
+      </form>
+    </div>
+
+    <script type="importmap">
+{
+  "imports": {
+    "@supabase/supabase-js": "https://esm.sh/@supabase/supabase-js@2"
+  }
+}
+    </script>
+    <script src="/config.js"></script>
+    <script src="/auth.js" type="module"></script>
     <script src="/app.js" type="module"></script>
 
     <!-- 新增指令弹窗 -->
