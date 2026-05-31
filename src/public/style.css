@@ -6,8 +6,8 @@
   --bg-chip: #fef9f4;
   --text-primary: #1c1917;
   --text-secondary: #78716c;
-  --text-muted: #a8a29e;
-  --text-placeholder: #c7bfb8;
+  --text-muted: #7c756f;
+  --text-placeholder: #8a827c;
   --border: rgba(0, 0, 0, 0.06);
   --border-strong: rgba(0, 0, 0, 0.1);
   --accent: #e8793a;
@@ -129,6 +129,24 @@ svg {
   font-weight: 750;
   letter-spacing: 0;
   color: var(--text-primary);
+}
+
+h1.brand {
+  margin: 0;
+}
+
+fieldset.add-cmd-fieldset {
+  border: none;
+  padding: 0;
+  margin: 0;
+}
+
+fieldset.add-cmd-fieldset legend {
+  font-size: 18px;
+  font-weight: 750;
+  color: var(--text-primary);
+  margin-bottom: 14px;
+  padding: 0;
 }
 
 .refresh-button {
@@ -466,7 +484,6 @@ svg {
   font-size: clamp(18px, 2.5svh, 24px);
   line-height: 1.45;
   resize: none;
-  outline: none;
   overflow-y: auto;
   word-break: break-word;
 }
@@ -860,7 +877,6 @@ svg {
   color: var(--text-primary);
   font-size: 14px;
   font-weight: 500;
-  outline: none;
   transition: border-color 0.2s var(--ease-smooth);
 }
 
@@ -870,6 +886,8 @@ svg {
 
 .cmd-search-input:focus {
   border-color: var(--accent);
+  border-width: 2px;
+  outline: none;
 }
 
 /* === Command Area Content === */
@@ -969,8 +987,6 @@ svg {
   color: var(--text-primary);
   font-size: 14px;
   font-weight: 500;
-  outline: none;
-  outline-offset: -1px;
 }
 
 .cmd-edit-label:focus {
@@ -1325,8 +1341,8 @@ svg {
     --bg-chip: #2a2418;
     --text-primary: #f4f1ed;
     --text-secondary: #c1bdb7;
-    --text-muted: #8c8781;
-    --text-placeholder: #77716b;
+    --text-muted: #a09a94;
+    --text-placeholder: #8a827c;
     --border: rgba(255, 255, 255, 0.08);
     --border-strong: rgba(255, 255, 255, 0.12);
     --accent: #f97316;
@@ -1402,5 +1418,18 @@ svg {
   body {
     background: linear-gradient(165deg, #181716 0%, #1f1c18 40%, #1a1816 100%);
     background-attachment: fixed;
+  }
+}
+
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
   }
 }
