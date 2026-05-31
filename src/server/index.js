@@ -24,7 +24,14 @@ dotenv.config({ path: path.join(rootDir, ".env") });
 const publicDir = path.join(rootDir, "src/public");
 const tmpDir = path.join(rootDir, "tmp");
 
-await fs.mkdir(tmpDir, { recursive: true });
+try {
+  console.log("Cleaning up leftover temp files...");
+  await fs.rm(tmpDir, { recursive: true, force: true });
+  await fs.mkdir(tmpDir, { recursive: true });
+  console.log("Temp directory ready.");
+} catch (err) {
+  console.error("Failed to clean temp directory:", err.message);
+}
 
 const config = loadConfig();
 const { key, cert } = await ensureCertificates(rootDir);
@@ -60,8 +67,11 @@ app.use("/api", createCommandsRouter());
 // ---- HTTP → HTTPS 重定向服务 ----
 const redirectApp = express();
 redirectApp.use((req, res) => {
-  const host = req.headers.host || `localhost:${config.port}`;
-  res.redirect(301, `https://${host}${req.url}`);
+  const localIp = getLocalIp();
+  const allowedHosts = [`localhost:${config.port}`, `127.0.0.1:${config.port}`, `${localIp}:${config.port}`];
+  const host = req.headers.host;
+  const safeHost = allowedHosts.includes(host) ? host : `localhost:${config.port}`;
+  res.redirect(301, `https://${safeHost}${req.url}`);
 });
 const redirectServer = http.createServer(redirectApp);
 
@@ -95,3 +105,10 @@ function shutdown() {
 
 process.on("SIGINT", shutdown);
 process.on("SIGTERM", shutdown);
+process.on("unhandledRejection", (reason) => {
+  console.error("Unhandled rejection:", reason);
+});
+process.on("uncaughtException", (err) => {
+  console.error("Uncaught exception:", err);
+  process.exit(1);
+});

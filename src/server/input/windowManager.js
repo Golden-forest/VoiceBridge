@@ -61,9 +61,11 @@ export async function activateWindow(appName, windowTitle, { execFileAsync: exec
   }
 
   try {
-    // Escape double quotes and backslashes to prevent AppleScript injection
-    const safeAppName = appName.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
-    const safeWindowTitle = windowTitle.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
+    // Sanitize: strip newlines, truncate, escape to prevent AppleScript injection
+    const cleanAppName = appName.replace(/[\r\n]/g, "").slice(0, 200);
+    const cleanWindowTitle = windowTitle.replace(/[\r\n]/g, "").slice(0, 200);
+    const safeAppName = cleanAppName.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
+    const safeWindowTitle = cleanWindowTitle.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
 
     const script = `
 tell application "System Events"

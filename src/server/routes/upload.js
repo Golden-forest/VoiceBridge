@@ -18,8 +18,22 @@ export function createUploadRouter({ config, wsHub, tmpDir }) {
         callback(null, `${Date.now()}-${Math.random().toString(16).slice(2)}${ext}`);
       }
     }),
+    fileFilter: (_req, file, callback) => {
+      const allowed = [
+        "audio/webm", "audio/ogg", "audio/mpeg", "audio/mp4",
+        "audio/mp3", "audio/wav", "audio/x-wav", "audio/wave",
+        "multipart/form-data"
+      ];
+      if (allowed.includes(file.mimetype)) {
+        callback(null, true);
+      } else {
+        callback(new Error("不支持的音频格式，请使用 webm、ogg、mp3、wav 或 m4a 格式。"));
+      }
+    },
     limits: {
-      fileSize: 25 * 1024 * 1024
+      fileSize: 25 * 1024 * 1024,
+      fields: 10,
+      files: 1
     }
   });
 
@@ -93,6 +107,12 @@ export function createUploadRouter({ config, wsHub, tmpDir }) {
       return res.status(400).json({
         ok: false,
         error: error.code === "LIMIT_FILE_SIZE" ? "音频文件太大，最大支持 25 MB。" : "音频上传失败。"
+      });
+    }
+    if (error.message === "不支持的音频格式，请使用 webm、ogg、mp3、wav 或 m4a 格式。") {
+      return res.status(400).json({
+        ok: false,
+        error: error.message
       });
     }
     return next(error);

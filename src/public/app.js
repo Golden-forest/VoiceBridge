@@ -97,17 +97,27 @@ function updateTextInputState() {
 }
 
 let lastAutoPastedText = "";
+let lastAutoPasteTimer = null;
 
 function sendTextInput() {
   const text = textInput.value.trim();
   if (!text) return;
+  if (text.length > 2000) {
+    showToast("文本过长，最多支持 2000 个字符", true);
+    return;
+  }
   if (text === lastAutoPastedText) {
     textInput.value = "";
     updateTextInputState();
     lastAutoPastedText = "";
+    clearTimeout(lastAutoPasteTimer);
+    lastAutoPasteTimer = null;
     showToast("该文本已通过语音自动发送。");
     return;
   }
+  lastAutoPastedText = "";
+  clearTimeout(lastAutoPasteTimer);
+  lastAutoPasteTimer = null;
   if (ws && ws.readyState === WebSocket.OPEN) {
     const msg = {
       type: "phrase",
@@ -121,7 +131,6 @@ function sendTextInput() {
     ws.send(JSON.stringify(msg));
     textInput.value = "";
     updateTextInputState();
-    lastAutoPastedText = "";
     showToast("已发送到电脑。");
   } else {
     showToast("发送失败，请检查连接。", true);
@@ -173,8 +182,12 @@ class WindowSelector {
 
   _loadSelection() { try { return JSON.parse(localStorage.getItem(WindowSelector.STORAGE_KEY)); } catch { return null; } }
   _saveSelection() {
-    if (this.selectedWindow) localStorage.setItem(WindowSelector.STORAGE_KEY, JSON.stringify(this.selectedWindow));
-    else localStorage.removeItem(WindowSelector.STORAGE_KEY);
+    try {
+      if (this.selectedWindow) localStorage.setItem(WindowSelector.STORAGE_KEY, JSON.stringify(this.selectedWindow));
+      else localStorage.removeItem(WindowSelector.STORAGE_KEY);
+    } catch {
+      // localStorage 不可用或已满，静默失败
+    }
   }
 
   _toggle() { this._isOpen ? this._close() : this._open(); }
@@ -200,6 +213,11 @@ class WindowSelector {
     this.el.list.innerHTML = '<p class="window-list-loading">加载中…</p>';
     try {
       const res = await fetch("/api/windows");
+      if (!res.ok) {
+        console.error("API error:", res.status, await res.text().catch(() => ""));
+        this.el.list.innerHTML = '<p class="window-list-empty">获取窗口失败</p>';
+        return;
+      }
       const data = await res.json();
       if (!data.ok || !data.windows || data.windows.length === 0) {
         this.el.list.innerHTML = '<p class="window-list-empty">没有找到可输入的窗口</p>';
@@ -323,7 +341,12 @@ class CommandLibrary {
   async load() {
     try {
       const res = await fetch("/api/commands");
-      this.commands = await res.json();
+      if (!res.ok) {
+        console.error("API error:", res.status, await res.text().catch(() => ""));
+        this.commands = [];
+      } else {
+        this.commands = await res.json();
+      }
       // If "最近" is active but no commands have been used, fall back to first category
       if (this.activeCategory === "最近" && !this.commands.some(c => c.lastUsedAt)) {
         const cats = this._getCategories();
@@ -539,6 +562,10 @@ class CommandLibrary {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(updates)
       });
+      if (!res.ok) {
+        console.error("API error:", res.status, await res.text().catch(() => ""));
+        return;
+      }
       const updated = await res.json();
       const idx = this.commands.findIndex(c => c.id === id);
       if (idx !== -1) this.commands[idx] = updated;
@@ -554,6 +581,10 @@ class CommandLibrary {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ lastUsedAt: new Date().toISOString() })
       });
+      if (!res.ok) {
+        console.error("API error:", res.status, await res.text().catch(() => ""));
+        return;
+      }
       const updated = await res.json();
       const idx = this.commands.findIndex(c => c.id === id);
       if (idx !== -1) this.commands[idx] = updated;
@@ -575,6 +606,11 @@ class CommandLibrary {
           category: category || "通用"
         })
       });
+      if (!res.ok) {
+        console.error("API error:", res.status, await res.text().catch(() => ""));
+        showToast("添加失败。", true);
+        return;
+      }
       const created = await res.json();
       this.commands.unshift(created);
       // Switch to the category of the newly added command
@@ -661,7 +697,11 @@ class CommandLibrary {
       }
       localStorage.setItem(migratedKey, "true");
       const res = await fetch("/api/commands");
-      this.commands = await res.json();
+      if (!res.ok) {
+        console.error("API error:", res.status, await res.text().catch(() => ""));
+      } else {
+        this.commands = await res.json();
+      }
       this.renderTabs();
       this.render();
     } catch { }
@@ -677,6 +717,8 @@ updateTextInputState();
 
 textInput.addEventListener("input", () => {
   lastAutoPastedText = "";
+  clearTimeout(lastAutoPasteTimer);
+  lastAutoPasteTimer = null;
   updateTextInputState();
 });
 
@@ -949,6 +991,9 @@ function finishUpload() {
 }
 
 // === WebSocket ===
+let wsRetryTimer = null;
+let wsVisibilityHandler = null;
+
 function connectWebSocket() {
   const protocol = location.protocol === "https:" ? "wss" : "ws";
   let wsRetryDelay = 1500;
@@ -956,6 +1001,12 @@ function connectWebSocket() {
 
   ws.addEventListener("open", () => {
     wsRetryDelay = 1500;
+    clearTimeout(wsRetryTimer);
+    wsRetryTimer = null;
+    if (wsVisibilityHandler) {
+      document.removeEventListener("visibilitychange", wsVisibilityHandler);
+      wsVisibilityHandler = null;
+    }
     setConnectionStatus("connected", "已连接电脑端");
   });
   ws.addEventListener("message", (event) => {
@@ -964,6 +1015,8 @@ function connectWebSocket() {
       if (payload.type === "result" && payload.text) {
         textInput.value = payload.text;
         lastAutoPastedText = payload.text.trim();
+        clearTimeout(lastAutoPasteTimer);
+        lastAutoPasteTimer = setTimeout(() => { lastAutoPastedText = ""; lastAutoPasteTimer = null; }, 5000);
         updateTextInputState();
       }
       if (payload.message) {
@@ -983,8 +1036,23 @@ function connectWebSocket() {
   ws.addEventListener("close", (event) => {
     if (event.code === 1000) return; // Normal closure, no reconnect
     setConnectionStatus("error", "连接已断开，正在重连...");
-    setTimeout(connectWebSocket, wsRetryDelay);
+    clearTimeout(wsRetryTimer);
+    wsRetryTimer = setTimeout(connectWebSocket, wsRetryDelay);
     wsRetryDelay = Math.min(wsRetryDelay * 2, 60000);
+    if (wsVisibilityHandler) {
+      document.removeEventListener("visibilitychange", wsVisibilityHandler);
+    }
+    wsVisibilityHandler = () => {
+      if (document.visibilityState === "visible" && (!ws || ws.readyState !== WebSocket.OPEN)) {
+        clearTimeout(wsRetryTimer);
+        wsRetryTimer = null;
+        document.removeEventListener("visibilitychange", wsVisibilityHandler);
+        wsVisibilityHandler = null;
+        wsRetryDelay = 1500;
+        connectWebSocket();
+      }
+    };
+    document.addEventListener("visibilitychange", wsVisibilityHandler);
   });
 }
 

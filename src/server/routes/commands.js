@@ -11,7 +11,9 @@ async function readCommandsFile() {
   try {
     const raw = await readFile(COMMANDS_PATH, "utf-8");
     return JSON.parse(raw);
-  } catch {
+  } catch (err) {
+    if (err.code === "ENOENT") return null;
+    console.warn(`readCommandsFile: failed to read ${COMMANDS_PATH}: ${err.message}`);
     return null;
   }
 }
@@ -83,7 +85,9 @@ function migrateOldFormat(data) {
 export async function ensureCommandsFile() {
   const data = await readCommandsFile();
   const migrated = migrateOldFormat(data);
-  await writeCommandsFile(migrated);
+  if (data !== migrated) {
+    await writeCommandsFile(migrated);
+  }
   return migrated;
 }
 
@@ -95,7 +99,8 @@ export function createCommandsRouter() {
       const data = await ensureCommandsFile();
       res.json(data.commands);
     } catch (err) {
-      res.status(500).json({ error: err.message });
+      console.error("GET /commands error:", err);
+      res.status(500).json({ ok: false, error: "获取指令列表失败" });
     }
   });
 
@@ -104,6 +109,11 @@ export function createCommandsRouter() {
       const { text, label, category } = req.body;
       if (!text || !label || !category) {
         res.status(400).json({ error: "缺少 text, label 或 category 字段" });
+        return;
+      }
+      if (typeof text !== "string" || typeof label !== "string" || typeof category !== "string"
+          || text.length > 2000 || label.length > 100 || category.length > 50) {
+        res.status(400).json({ error: "字段值无效" });
         return;
       }
       const now = Date.now();
@@ -120,14 +130,18 @@ export function createCommandsRouter() {
       await writeCommandsFile(data);
       res.status(201).json(cmd);
     } catch (err) {
-      res.status(500).json({ error: err.message });
+      console.error("POST /commands error:", err);
+      res.status(500).json({ ok: false, error: "保存指令失败" });
     }
   });
 
   router.put("/commands/:id", async (req, res) => {
     try {
       const { id } = req.params;
-      const updates = req.body;
+      const ALLOWED_FIELDS = new Set(["text", "label", "category"]);
+      const updates = Object.fromEntries(
+        Object.entries(req.body).filter(([key]) => ALLOWED_FIELDS.has(key))
+      );
       const data = await ensureCommandsFile();
       const idx = data.commands.findIndex((c) => c.id === id);
       if (idx === -1) {
@@ -138,7 +152,8 @@ export function createCommandsRouter() {
       await writeCommandsFile(data);
       res.json(data.commands[idx]);
     } catch (err) {
-      res.status(500).json({ error: err.message });
+      console.error("PUT /commands error:", err);
+      res.status(500).json({ ok: false, error: "更新指令失败" });
     }
   });
 
@@ -155,7 +170,8 @@ export function createCommandsRouter() {
       await writeCommandsFile(data);
       res.json({ ok: true });
     } catch (err) {
-      res.status(500).json({ error: err.message });
+      console.error("DELETE /commands error:", err);
+      res.status(500).json({ ok: false, error: "删除指令失败" });
     }
   });
 

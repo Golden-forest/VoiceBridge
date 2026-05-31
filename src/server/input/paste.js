@@ -30,7 +30,7 @@ export function getPasteCommand(platform = process.platform) {
 
 export async function pasteClipboard() {
   const { command, args } = getPasteCommand();
-  await execFileAsync(command, args, { windowsHide: true });
+  await execFileAsync(command, args, { windowsHide: true, timeout: 5000 });
 }
 
 export function getEnterCommand(platform = process.platform) {
@@ -60,7 +60,7 @@ export function getEnterCommand(platform = process.platform) {
 
 export async function pressEnter() {
   const { command, args } = getEnterCommand();
-  await execFileAsync(command, args, { windowsHide: true });
+  await execFileAsync(command, args, { windowsHide: true, timeout: 5000 });
 }
 
 export function getUndoCommand(platform = process.platform) {
@@ -90,7 +90,7 @@ export function getUndoCommand(platform = process.platform) {
 
 export async function pressUndo() {
   const { command, args } = getUndoCommand();
-  await execFileAsync(command, args, { windowsHide: true });
+  await execFileAsync(command, args, { windowsHide: true, timeout: 5000 });
 }
 
 // --- Generic key press helper ---
@@ -142,22 +142,24 @@ function keyCommand(platform, key, modifiers = {}) {
 
 export async function pressCtrlC() {
   const { command, args } = keyCommand(process.platform, "c", { ctrl: true });
-  await execFileAsync(command, args, { windowsHide: true });
+  await execFileAsync(command, args, { windowsHide: true, timeout: 5000 });
 }
 
 export async function pressEscape() {
   const { command, args } = keyCommand(process.platform, "escape");
-  await execFileAsync(command, args, { windowsHide: true });
+  await execFileAsync(command, args, { windowsHide: true, timeout: 5000 });
 }
 
 export async function pressDelete() {
   const { command, args } = keyCommand(process.platform, "delete");
-  await execFileAsync(command, args, { windowsHide: true });
+  await execFileAsync(command, args, { windowsHide: true, timeout: 5000 });
 }
 
 export async function pressArrow(direction) {
-  const keyMap = { up: "up", down: "down", left: "left", right: "right" };
-  const key = keyMap[direction] || direction;
-  const { command, args } = keyCommand(process.platform, key);
-  await execFileAsync(command, args, { windowsHide: true });
+  const allowed = new Set(["up", "down", "left", "right"]);
+  if (!allowed.has(direction)) {
+    throw new Error(`Invalid arrow direction: "${direction}". Allowed: up, down, left, right`);
+  }
+  const { command, args } = keyCommand(process.platform, direction);
+  await execFileAsync(command, args, { windowsHide: true, timeout: 5000 });
 }

@@ -3,7 +3,7 @@ import { pressEnter, pressUndo, pressCtrlC, pressEscape, pressDelete, pressArrow
 import { outputText } from "./input/outputText.js";
 
 export function createWebSocketHub(server) {
-  const wss = new WebSocketServer({ server, path: "/ws" });
+  const wss = new WebSocketServer({ server, path: "/ws", maxPayload: 1024 * 1024 });
   const clients = new Set();
 
   wss.on("connection", (socket) => {
@@ -36,7 +36,10 @@ export function createWebSocketHub(server) {
           await pressDelete();
         }
         if (payload.type === "arrow" && payload.direction) {
-          await pressArrow(payload.direction);
+          const allowed = new Set(["up", "down", "left", "right"]);
+          if (allowed.has(payload.direction)) {
+            await pressArrow(payload.direction);
+          }
         }
         if (payload.type === "paste") {
           await pasteClipboard();
@@ -48,8 +51,8 @@ export function createWebSocketHub(server) {
           });
           broadcast({ type: "output", ...result });
         }
-      } catch {
-        // Ignore malformed messages.
+      } catch (err) {
+        console.error("WebSocket message error:", err);
       }
     });
   });
