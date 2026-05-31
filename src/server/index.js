@@ -8,7 +8,7 @@ import dotenv from "dotenv";
 import express from "express";
 import qrcode from "qrcode-terminal";
 
-import { loadConfig } from "./config.js";
+import { buildPublicConfig, loadConfig } from "./config.js";
 import { getLocalIp } from "./network/getLocalIp.js";
 import { createUploadRouter } from "./routes/upload.js";
 import { createCommandsRouter } from "./routes/commands.js";
@@ -48,11 +48,7 @@ app.use("/shared", express.static(path.join(rootDir, "src/shared")));
 app.get("/config.js", (_req, res) => {
   res.type("application/javascript");
   res.set("Cache-Control", "no-store");
-  res.send(`window.__VB_CONFIG = ${JSON.stringify({
-    voicebridgeMode: config.voicebridgeMode,
-    supabaseUrl: config.supabaseUrl,
-    supabaseAnonKey: config.supabaseAnonKey
-  })};`);
+  res.send(`window.__VB_CONFIG = ${JSON.stringify(buildPublicConfig(config))};`);
 });
 
 app.get("/api/health", (_req, res) => {

@@ -38,3 +38,11 @@ export function loadConfig(env = process.env) {
     stripeCancelUrl: env.STRIPE_CANCEL_URL || "http://localhost:3000/?billing=cancel"
   };
 }
+
+export function buildPublicConfig(config) {
+  return {
+    voicebridgeMode: config.voicebridgeMode,
+    supabaseUrl: config.supabaseUrl,
+    supabaseAnonKey: config.supabaseAnonKey
+  };
+}

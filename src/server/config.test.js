@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
-import { loadConfig, parseBoolean } from "./config.js";
+import { buildPublicConfig, loadConfig, parseBoolean } from "./config.js";
 
 test("loadConfig applies safe MVP defaults", () => {
   const config = loadConfig({});
@@ -51,6 +51,33 @@ test("loadConfig exposes cloud runtime config without service secrets", () => {
   assert.equal(config.supabaseAnonKey, "anon-key");
   assert.equal(config.supabaseServiceRoleKey, "service-role-secret");
   assert.equal(config.stripeSecretKey, "stripe-secret");
+});
+
+test("buildPublicConfig excludes service, Stripe, and Tencent secrets", () => {
+  const config = loadConfig({
+    VOICEBRIDGE_MODE: "cloud",
+    SUPABASE_URL: "https://example.supabase.co",
+    SUPABASE_ANON_KEY: "anon-key",
+    SUPABASE_SERVICE_ROLE_KEY: "service-role-secret",
+    STRIPE_SECRET_KEY: "stripe-secret",
+    STRIPE_WEBHOOK_SECRET: "stripe-webhook-secret",
+    TENCENT_SECRET_ID: "tencent-secret-id",
+    TENCENT_SECRET_KEY: "tencent-secret-key"
+  });
+
+  const publicConfig = buildPublicConfig(config);
+  const serialized = JSON.stringify(publicConfig);
+
+  assert.deepEqual(publicConfig, {
+    voicebridgeMode: "cloud",
+    supabaseUrl: "https://example.supabase.co",
+    supabaseAnonKey: "anon-key"
+  });
+  assert.equal(serialized.includes("service-role-secret"), false);
+  assert.equal(serialized.includes("stripe-secret"), false);
+  assert.equal(serialized.includes("stripe-webhook-secret"), false);
+  assert.equal(serialized.includes("tencent-secret-id"), false);
+  assert.equal(serialized.includes("tencent-secret-key"), false);
 });
 
 test("parseBoolean handles common form and env values", () => {
