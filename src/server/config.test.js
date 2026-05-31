@@ -36,6 +36,23 @@ test("loadConfig reads environment overrides", () => {
   assert.equal(config.autoPaste, false);
 });
 
+test("loadConfig exposes cloud runtime config without service secrets", () => {
+  const config = loadConfig({
+    PORT: "3210",
+    SUPABASE_URL: "https://example.supabase.co",
+    SUPABASE_ANON_KEY: "anon-key",
+    SUPABASE_SERVICE_ROLE_KEY: "service-role-secret",
+    STRIPE_SECRET_KEY: "stripe-secret",
+    VOICEBRIDGE_MODE: "cloud"
+  });
+
+  assert.equal(config.voicebridgeMode, "cloud");
+  assert.equal(config.supabaseUrl, "https://example.supabase.co");
+  assert.equal(config.supabaseAnonKey, "anon-key");
+  assert.equal(config.supabaseServiceRoleKey, "service-role-secret");
+  assert.equal(config.stripeSecretKey, "stripe-secret");
+});
+
 test("parseBoolean handles common form and env values", () => {
   assert.equal(parseBoolean("true", false), true);
   assert.equal(parseBoolean("1", false), true);

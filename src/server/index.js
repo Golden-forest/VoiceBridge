@@ -43,6 +43,18 @@ const wsHub = createWebSocketHub(tlsServer);
 
 app.use(express.json());
 app.use(express.static(publicDir));
+app.use("/shared", express.static(path.join(rootDir, "src/shared")));
+
+app.get("/config.js", (_req, res) => {
+  res.type("application/javascript");
+  res.set("Cache-Control", "no-store");
+  res.send(`window.__VB_CONFIG = ${JSON.stringify({
+    voicebridgeMode: config.voicebridgeMode,
+    supabaseUrl: config.supabaseUrl,
+    supabaseAnonKey: config.supabaseAnonKey
+  })};`);
+});
+
 app.get("/api/health", (_req, res) => {
   res.json({
     ok: true,
