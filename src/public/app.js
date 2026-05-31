@@ -590,7 +590,7 @@ class CommandLibrary {
     if (!this.editingId) return;
     const currentLabel = document.getElementById("editLabelInput").value;
     const currentText = textInput.value;
-    const changed = currentLabel !== this._editOriginalLabel || currentText !== this._editOriginalText;
+    const changed = currentLabel.trim() !== this._editOriginalLabel || currentText.trim() !== this._editOriginalText;
     document.getElementById("editSaveBtn").classList.toggle("hidden", !changed);
     document.getElementById("editCancelBtn").classList.toggle("hidden", !changed);
   }
@@ -603,6 +603,7 @@ class CommandLibrary {
       this._exitEditMode(false);
     } catch {
       showToast("删除失败。", true);
+      this._exitEditMode(false);
     }
   }
 
@@ -774,11 +775,23 @@ textInput.addEventListener("input", () => {
 });
 
 textInput.addEventListener("keydown", (e) => {
-  if (commandLibrary.editingId) return;
+  if (commandLibrary.editingId) {
+    if (e.key === "Escape") { e.preventDefault(); commandLibrary._exitEditMode(false); }
+    return;
+  }
   if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendTextInput(); }
 });
 
 // === Edit Mode Button Events ===
+document.getElementById("editLabelInput").addEventListener("keydown", (e) => {
+  if (!commandLibrary.editingId) return;
+  if (e.key === "Escape") { e.preventDefault(); commandLibrary._exitEditMode(false); return; }
+  if (e.key === "Enter") {
+    e.preventDefault();
+    commandLibrary._exitEditMode(true);
+    textInput.focus();
+  }
+});
 document.getElementById("editLabelInput").addEventListener("input", () => {
   if (commandLibrary.editingId) commandLibrary._checkEditChanges();
 });
@@ -799,8 +812,8 @@ document.getElementById("editCancelBtn").addEventListener("click", () => {
 document.addEventListener("click", (e) => {
   if (!commandLibrary.editingId) return;
   if (e.target.closest(".input-card") || e.target.closest(".library-panel")) return;
-  const changed = document.getElementById("editLabelInput").value !== commandLibrary._editOriginalLabel
-    || textInput.value !== commandLibrary._editOriginalText;
+  const changed = document.getElementById("editLabelInput").value.trim() !== commandLibrary._editOriginalLabel
+    || textInput.value.trim() !== commandLibrary._editOriginalText;
   if (!changed) commandLibrary._exitEditMode(false);
 });
 
@@ -1063,9 +1076,15 @@ async function uploadAudio(blob, extension) {
 
 function finishUpload() {
   isUploading = false;
-  recordButton.disabled = false;
+  if (commandLibrary.editingId) {
+    recordButton.disabled = true;
+    submitButton.disabled = true;
+    enterButton.disabled = true;
+  } else {
+    recordButton.disabled = false;
+    setActionButtonsDisabled(false);
+  }
   setRecordIdle();
-  setActionButtonsDisabled(false);
 }
 
 // === WebSocket ===
@@ -1091,20 +1110,26 @@ function connectWebSocket() {
     try {
       const payload = JSON.parse(event.data);
       if (payload.type === "result" && payload.text) {
-        textInput.value = payload.text;
-        lastAutoPastedText = payload.text.trim();
-        clearTimeout(lastAutoPasteTimer);
-        lastAutoPasteTimer = setTimeout(() => { lastAutoPastedText = ""; lastAutoPasteTimer = null; }, 5000);
-        updateTextInputState();
+        if (!commandLibrary.editingId) {
+          textInput.value = payload.text;
+          lastAutoPastedText = payload.text.trim();
+          clearTimeout(lastAutoPasteTimer);
+          lastAutoPasteTimer = setTimeout(() => { lastAutoPastedText = ""; lastAutoPasteTimer = null; }, 5000);
+          updateTextInputState();
+        }
       }
       if (payload.message) {
         showToast(payload.message, payload.type === "error");
       }
-      if (payload.type === "output" && payload.copied && !payload.pasted) {
-        if (payload.pasteError) {
-          showToast("已复制，自动粘贴失败。", true);
-        } else if (payload.text) {
-          showCopyToast("已复制到剪切板。", payload.text);
+      if (payload.type === "output") {
+        if (!payload.copied) {
+          showToast("识别成功，但写入剪切板失败。", true);
+        } else if (!payload.pasted) {
+          if (payload.pasteError) {
+            showToast("已复制，自动粘贴失败。", true);
+          } else if (payload.text) {
+            showCopyToast("已复制到剪切板。", payload.text);
+          }
         }
       }
     } catch {
