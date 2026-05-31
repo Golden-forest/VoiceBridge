@@ -922,6 +922,9 @@ fieldset.add-cmd-fieldset legend {
   display: flex;
   align-items: center;
   justify-content: center;
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;
+  user-select: none;
   gap: 3px;
   padding: 0 6px;
   border: 1.5px solid var(--border);
