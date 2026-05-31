@@ -2,6 +2,8 @@ import { WebSocket, WebSocketServer } from "ws";
 import { pressEnter, pressUndo, pressCtrlC, pressEscape, pressDelete, pressArrow, pasteClipboard } from "./input/paste.js";
 import { outputText } from "./input/outputText.js";
 
+const MAX_BUFFER_SIZE = 64 * 1024;
+
 export function createWebSocketHub(server) {
   const wss = new WebSocketServer({ server, path: "/ws", maxPayload: 1024 * 1024 });
   const clients = new Set();
@@ -60,9 +62,13 @@ export function createWebSocketHub(server) {
   function broadcast(payload) {
     const data = JSON.stringify(payload);
     for (const client of clients) {
-      if (client.readyState === WebSocket.OPEN) {
-        client.send(data);
+      if (client.readyState !== WebSocket.OPEN) continue;
+      if (client.bufferedAmount > MAX_BUFFER_SIZE) {
+        client.terminate();
+        clients.delete(client);
+        continue;
       }
+      client.send(data);
     }
   }
 

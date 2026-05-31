@@ -1387,6 +1387,18 @@ svg {
     background: var(--bg-soft);
   }
 
+  .input-card {
+    border-color: rgba(255, 255, 255, 0.08);
+  }
+
+  .window-dropdown {
+    box-shadow: 0 14px 34px rgba(0, 0, 0, 0.35), 0 4px 12px rgba(0, 0, 0, 0.2);
+  }
+
+  .toast-copy-btn {
+    background: rgba(255, 255, 255, 0.1);
+  }
+
   body {
     background: linear-gradient(165deg, #181716 0%, #1f1c18 40%, #1a1816 100%);
     background-attachment: fixed;

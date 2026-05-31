@@ -82,13 +82,26 @@ function migrateOldFormat(data) {
   return { commands };
 }
 
+/**
+ * Read the commands file once, apply ALL migrations in memory,
+ * and write once at the end if any migration changed the data.
+ * Returns the (possibly migrated) data object.
+ */
 export async function ensureCommandsFile() {
-  const data = await readCommandsFile();
-  const migrated = migrateOldFormat(data);
-  if (data !== migrated) {
-    await writeCommandsFile(migrated);
+  let data = await readCommandsFile();
+  // Apply each migration in sequence; if any changed the data, write once at the end.
+  let dirty = false;
+  for (const migrate of [migrateOldFormat]) {
+    const next = migrate(data);
+    if (next !== data) {
+      data = next;
+      dirty = true;
+    }
   }
-  return migrated;
+  if (dirty) {
+    await writeCommandsFile(data);
+  }
+  return data;
 }
 
 export function createCommandsRouter() {

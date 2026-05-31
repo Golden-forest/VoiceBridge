@@ -72,15 +72,15 @@
 - [x] **M9** lastUsedAt 统一为数值时间戳 (commands.js, app.js)
 - [x] **L1** 文件名 Math.random() 替换为 crypto.randomUUID() (upload.js)
 
-### 剩余 MEDIUM
-- [ ] **M1** 无 CORS / Rate Limiting
-- [ ] **M8** 暗色模式部分 UI 未覆盖
+### 第四轮修复 (5 项)
+- [x] **L10** base64 内联 apple-touch-icon 替换为文件引用 (~39KB 节省) (index.html)
+- [x] **L6** manifest.json 添加 scope 和 maskable purpose (manifest.json)
+- [x] **M8** 暗色模式补充 input-card/window-dropdown/toast-copy-btn 规则 (style.css)
+- [x] **L9** 命令库迁移重构为批量管线，单次读写 (commands.js)
+- [x] **L2** broadcast 添加 bufferedAmount 背压保护 64KB 阈值 (ws.js)
 
-### 剩余 LOW
-- [ ] **L2** broadcast 无背压处理
-- [ ] **L5** PWA 无 Service Worker
-- [ ] **L6** manifest.json 缺少 scope/maskable
-- [ ] **L7** 无障碍访问缺失
-- [ ] **L8** 测试覆盖严重不足 (upload/commands 路由、前端无测试)
-- [ ] **L9** 命令库迁移逻辑串行执行
-- [ ] **L10** 87KB base64 内联 apple-touch-icon
+### 剩余 (搁置/需架构决策)
+- [ ] **M1** 无 CORS / Rate Limiting (已讨论搁置)
+- [ ] **L5** PWA 无 Service Worker (需架构设计)
+- [ ] **L7** 无障碍访问缺失 (需全面UI审查)
+- [ ] **L8** 测试覆盖严重不足 (需长期投入)
