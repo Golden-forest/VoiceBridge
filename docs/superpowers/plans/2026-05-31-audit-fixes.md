@@ -82,5 +82,5 @@
 ### 剩余 (搁置/需架构决策)
 - [ ] **M1** 无 CORS / Rate Limiting (已讨论搁置)
 - [ ] **L5** PWA 无 Service Worker (需架构设计)
-- [ ] **L7** 无障碍访问缺失 (需全面UI审查)
+- [x] **L7** 无障碍访问修复 — 方案B: CSS焦点/对比度/reduced-motion + HTML语义/ARIA + JS动态属性 (style.css, index.html, app.js)
 - [ ] **L8** 测试覆盖严重不足 (需长期投入)
