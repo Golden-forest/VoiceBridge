@@ -87,6 +87,14 @@ function updateTextInputState() {
   const text = textInput.value.trim();
   if (charCount) charCount.textContent = `${textInput.value.length}/2000`;
   const saveBtn = document.querySelector("#savePhraseBtn");
+
+  // In edit mode, hide save button — handled by edit UI
+  if (commandLibrary.editingId) {
+    saveBtn.classList.add("hidden");
+    commandLibrary._checkEditChanges();
+    return;
+  }
+
   if (text) {
     saveBtn.classList.remove("hidden");
     saveBtn.classList.remove("saved");
@@ -298,18 +306,11 @@ class CommandLibrary {
     });
 
     this.container.addEventListener("click", (e) => {
-      // Command button click
+      // Command button click — disabled during edit mode
       const btn = e.target.closest(".cmd-btn");
       if (!btn) return;
+      if (this.editingId) return;
       const id = btn.dataset.id;
-      if (this.editingId) {
-        if (btn.classList.contains("cmd-delete-btn")) {
-          this._deleteCommand(id);
-        } else if (btn.classList.contains("cmd-done-btn")) {
-          this._exitEditMode();
-        }
-        return;
-      }
       const cmd = this.commands.find(c => c.id === id);
       if (!cmd) return;
       sendQuickCommand(cmd.text, cmd.label);
@@ -493,68 +494,113 @@ class CommandLibrary {
       if (cmd.text.startsWith("/") || /^(npm|node|copyclaw|npx)\b/.test(cmd.text)) {
         btn.classList.add("slash");
       }
-      if (this.editingId === cmd.id) {
-        btn.classList.add("editing");
-        const input = document.createElement("span");
-        input.className = "cmd-edit-label";
-        input.contentEditable = "true";
-        input.textContent = cmd.label;
-        btn.appendChild(input);
-        // Delete and Done buttons
-        const actions = document.createElement("span");
-        actions.className = "cmd-edit-actions";
-        const delBtn = document.createElement("span");
-        delBtn.className = "cmd-btn cmd-delete-btn";
-        delBtn.dataset.id = cmd.id;
-        delBtn.textContent = "删除";
-        actions.appendChild(delBtn);
-        const doneBtn = document.createElement("span");
-        doneBtn.className = "cmd-btn cmd-done-btn";
-        doneBtn.textContent = "完成";
-        actions.appendChild(doneBtn);
-        btn.appendChild(actions);
-        // Stop event propagation on inner buttons
-        delBtn.addEventListener("pointerdown", e => e.stopPropagation());
-        doneBtn.addEventListener("pointerdown", e => e.stopPropagation());
-      } else {
-        if (this.editingId) btn.classList.add("dimmed");
-        const labelSpan = document.createElement("span");
-        labelSpan.className = "cmd-label";
-        labelSpan.textContent = cmd.label;
-        btn.appendChild(labelSpan);
-      }
+      if (this.editingId) btn.classList.add("dimmed");
+      const labelSpan = document.createElement("span");
+      labelSpan.className = "cmd-label";
+      labelSpan.textContent = cmd.label;
+      btn.appendChild(labelSpan);
       grid.appendChild(btn);
     });
     this.container.appendChild(grid);
   }
 
   _enterEditMode(id) {
+    const cmd = this.commands.find(c => c.id === id);
+    if (!cmd) return;
     this.editingId = id;
+
+    // Populate input area
+    const editLabel = document.getElementById("editLabelInput");
+    const inputCard = document.getElementById("inputCard");
+    editLabel.value = cmd.label;
+    editLabel.classList.remove("hidden");
+    textInput.value = cmd.text;
+    textInput.rows = 5;
+    textInput.placeholder = "编辑指令内容…";
+    inputCard.classList.add("editing");
+
+    // Store originals for change detection
+    this._editOriginalLabel = cmd.label;
+    this._editOriginalText = cmd.text;
+
+    // Show edit buttons, hide save button
+    document.getElementById("savePhraseBtn").classList.add("hidden");
+    document.getElementById("editDeleteBtn").classList.remove("hidden");
+    document.getElementById("editSaveBtn").classList.add("hidden");
+    document.getElementById("editCancelBtn").classList.add("hidden");
+
+    // Disable primary actions during edit
+    document.getElementById("submitButton").disabled = true;
+    document.getElementById("submitButton").classList.add("dimmed");
+    document.getElementById("recordButton").disabled = true;
+    document.getElementById("recordButton").classList.add("dimmed");
+    document.getElementById("enterButton").disabled = true;
+    document.getElementById("enterButton").classList.add("dimmed");
+
+    // Scroll to top so user sees the input area
+    inputCard.scrollIntoView({ behavior: "smooth", block: "nearest" });
+
+    updateTextInputState();
     this.render();
   }
 
-  _exitEditMode() {
+  _exitEditMode(save) {
     if (!this.editingId) return;
-    // Save label changes
-    const editInput = this.container.querySelector(`.cmd-btn.editing .cmd-edit-label`);
-    if (editInput) {
-      const newLabel = editInput.textContent.trim();
-      if (newLabel) {
-        this._updateCommand(this.editingId, { label: newLabel });
+
+    if (save) {
+      const newLabel = document.getElementById("editLabelInput").value.trim();
+      const newText = textInput.value.trim();
+      if (newLabel && newText) {
+        this._updateCommand(this.editingId, { label: newLabel, text: newText });
+        showToast("已保存指令。");
       }
     }
+
+    // Restore input area
+    const editLabel = document.getElementById("editLabelInput");
+    const inputCard = document.getElementById("inputCard");
+    editLabel.value = "";
+    editLabel.classList.add("hidden");
+    textInput.value = "";
+    textInput.rows = 3;
+    textInput.placeholder = "输入文字，或语音识别…";
+    inputCard.classList.remove("editing");
+
+    // Hide edit buttons
+    document.getElementById("editDeleteBtn").classList.add("hidden");
+    document.getElementById("editSaveBtn").classList.add("hidden");
+    document.getElementById("editCancelBtn").classList.add("hidden");
+
+    // Re-enable primary actions
+    document.getElementById("submitButton").disabled = false;
+    document.getElementById("submitButton").classList.remove("dimmed");
+    document.getElementById("recordButton").disabled = false;
+    document.getElementById("recordButton").classList.remove("dimmed");
+    document.getElementById("enterButton").disabled = false;
+    document.getElementById("enterButton").classList.remove("dimmed");
+
     this.editingId = null;
+    this._editOriginalLabel = null;
+    this._editOriginalText = null;
+    updateTextInputState();
     this.render();
+  }
+
+  _checkEditChanges() {
+    if (!this.editingId) return;
+    const currentLabel = document.getElementById("editLabelInput").value;
+    const currentText = textInput.value;
+    const changed = currentLabel !== this._editOriginalLabel || currentText !== this._editOriginalText;
+    document.getElementById("editSaveBtn").classList.toggle("hidden", !changed);
+    document.getElementById("editCancelBtn").classList.toggle("hidden", !changed);
   }
 
   async _deleteCommand(id) {
     try {
       await fetch(`/api/commands/${id}`, { method: "DELETE" });
       this.commands = this.commands.filter(c => c.id !== id);
-      this.editingId = null;
       showToast("已删除指令。");
-      this.renderTabs();
-      this.render();
+      this._exitEditMode(false);
     } catch {
       showToast("删除失败。", true);
     }
@@ -728,7 +774,34 @@ textInput.addEventListener("input", () => {
 });
 
 textInput.addEventListener("keydown", (e) => {
+  if (commandLibrary.editingId) return;
   if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendTextInput(); }
+});
+
+// === Edit Mode Button Events ===
+document.getElementById("editLabelInput").addEventListener("input", () => {
+  if (commandLibrary.editingId) commandLibrary._checkEditChanges();
+});
+
+document.getElementById("editDeleteBtn").addEventListener("click", () => {
+  if (commandLibrary.editingId) commandLibrary._deleteCommand(commandLibrary.editingId);
+});
+
+document.getElementById("editSaveBtn").addEventListener("click", () => {
+  if (commandLibrary.editingId) commandLibrary._exitEditMode(true);
+});
+
+document.getElementById("editCancelBtn").addEventListener("click", () => {
+  if (commandLibrary.editingId) commandLibrary._exitEditMode(false);
+});
+
+// Click outside input-card to exit edit mode (only when no changes)
+document.addEventListener("click", (e) => {
+  if (!commandLibrary.editingId) return;
+  if (e.target.closest(".input-card") || e.target.closest(".library-panel")) return;
+  const changed = document.getElementById("editLabelInput").value !== commandLibrary._editOriginalLabel
+    || textInput.value !== commandLibrary._editOriginalText;
+  if (!changed) commandLibrary._exitEditMode(false);
 });
 
 // === Paste & Undo Buttons ===

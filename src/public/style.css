@@ -472,6 +472,40 @@ fieldset.add-cmd-fieldset legend {
   box-shadow: var(--shadow-button-hover);
 }
 
+.input-card.editing {
+  border-color: var(--accent);
+  box-shadow: var(--shadow-accent);
+}
+
+.edit-label-input {
+  width: 100%;
+  min-width: 0;
+  border: 0;
+  border-bottom: 1px solid var(--border);
+  padding: 0 0 6px 0;
+  margin-bottom: 6px;
+  background: transparent;
+  color: var(--text-primary);
+  font-size: 14px;
+  font-weight: 600;
+  outline: none;
+}
+
+.edit-label-input::placeholder {
+  color: var(--text-placeholder);
+  font-weight: 500;
+}
+
+.edit-label-input:focus {
+  border-bottom-color: var(--accent);
+}
+
+.footer-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
 .text-input {
   width: 100%;
   min-width: 0;
@@ -968,61 +1002,38 @@ fieldset.add-cmd-fieldset legend {
   pointer-events: none;
 }
 
-.cmd-btn.editing {
-  grid-column: 1 / -1;
-  min-height: auto;
-  border-radius: var(--radius-sm);
-  border-color: var(--accent);
+/* === Edit Mode Action Buttons === */
+.edit-action-btn {
+  min-height: 28px;
+  padding: 0 10px;
+  gap: 5px;
+  font-size: 12px;
+  border-radius: 999px;
+  font-weight: 650;
+  cursor: pointer;
+  box-shadow: none;
+  border: 1px solid rgba(232, 121, 58, 0.2);
   background: var(--accent-soft);
-  padding: 8px 10px;
-  flex-direction: column;
-  gap: 6px;
-  box-shadow: var(--shadow-accent);
+  color: var(--accent);
 }
 
-.cmd-edit-label {
-  width: 100%;
-  min-width: 0;
-  padding: 6px 8px;
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  background: var(--bg-card);
-  color: var(--text-primary);
-  font-size: 14px;
-  font-weight: 500;
-}
-
-.cmd-edit-label:focus {
-  border-color: var(--accent);
-}
-
-.cmd-edit-actions {
-  display: flex;
-  gap: 8px;
-  align-self: flex-end;
-}
-
-.cmd-delete-btn {
-  border: 0;
-  border-radius: 8px;
+.edit-delete-btn {
   background: #fef2f2;
+  border-color: rgba(239, 68, 68, 0.2);
   color: var(--danger);
-  font-size: 12px;
-  font-weight: 700;
-  cursor: pointer;
-  padding: 5px 12px;
 }
 
-.cmd-done-btn {
-  border: 0;
-  border-radius: 8px;
+.edit-save-btn {
   background: var(--accent-gradient);
+  border: none;
   color: var(--accent-text);
-  font-size: 12px;
-  font-weight: 700;
-  cursor: pointer;
-  padding: 5px 16px;
   box-shadow: var(--shadow-accent);
+}
+
+.edit-cancel-btn {
+  background: var(--bg-card);
+  border-color: var(--border);
+  color: var(--text-secondary);
 }
 
 .cmd-label {
@@ -1395,9 +1406,10 @@ fieldset.add-cmd-fieldset legend {
     background: var(--bg-card);
   }
 
-  .cmd-delete-btn {
+  .edit-delete-btn {
     background: #3b1515;
     color: #fca5a5;
+    border-color: rgba(239, 68, 68, 0.3);
   }
 
   .add-cmd-textarea,

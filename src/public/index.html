@@ -62,13 +62,19 @@
           </label>
         </section>
         <!-- 文本输入 -->
-        <section class="input-card">
+        <section class="input-card" id="inputCard">
+          <input id="editLabelInput" class="edit-label-input hidden" type="text" placeholder="按钮显示名称…" maxlength="100" aria-label="编辑指令名称" />
           <textarea id="textInput" class="text-input" placeholder="输入文字，或语音识别…" enterkeyhint="send" rows="3" maxlength="2000" aria-label="文字输入"></textarea>
           <div class="input-card-footer">
-            <button id="savePhraseBtn" class="save-btn save-btn-sm hidden" type="button">
-              <svg viewBox="0 0 24 24" width="14" height="14"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
-              收藏
-            </button>
+            <div class="footer-actions">
+              <button id="savePhraseBtn" class="save-btn save-btn-sm hidden" type="button">
+                <svg viewBox="0 0 24 24" width="14" height="14"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                收藏
+              </button>
+              <button id="editDeleteBtn" class="edit-action-btn edit-delete-btn hidden" type="button">删除</button>
+              <button id="editSaveBtn" class="edit-action-btn edit-save-btn hidden" type="button">保存</button>
+              <button id="editCancelBtn" class="edit-action-btn edit-cancel-btn hidden" type="button">取消</button>
+            </div>
             <span id="charCount" class="char-count">0/2000</span>
           </div>
         </section>
