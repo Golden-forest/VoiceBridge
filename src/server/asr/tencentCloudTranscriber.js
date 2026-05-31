@@ -1,5 +1,4 @@
 import crypto from "node:crypto";
-import fs from "node:fs";
 import fsPromises from "node:fs/promises";
 
 const ENDPOINT = "asr.tencentcloudapi.com";
@@ -11,31 +10,17 @@ const MAX_RETRIES = 2;
 const RETRY_DELAYS = [1000, 2000];
 
 /**
- * Read a file and return its base64-encoded contents using streaming,
- * avoiding reading the entire file into a single Buffer allocation.
+ * Read a file and return its base64-encoded contents.
  */
 async function readFileAsBase64(filePath) {
-  const stat = fs.statSync(filePath);
-  const size = stat.size;
-  const fd = await fsPromises.open(filePath, "r");
-  try {
-    const CHUNK = 64 * 1024; // 64 KB chunks
-    const chunks = [];
-    let offset = 0;
-    while (offset < size) {
-      const buf = Buffer.allocUnsafe(Math.min(CHUNK, size - offset));
-      const { bytesRead } = await fd.read(buf, 0, buf.length, offset);
-      chunks.push(buf.subarray(0, bytesRead).toString("base64"));
-      offset += bytesRead;
-    }
-    return { base64: chunks.join(""), length: size };
-  } finally {
-    await fd.close();
-  }
+  const data = await fsPromises.readFile(filePath);
+  return { base64: data.toString("base64"), length: data.length };
 }
 
 export async function transcribeWithTencentCloud({ filePath, config }) {
   const { base64: audioBase64, length: audioLength } = await readFileAsBase64(filePath);
+
+  console.log(`[ASR] Audio file: ${audioLength} bytes, base64 length: ${audioBase64.length}`);
 
   let lastError;
   for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
@@ -61,6 +46,7 @@ export async function transcribeWithTencentCloud({ filePath, config }) {
         clearTimeout(timeoutId);
         if (err.name === "AbortError") {
           const error = new Error("Tencent ASR request timed out after 30s");
+          error.retryable = true;
           error.publicMessage = "语音识别请求超时，请重试。";
           err = error;
         }
@@ -100,13 +86,14 @@ export async function transcribeWithTencentCloud({ filePath, config }) {
     } catch (err) {
       lastError = err;
 
-      // Do not retry on 4xx or business logic errors
-      if (err.publicMessage) {
+      // Explicitly retryable errors (e.g. timeout) bypass the publicMessage guard
+      if (err.publicMessage && !err.retryable) {
         throw err;
       }
 
       // Network errors (AbortError, TypeError) and 5xx are retryable
       const isRetryable =
+        err.retryable ||
         err.name === "AbortError" ||
         err instanceof TypeError ||
         (err.message && err.message.startsWith("Tencent ASR failed"));
