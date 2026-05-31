@@ -104,38 +104,30 @@ create policy usage_events_select_own
   to authenticated
   using (user_id = auth.uid());
 
-create policy realtime_own_device_broadcast_select
-  on realtime.messages
-  for select
-  to authenticated
+create policy "realtime_own_device_broadcast_select"
+  on realtime.messages for select to authenticated
   using (
-    extension = 'broadcast'
-    and topic like 'device:' || auth.uid() || ':%'
+    realtime.messages.extension = 'broadcast'
+    and (select realtime.topic()) like 'device:' || (select auth.uid()) || ':%'
   );
 
-create policy realtime_own_device_broadcast_insert
-  on realtime.messages
-  for insert
-  to authenticated
+create policy "realtime_own_device_broadcast_insert"
+  on realtime.messages for insert to authenticated
   with check (
-    extension = 'broadcast'
-    and topic like 'device:' || auth.uid() || ':%'
+    realtime.messages.extension = 'broadcast'
+    and (select realtime.topic()) like 'device:' || (select auth.uid()) || ':%'
   );
 
-create policy realtime_own_presence_select
-  on realtime.messages
-  for select
-  to authenticated
+create policy "realtime_own_presence_select"
+  on realtime.messages for select to authenticated
   using (
-    extension = 'presence'
-    and topic = 'user:' || auth.uid() || ':presence'
+    realtime.messages.extension = 'presence'
+    and (select realtime.topic()) = 'user:' || (select auth.uid()) || ':presence'
   );
 
-create policy realtime_own_presence_insert
-  on realtime.messages
-  for insert
-  to authenticated
+create policy "realtime_own_presence_insert"
+  on realtime.messages for insert to authenticated
   with check (
-    extension = 'presence'
-    and topic = 'user:' || auth.uid() || ':presence'
+    realtime.messages.extension = 'presence'
+    and (select realtime.topic()) = 'user:' || (select auth.uid()) || ':presence'
   );
