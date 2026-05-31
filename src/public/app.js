@@ -191,8 +191,8 @@ class WindowSelector {
   }
 
   _toggle() { this._isOpen ? this._close() : this._open(); }
-  _open() { this._isOpen = true; this.el.dropdown.classList.remove("hidden"); this._fetchWindows(); }
-  _close() { this._isOpen = false; this.el.dropdown.classList.add("hidden"); }
+  _open() { this._isOpen = true; this.el.dropdown.classList.remove("hidden"); this.el.btn.setAttribute("aria-expanded", "true"); this._fetchWindows(); }
+  _close() { this._isOpen = false; this.el.dropdown.classList.add("hidden"); this.el.btn.setAttribute("aria-expanded", "false"); }
 
   _updateButton() {
     if (this.selectedWindow) {
@@ -246,6 +246,7 @@ class WindowSelector {
         btn.type = "button";
         const isSelected = this.selectedWindow && this.selectedWindow.appName === group.appName && this.selectedWindow.windowTitle === win.title;
         if (isSelected) btn.classList.add("selected");
+        btn.setAttribute("aria-selected", String(isSelected));
         const check = document.createElement("span");
         check.className = "window-item-check";
         check.textContent = isSelected ? "✓" : "";
@@ -394,6 +395,8 @@ class CommandLibrary {
       const recentBtn = document.createElement("button");
       recentBtn.className = "tab-item" + (this.activeCategory === "最近" ? " active" : "");
       recentBtn.type = "button";
+      recentBtn.setAttribute("role", "tab");
+      recentBtn.setAttribute("aria-selected", String(this.activeCategory === "最近"));
       recentBtn.dataset.category = "最近";
       const recentNameSpan = document.createElement("span");
       recentNameSpan.textContent = "最近";
@@ -408,6 +411,8 @@ class CommandLibrary {
       const btn = document.createElement("button");
       btn.className = "tab-item" + (category === this.activeCategory ? " active" : "");
       btn.type = "button";
+      btn.setAttribute("role", "tab");
+      btn.setAttribute("aria-selected", String(category === this.activeCategory));
       btn.dataset.category = category;
       const nameSpan = document.createElement("span");
       nameSpan.textContent = category;
