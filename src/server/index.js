@@ -71,7 +71,8 @@ redirectApp.use((req, res) => {
   const allowedHosts = [`localhost:${config.port}`, `127.0.0.1:${config.port}`, `${localIp}:${config.port}`];
   const host = req.headers.host;
   const safeHost = allowedHosts.includes(host) ? host : `localhost:${config.port}`;
-  res.redirect(301, `https://${safeHost}${req.url}`);
+  const safePath = req.url.replace(/^\/+/, "/");
+  res.redirect(301, `https://${safeHost}${safePath}`);
 });
 const redirectServer = http.createServer(redirectApp);
 

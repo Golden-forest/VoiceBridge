@@ -67,7 +67,26 @@ export function createUploadRouter({ config, wsHub, tmpDir }) {
         message: "识别完成"
       });
 
-      const output = await outputText(text, { autoPaste, targetWindow });
+      let output;
+      try {
+        output = await outputText(text, { autoPaste, targetWindow });
+      } catch (clipboardError) {
+        const msg = clipboardError instanceof Error ? clipboardError.message : String(clipboardError);
+        console.error("Clipboard/paste error:", clipboardError);
+        // STT succeeded but clipboard write failed — still return the text
+        wsHub.broadcast({
+          type: "output",
+          text,
+          copied: false,
+          pasted: false,
+          pasteError: msg
+        });
+        return res.json({
+          ok: true,
+          text,
+          output: { copied: false, pasted: false, pasteError: msg }
+        });
+      }
 
       wsHub.broadcast({
         type: "output",
@@ -84,8 +103,8 @@ export function createUploadRouter({ config, wsHub, tmpDir }) {
       });
     } catch (error) {
       const statusCode = error.statusCode || 500;
-      const message = error.publicMessage || "语音识别或写入剪切板失败。";
-      console.error(error);
+      const message = error.publicMessage || "语音识别失败。";
+      console.error("Transcription error:", error);
 
       wsHub.broadcast({
         type: "error",
@@ -103,7 +122,7 @@ export function createUploadRouter({ config, wsHub, tmpDir }) {
     }
   });
 
-  router.use((error, _req, res, next) => {
+  router.use((error, _req, res, _next) => {
     if (error instanceof multer.MulterError) {
       return res.status(400).json({
         ok: false,
@@ -116,7 +135,11 @@ export function createUploadRouter({ config, wsHub, tmpDir }) {
         error: error.message
       });
     }
-    return next(error);
+    console.error("Upload error middleware:", error);
+    return res.status(500).json({
+      ok: false,
+      error: "文件上传处理失败。"
+    });
   });
 
   return router;

@@ -21,37 +21,44 @@ export function createWebSocketHub(server) {
     socket.on("message", async (data) => {
       try {
         const payload = JSON.parse(data);
-        if (payload.type === "enter") {
-          await pressEnter();
-        }
-        if (payload.type === "undo") {
-          await pressUndo();
-        }
-        if (payload.type === "ctrl-c") {
-          await pressCtrlC();
-        }
-        if (payload.type === "escape") {
-          await pressEscape();
-          if (payload.twice) await pressEscape();
-        }
-        if (payload.type === "delete") {
-          await pressDelete();
-        }
-        if (payload.type === "arrow" && payload.direction) {
-          const allowed = new Set(["up", "down", "left", "right"]);
-          if (allowed.has(payload.direction)) {
-            await pressArrow(payload.direction);
+        switch (payload.type) {
+          case "enter":
+            await pressEnter();
+            break;
+          case "undo":
+            await pressUndo();
+            break;
+          case "ctrl-c":
+            await pressCtrlC();
+            break;
+          case "escape":
+            await pressEscape();
+            if (payload.twice) await pressEscape();
+            break;
+          case "delete":
+            await pressDelete();
+            break;
+          case "arrow": {
+            const allowed = new Set(["up", "down", "left", "right"]);
+            if (payload.direction && allowed.has(payload.direction)) {
+              await pressArrow(payload.direction);
+            }
+            break;
           }
-        }
-        if (payload.type === "paste") {
-          await pasteClipboard();
-        }
-        if (payload.type === "phrase" && typeof payload.text === "string") {
-          const result = await outputText(payload.text, {
-            autoPaste: Boolean(payload.autoPaste),
-            targetWindow: payload.targetWindow || null
-          });
-          broadcast({ type: "output", ...result });
+          case "paste":
+            await pasteClipboard();
+            break;
+          case "phrase":
+            if (typeof payload.text === "string" && payload.text.length <= 10000) {
+              const result = await outputText(payload.text, {
+                autoPaste: Boolean(payload.autoPaste),
+                targetWindow: payload.targetWindow || null
+              });
+              if (socket.readyState === WebSocket.OPEN) broadcast({ type: "output", ...result });
+            }
+            break;
+          default:
+            console.warn("Unknown WebSocket message type:", payload.type);
         }
       } catch (err) {
         console.error("WebSocket message error:", err);
@@ -61,14 +68,21 @@ export function createWebSocketHub(server) {
 
   function broadcast(payload) {
     const data = JSON.stringify(payload);
+    const toRemove = [];
     for (const client of clients) {
-      if (client.readyState !== WebSocket.OPEN) continue;
+      if (client.readyState !== WebSocket.OPEN) {
+        toRemove.push(client);
+        continue;
+      }
       if (client.bufferedAmount > MAX_BUFFER_SIZE) {
         client.terminate();
-        clients.delete(client);
+        toRemove.push(client);
         continue;
       }
       client.send(data);
+    }
+    for (const client of toRemove) {
+      clients.delete(client);
     }
   }
 
