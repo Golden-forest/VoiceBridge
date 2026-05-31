@@ -1,5 +1,6 @@
 import fs from "node:fs/promises";
 import path from "node:path";
+import crypto from "node:crypto";
 
 import express from "express";
 import multer from "multer";
@@ -15,7 +16,7 @@ export function createUploadRouter({ config, wsHub, tmpDir }) {
       destination: tmpDir,
       filename: (_req, file, callback) => {
         const ext = path.extname(file.originalname || "") || ".webm";
-        callback(null, `${Date.now()}-${Math.random().toString(16).slice(2)}${ext}`);
+        callback(null, `${crypto.randomUUID()}${ext}`);
       }
     }),
     fileFilter: (_req, file, callback) => {

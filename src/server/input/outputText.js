@@ -2,7 +2,6 @@ export async function outputText(
   text,
   {
     autoPaste,
-    pasteDelayMs = 120,
     clipboardWriter = defaultClipboardWriter,
     pasteFn = defaultPasteFn,
     targetWindow = null,
@@ -28,6 +27,8 @@ export async function outputText(
     await delay(200);
   }
 
+  // clipboardWriter is fully awaited so pbcopy (or equivalent) has
+  // completed before we proceed.  No additional fixed delay is needed.
   await clipboardWriter(text);
 
   if (!autoPaste) {
@@ -37,8 +38,6 @@ export async function outputText(
       pasteError: null
     };
   }
-
-  await delay(pasteDelayMs);
 
   try {
     await pasteFn();

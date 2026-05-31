@@ -5,7 +5,8 @@ import { createTencentSentenceRecognitionRequest } from "./tencentCloudTranscrib
 
 test("createTencentSentenceRecognitionRequest builds a signed SentenceRecognition request", () => {
   const request = createTencentSentenceRecognitionRequest({
-    audio: Buffer.from("audio"),
+    audioBase64: Buffer.from("audio").toString("base64"),
+    audioLength: 5,
     timestamp: 1710000000,
     config: {
       tencentSecretId: "secret-id",

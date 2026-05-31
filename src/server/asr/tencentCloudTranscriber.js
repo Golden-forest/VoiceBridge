@@ -1,5 +1,6 @@
 import crypto from "node:crypto";
-import fs from "node:fs/promises";
+import fs from "node:fs";
+import fsPromises from "node:fs/promises";
 
 const ENDPOINT = "asr.tencentcloudapi.com";
 const SERVICE = "asr";
@@ -9,14 +10,39 @@ const ACTION = "SentenceRecognition";
 const MAX_RETRIES = 2;
 const RETRY_DELAYS = [1000, 2000];
 
+/**
+ * Read a file and return its base64-encoded contents using streaming,
+ * avoiding reading the entire file into a single Buffer allocation.
+ */
+async function readFileAsBase64(filePath) {
+  const stat = fs.statSync(filePath);
+  const size = stat.size;
+  const fd = await fsPromises.open(filePath, "r");
+  try {
+    const CHUNK = 64 * 1024; // 64 KB chunks
+    const chunks = [];
+    let offset = 0;
+    while (offset < size) {
+      const buf = Buffer.allocUnsafe(Math.min(CHUNK, size - offset));
+      const { bytesRead } = await fd.read(buf, 0, buf.length, offset);
+      chunks.push(buf.subarray(0, bytesRead).toString("base64"));
+      offset += bytesRead;
+    }
+    return { base64: chunks.join(""), length: size };
+  } finally {
+    await fd.close();
+  }
+}
+
 export async function transcribeWithTencentCloud({ filePath, config }) {
-  const audio = await fs.readFile(filePath);
+  const { base64: audioBase64, length: audioLength } = await readFileAsBase64(filePath);
 
   let lastError;
   for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
     try {
       const request = createTencentSentenceRecognitionRequest({
-        audio,
+        audioBase64,
+        audioLength,
         config
       });
 
@@ -101,7 +127,8 @@ export async function transcribeWithTencentCloud({ filePath, config }) {
 }
 
 export function createTencentSentenceRecognitionRequest({
-  audio,
+  audioBase64,
+  audioLength,
   config,
   timestamp = Math.floor(Date.now() / 1000)
 }) {
@@ -112,8 +139,8 @@ export function createTencentSentenceRecognitionRequest({
     SourceType: 1,
     VoiceFormat: config.tencentAsrVoiceFormat,
     UsrAudioKey: `voicebridge-${timestamp}`,
-    Data: audio.toString("base64"),
-    DataLen: audio.length
+    Data: audioBase64,
+    DataLen: audioLength
   };
 
   const body = JSON.stringify(payload);

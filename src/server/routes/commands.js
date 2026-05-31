@@ -138,10 +138,14 @@ export function createCommandsRouter() {
   router.put("/commands/:id", async (req, res) => {
     try {
       const { id } = req.params;
-      const ALLOWED_FIELDS = new Set(["text", "label", "category"]);
+      const ALLOWED_FIELDS = new Set(["text", "label", "category", "lastUsedAt"]);
       const updates = Object.fromEntries(
         Object.entries(req.body).filter(([key]) => ALLOWED_FIELDS.has(key))
       );
+      // Ensure lastUsedAt is a numeric timestamp for type consistency
+      if (updates.lastUsedAt != null) {
+        updates.lastUsedAt = Number(updates.lastUsedAt) || Date.now();
+      }
       const data = await ensureCommandsFile();
       const idx = data.commands.findIndex((c) => c.id === id);
       if (idx === -1) {

@@ -57,25 +57,27 @@
 
 ## 未修复但明确 (后续按需处理)
 
-### 剩余 HIGH
-- [ ] **H5** 剪贴板写入与粘贴间竞态 (outputText.js 120ms 硬编码延迟)
-- [ ] **H6** paste.js osascript 无超时 (辅助功能弹窗阻塞)
-- [ ] **H7** 文件上传无 MIME 类型验证 (upload.js)
-- [ ] **H10** 大文件全量读入内存 (tencentCloudTranscriber.js)
+### 服务端安全补充 (6 项)
+- [x] **H6** osascript 所有 execFileAsync 添加 5s 超时 (paste.js)
+- [x] **H7** 文件上传 MIME 类型白名单 (upload.js)
+- [x] **M5** 服务器启动时清理 tmp/ 残留文件 (index.js)
+- [x] **M6(ws)** WebSocket maxPayload 1MB 限制 (ws.js)
+- [x] **M11** commands.js 所有端点统一中文错误响应 (commands.js)
+- [x] **L4** WebSocket visibilitychange 快速重连 (app.js)
+
+### 第三轮修复 (5 项)
+- [x] **H5** 移除 120ms 硬编码延迟，改为 await clipboardWriter 完成后直接粘贴 (outputText.js)
+- [x] **H10** 分块读取文件避免全量内存占用 (tencentCloudTranscriber.js)
+- [x] **M4** execSync 替换为异步 execFileAsync 生成证书 (certs.js)
+- [x] **M9** lastUsedAt 统一为数值时间戳 (commands.js, app.js)
+- [x] **L1** 文件名 Math.random() 替换为 crypto.randomUUID() (upload.js)
 
 ### 剩余 MEDIUM
 - [ ] **M1** 无 CORS / Rate Limiting
-- [ ] **M4** execSync 生成证书阻塞 (certs.js)
-- [ ] **M5** 临时文件崩溃残留无清理
-- [ ] **M6(ws)** WebSocket 无 maxPayload 限制
 - [ ] **M8** 暗色模式部分 UI 未覆盖
-- [ ] **M9** lastUsedAt 类型不一致
-- [ ] **M11** commands.js 错误响应泄露内部信息
 
 ### 剩余 LOW
-- [ ] **L1** 文件名用 Math.random() 而非 crypto.randomUUID()
 - [ ] **L2** broadcast 无背压处理
-- [ ] **L4** WebSocket 重连无 visibilitychange 快速恢复
 - [ ] **L5** PWA 无 Service Worker
 - [ ] **L6** manifest.json 缺少 scope/maskable
 - [ ] **L7** 无障碍访问缺失

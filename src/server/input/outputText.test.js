@@ -8,7 +8,6 @@ test("outputText writes clipboard before attempting paste", async () => {
 
   const result = await outputText("hello", {
     autoPaste: true,
-    pasteDelayMs: 0,
     clipboardWriter: async (text) => calls.push(["clipboard", text]),
     pasteFn: async () => calls.push(["paste"])
   });
@@ -38,7 +37,6 @@ test("outputText can copy without auto paste", async () => {
 test("outputText keeps clipboard success when paste fails", async () => {
   const result = await outputText("safe fallback", {
     autoPaste: true,
-    pasteDelayMs: 0,
     clipboardWriter: async () => {},
     logger: { warn: () => {} },
     pasteFn: async () => {
@@ -56,7 +54,6 @@ test("outputText activates target window before pasting", async () => {
 
   const result = await outputText("hello", {
     autoPaste: true,
-    pasteDelayMs: 0,
     targetWindow: { appName: "Chrome", windowTitle: "GitHub" },
     activateWindowFn: async () => calls.push(["activate"]),
     clipboardWriter: async (text) => calls.push(["clipboard", text]),
@@ -72,7 +69,6 @@ test("outputText skips activation when targetWindow is null", async () => {
 
   const result = await outputText("hello", {
     autoPaste: true,
-    pasteDelayMs: 0,
     targetWindow: null,
     activateWindowFn: async () => calls.push(["activate"]),
     clipboardWriter: async (text) => calls.push(["clipboard", text]),
@@ -88,7 +84,6 @@ test("outputText falls back to paste when activation fails", async () => {
 
   const result = await outputText("hello", {
     autoPaste: true,
-    pasteDelayMs: 0,
     targetWindow: { appName: "Chrome", windowTitle: "GitHub" },
     activateWindowFn: async () => { throw new Error("not found"); },
     clipboardWriter: async (text) => calls.push(["clipboard", text]),

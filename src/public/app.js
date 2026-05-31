@@ -579,7 +579,7 @@ class CommandLibrary {
       const res = await fetch(`/api/commands/${id}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ lastUsedAt: new Date().toISOString() })
+        body: JSON.stringify({ lastUsedAt: Date.now() })
       });
       if (!res.ok) {
         console.error("API error:", res.status, await res.text().catch(() => ""));
