@@ -11,6 +11,8 @@ const pageRefreshButton = document.querySelector("#pageRefreshButton");
 const cloudDeviceSelect = document.querySelector("#cloudDeviceSelect");
 let cloudRealtime = null;
 let selectedCloudDeviceId = "";
+let activeCloudUserId = "";
+let activeCloudPhoneDeviceId = "";
 
 // === Phone Clipboard ===
 async function copyToPhoneClipboard(text) {
@@ -131,22 +133,31 @@ async function sendTextInput() {
   lastAutoPastedText = "";
   clearTimeout(lastAutoPasteTimer);
   lastAutoPasteTimer = null;
-  await sendTextToDesktop(text);
+  const accepted = await sendTextToDesktop(text);
+  if (accepted) {
+    textInput.value = "";
+    updateTextInputState();
+  }
 }
 
-async function sendTextToDesktop(text) {
+async function sendTextToDesktop(text, { localSuccessMessage = "已发送到电脑。" } = {}) {
   if ((window.__VB_CONFIG || {}).voicebridgeMode === "cloud") {
     if (!cloudRealtime || !selectedCloudDeviceId) {
       showToast("请先打开桌面客户端。", true);
-      return;
+      return false;
     }
-    await cloudRealtime.sendText({
-      targetDeviceId: selectedCloudDeviceId,
-      text,
-      autoPaste: autoPasteEl.checked
-    });
-    showToast("已发送，等待桌面端确认...");
-    return;
+    try {
+      await cloudRealtime.sendText({
+        targetDeviceId: selectedCloudDeviceId,
+        text,
+        autoPaste: autoPasteEl.checked
+      });
+      showToast("已发送，等待桌面端确认...");
+      return true;
+    } catch (error) {
+      showToast(error.message || "发送失败，请稍后重试。", true);
+      return false;
+    }
   }
 
   if (ws && ws.readyState === WebSocket.OPEN) {
@@ -160,20 +171,31 @@ async function sendTextToDesktop(text) {
     }
     copyToPhoneClipboard(text);
     ws.send(JSON.stringify(msg));
-    textInput.value = "";
-    updateTextInputState();
-    showToast("已发送到电脑。");
+    showToast(localSuccessMessage);
+    return true;
   } else {
     showToast("发送失败，请检查连接。", true);
+    return false;
   }
 }
 
 window.addEventListener("voicebridge:auth", async (event) => {
   const { session, user } = event.detail;
-  if (!session || !user || !window.VoiceBridgeAuth?.supabase) return;
   if ((window.__VB_CONFIG || {}).voicebridgeMode !== "cloud") return;
+  if (!session || !user || !window.VoiceBridgeAuth?.supabase) {
+    await stopCloudRealtime();
+    resetCloudDeviceSelect();
+    return;
+  }
 
   const phoneDeviceId = getPhoneDeviceId();
+  if (cloudRealtime && activeCloudUserId === user.id && activeCloudPhoneDeviceId === phoneDeviceId) {
+    return;
+  }
+
+  await stopCloudRealtime();
+  activeCloudUserId = user.id;
+  activeCloudPhoneDeviceId = phoneDeviceId;
   cloudDeviceSelect.classList.remove("hidden");
   cloudRealtime = new CloudRealtime({
     supabase: window.VoiceBridgeAuth.supabase,
@@ -181,22 +203,68 @@ window.addEventListener("voicebridge:auth", async (event) => {
     phoneDeviceId,
     onDevices: (devices) => {
       const desktopDevices = devices.filter((device) => isDesktopDeviceCandidate(device, phoneDeviceId));
-      cloudDeviceSelect.innerHTML = desktopDevices.length
-        ? desktopDevices.map((device) => `<option value="${device.deviceId}">${device.name || device.deviceId}</option>`).join("")
-        : `<option value="">等待桌面端上线</option>`;
-      selectedCloudDeviceId = cloudDeviceSelect.value;
+      renderCloudDeviceOptions(desktopDevices);
     },
     onAck: (ack) => {
       showToast(ack.status === "success" ? "已发送到桌面端。" : `桌面端执行失败：${ack.detail}`);
     },
     onStatus: () => setConnectionStatus("connected", "云端已连接")
   });
-  await cloudRealtime.start();
+  try {
+    await cloudRealtime.start();
+  } catch (error) {
+    showToast(error.message || "云端连接失败，请稍后重试。", true);
+    setConnectionStatus("error", "云端连接失败");
+    await stopCloudRealtime();
+    resetCloudDeviceSelect();
+  }
 });
 
 cloudDeviceSelect?.addEventListener("change", () => {
   selectedCloudDeviceId = cloudDeviceSelect.value;
 });
+
+function renderCloudDeviceOptions(desktopDevices) {
+  const previousDeviceId = selectedCloudDeviceId;
+  const options = desktopDevices.length
+    ? desktopDevices.map((device) => {
+      const option = document.createElement("option");
+      option.value = device.deviceId;
+      option.textContent = device.name || device.deviceId;
+      return option;
+    })
+    : [createCloudPlaceholderOption()];
+
+  cloudDeviceSelect.replaceChildren(...options);
+
+  if (desktopDevices.some((device) => device.deviceId === previousDeviceId)) {
+    selectedCloudDeviceId = previousDeviceId;
+    cloudDeviceSelect.value = previousDeviceId;
+  } else {
+    selectedCloudDeviceId = desktopDevices[0]?.deviceId || "";
+    cloudDeviceSelect.value = selectedCloudDeviceId;
+  }
+}
+
+function createCloudPlaceholderOption() {
+  const option = document.createElement("option");
+  option.value = "";
+  option.textContent = "等待桌面端上线";
+  return option;
+}
+
+async function stopCloudRealtime() {
+  await cloudRealtime?.stop();
+  cloudRealtime = null;
+  activeCloudUserId = "";
+  activeCloudPhoneDeviceId = "";
+}
+
+function resetCloudDeviceSelect() {
+  selectedCloudDeviceId = "";
+  cloudDeviceSelect.replaceChildren(createCloudPlaceholderOption());
+  cloudDeviceSelect.classList.add("hidden");
+}
 
 // === SVG Icons ===
 const starSvg = '<svg viewBox="0 0 24 24" width="14" height="14"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>';
@@ -913,7 +981,7 @@ deleteButton.addEventListener("click", () => {
 });
 
 async function sendQuickCommand(text, label) {
-  await sendTextToDesktop(text);
+  await sendTextToDesktop(text, { localSuccessMessage: "已发送快捷指令。" });
 }
 
 // === Action Buttons ===
@@ -997,7 +1065,9 @@ let recordSeconds = 0;
 let isUploading = false;
 let ws = null;
 
-connectWebSocket();
+if ((window.__VB_CONFIG || {}).voicebridgeMode !== "cloud") {
+  connectWebSocket();
+}
 
 function setActionButtonsDisabled(disabled) {
   submitButton.disabled = disabled;
