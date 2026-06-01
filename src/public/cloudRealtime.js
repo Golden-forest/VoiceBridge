@@ -1,43 +1,51 @@
 import { deviceChannel, presenceChannel, createRequestId, isAckMessage } from "../shared/protocol.js";
 
 export class CloudRealtime {
-  constructor({ supabase, user, phoneDeviceId, onDevices, onAck, onStatus }) {
+  constructor({ supabase, user, phoneDeviceId, onDevices, onAck, onStatus, ackTimeoutMs = 10000 }) {
     this.supabase = supabase;
     this.user = user;
     this.phoneDeviceId = phoneDeviceId;
     this.onDevices = onDevices;
     this.onAck = onAck;
     this.onStatus = onStatus;
+    this.ackTimeoutMs = ackTimeoutMs;
     this.presence = null;
     this.ackChannel = null;
     this.targetChannels = new Map();
-    this.pendingRequestIds = new Set();
+    this.pendingRequests = new Map();
+    this.startGeneration = 0;
   }
 
   async start() {
     await this.stop();
+    const generation = ++this.startGeneration;
     this.presence = this.supabase.channel(presenceChannel(this.user.id), {
       config: { private: true }
     });
     this.ackChannel = this.supabase.channel(deviceChannel(this.user.id, this.phoneDeviceId), {
       config: { private: true }
     });
+    const presence = this.presence;
+    const ackChannel = this.ackChannel;
     this.ackChannel.on("broadcast", { event: "ack" }, ({ payload }) => {
-      if (isAckMessage(payload, this.phoneDeviceId) && this.pendingRequestIds.has(payload.request_id)) {
-        this.pendingRequestIds.delete(payload.request_id);
+      if (!this.isActiveGeneration(generation)) return;
+      if (isAckMessage(payload, this.phoneDeviceId) && this.pendingRequests.has(payload.request_id)) {
+        this.clearPendingRequest(payload.request_id);
         this.onAck(payload);
       }
     });
     this.presence.on("presence", { event: "sync" }, () => {
-      const state = this.presence.presenceState();
+      if (!this.isActiveGeneration(generation)) return;
+      const state = presence.presenceState();
       const devices = Object.values(state).flat().filter((entry) => entry.deviceId);
       this.onDevices(devices);
     });
-    await this.subscribeChannel(this.ackChannel, "ack");
-    await this.subscribeChannel(this.presence, "presence", async (status) => {
+    await this.subscribeChannel(ackChannel, "ack", null, generation);
+    await this.subscribeChannel(presence, "presence", async (status) => {
+      if (!this.isActiveGeneration(generation)) return;
       this.onStatus(status);
       if (status === "SUBSCRIBED") {
-        await this.presence.track({
+        await presence.track({
           deviceId: this.phoneDeviceId,
           name: "Phone",
           platform: "web",
@@ -45,7 +53,7 @@ export class CloudRealtime {
           status: "online"
         });
       }
-    });
+    }, generation);
   }
 
   async sendText({ targetDeviceId, text, autoPaste }) {
@@ -54,7 +62,7 @@ export class CloudRealtime {
     }
     const requestId = createRequestId();
     const channel = await this.getTargetChannel(targetDeviceId);
-    this.pendingRequestIds.add(requestId);
+    this.addPendingRequest(requestId, targetDeviceId);
     const sendStatus = await channel.send({
       type: "broadcast",
       event: "command",
@@ -69,7 +77,7 @@ export class CloudRealtime {
       }
     });
     if (sendStatus !== "ok") {
-      this.pendingRequestIds.delete(requestId);
+      this.clearPendingRequest(requestId);
       throw new Error(`发送到桌面端失败：${sendStatus}`);
     }
     return requestId;
@@ -92,7 +100,7 @@ export class CloudRealtime {
     }
   }
 
-  subscribeChannel(channel, label, onStatus) {
+  subscribeChannel(channel, label, onStatus, generation = this.startGeneration) {
     return new Promise((resolve, reject) => {
       let settled = false;
       const settle = (fn, value) => {
@@ -109,6 +117,7 @@ export class CloudRealtime {
       let subscribeResult;
       try {
         subscribeResult = channel.subscribe(async (status) => {
+          if (!this.isActiveGeneration(generation)) return;
           await onStatus?.(status);
           if (status === "SUBSCRIBED") {
             settle(resolve);
@@ -136,7 +145,37 @@ export class CloudRealtime {
     });
   }
 
+  addPendingRequest(requestId, targetDeviceId) {
+    const timer = setTimeout(() => {
+      if (!this.pendingRequests.has(requestId)) return;
+      this.pendingRequests.delete(requestId);
+      this.onStatus(`ack:${requestId}:TIMED_OUT`);
+      this.onAck({
+        type: "ack",
+        request_id: requestId,
+        source_device_id: targetDeviceId,
+        target_device_id: this.phoneDeviceId,
+        status: "failed",
+        detail: "桌面端未确认，请确认客户端在线。"
+      });
+    }, this.ackTimeoutMs);
+
+    this.pendingRequests.set(requestId, { targetDeviceId, timer });
+  }
+
+  clearPendingRequest(requestId) {
+    const pending = this.pendingRequests.get(requestId);
+    if (!pending) return;
+    clearTimeout(pending.timer);
+    this.pendingRequests.delete(requestId);
+  }
+
+  isActiveGeneration(generation) {
+    return generation === this.startGeneration && Boolean(this.presence && this.ackChannel);
+  }
+
   async stop() {
+    this.startGeneration++;
     const channels = [
       this.presence,
       this.ackChannel,
@@ -147,7 +186,9 @@ export class CloudRealtime {
     this.presence = null;
     this.ackChannel = null;
     this.targetChannels.clear();
-    this.pendingRequestIds.clear();
+    for (const requestId of this.pendingRequests.keys()) {
+      this.clearPendingRequest(requestId);
+    }
   }
 }
 

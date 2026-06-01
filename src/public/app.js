@@ -197,7 +197,7 @@ window.addEventListener("voicebridge:auth", async (event) => {
   activeCloudUserId = user.id;
   activeCloudPhoneDeviceId = phoneDeviceId;
   cloudDeviceSelect.classList.remove("hidden");
-  cloudRealtime = new CloudRealtime({
+  const realtime = new CloudRealtime({
     supabase: window.VoiceBridgeAuth.supabase,
     user,
     phoneDeviceId,
@@ -210,9 +210,13 @@ window.addEventListener("voicebridge:auth", async (event) => {
     },
     onStatus: () => setConnectionStatus("connected", "云端已连接")
   });
+  cloudRealtime = realtime;
   try {
-    await cloudRealtime.start();
+    await realtime.start();
   } catch (error) {
+    if (cloudRealtime !== realtime || activeCloudUserId !== user.id || activeCloudPhoneDeviceId !== phoneDeviceId) {
+      return;
+    }
     showToast(error.message || "云端连接失败，请稍后重试。", true);
     setConnectionStatus("error", "云端连接失败");
     await stopCloudRealtime();

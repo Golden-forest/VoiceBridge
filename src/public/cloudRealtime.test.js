@@ -303,3 +303,91 @@ test("CloudRealtime throws when a channel subscription fails", async () => {
   );
   assert.equal(statuses.includes("device:desktop-1:CHANNEL_ERROR"), true);
 });
+
+test("CloudRealtime emits failed ack and clears pending request on ack timeout", async () => {
+  const supabase = {
+    channel(topic) {
+      return {
+        topic,
+        on() {
+          return this;
+        },
+        async subscribe(callback) {
+          await callback?.("SUBSCRIBED");
+          return "ok";
+        },
+        async track() {
+          return "ok";
+        },
+        async send() {
+          return "ok";
+        },
+        async unsubscribe() {
+          return "ok";
+        }
+      };
+    }
+  };
+
+  const acks = [];
+  const realtime = new CloudRealtime({
+    supabase,
+    user: { id: "user-1" },
+    phoneDeviceId: "phone-1",
+    ackTimeoutMs: 5,
+    onDevices: () => {},
+    onAck: (ack) => acks.push(ack),
+    onStatus: () => {}
+  });
+
+  await realtime.start();
+  const requestId = await realtime.sendText({ targetDeviceId: "desktop-1", text: "hello", autoPaste: true });
+  await new Promise((resolve) => setTimeout(resolve, 20));
+
+  assert.equal(acks.length, 1);
+  assert.equal(acks[0].request_id, requestId);
+  assert.equal(acks[0].status, "failed");
+  assert.equal(acks[0].detail, "桌面端未确认，请确认客户端在线。");
+  assert.equal(realtime.pendingRequests.size, 0);
+});
+
+test("CloudRealtime stop prevents delayed start callbacks from tracking presence", async () => {
+  const callbacks = [];
+  let tracked = false;
+
+  const supabase = {
+    channel() {
+      return {
+        on() {
+          return this;
+        },
+        subscribe(callback) {
+          callbacks.push(callback);
+          return "ok";
+        },
+        async track() {
+          tracked = true;
+          return "ok";
+        },
+        async unsubscribe() {
+          return "ok";
+        }
+      };
+    }
+  };
+
+  const realtime = new CloudRealtime({
+    supabase,
+    user: { id: "user-1" },
+    phoneDeviceId: "phone-1",
+    onDevices: () => {},
+    onAck: () => {},
+    onStatus: () => {}
+  });
+
+  await realtime.start();
+  await realtime.stop();
+  await Promise.all(callbacks.map((callback) => callback("SUBSCRIBED")));
+
+  assert.equal(tracked, false);
+});
