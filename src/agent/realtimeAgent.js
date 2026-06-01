@@ -15,6 +15,7 @@ export async function handleDesktopMessage({
     const outputResult = await output(payload.text, {
       autoPaste: Boolean(payload.auto_paste)
     });
+    const pasteFailed = Boolean(payload.auto_paste && outputResult.pasteError);
     return {
       handled: true,
       ack: {
@@ -22,8 +23,8 @@ export async function handleDesktopMessage({
         request_id: payload.request_id,
         source_device_id: myDeviceId,
         target_device_id: payload.source_device_id,
-        status: outputResult.pasted || outputResult.copied ? "success" : "failed",
-        detail: outputResult.pasted ? "pasted" : "copied"
+        status: !pasteFailed && (outputResult.pasted || outputResult.copied) ? "success" : "failed",
+        detail: pasteFailed ? outputResult.pasteError : outputResult.pasted ? "pasted" : "copied"
       }
     };
   } catch (error) {
@@ -49,8 +50,10 @@ export async function startRealtimeAgent({
   supabase,
   userId,
   device,
+  output = outputText,
   onStatus = console.log
 }) {
+  const ackChannels = new Map();
   const messageChannel = supabase.channel(deviceChannel(userId, device.id), {
     config: { private: true }
   });
@@ -59,15 +62,25 @@ export async function startRealtimeAgent({
   });
 
   messageChannel.on("broadcast", { event: "command" }, async ({ payload }) => {
-    const result = await handleDesktopMessage({ payload, myDeviceId: device.id });
+    const result = await handleDesktopMessage({ payload, myDeviceId: device.id, output });
     if (result.ack) {
-      await supabase.channel(deviceChannel(userId, result.ack.target_device_id), {
-        config: { private: true }
-      }).send({
+      const targetDeviceId = result.ack.target_device_id;
+      let ackChannel = ackChannels.get(targetDeviceId);
+      if (!ackChannel) {
+        ackChannel = supabase.channel(deviceChannel(userId, targetDeviceId), {
+          config: { private: true }
+        });
+        ackChannels.set(targetDeviceId, ackChannel);
+      }
+
+      const sendStatus = await ackChannel.send({
         type: "broadcast",
         event: "ack",
         payload: result.ack
       });
+      if (sendStatus !== "ok") {
+        onStatus(`ack:${targetDeviceId}:${sendStatus}`);
+      }
     }
   });
 
@@ -88,6 +101,10 @@ export async function startRealtimeAgent({
     async stop() {
       await messageChannel.unsubscribe();
       await presence.unsubscribe();
+      await Promise.all(
+        [...ackChannels.values()].map((channel) => channel.unsubscribe())
+      );
+      ackChannels.clear();
     }
   };
 }

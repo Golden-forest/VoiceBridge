@@ -27,7 +27,7 @@ if (error) {
 }
 
 const device = await loadOrCreateDevice();
-await supabase.from("devices").upsert({
+const { error: upsertError } = await supabase.from("devices").upsert({
   id: device.id,
   user_id: data.user.id,
   name: device.name,
@@ -36,6 +36,11 @@ await supabase.from("devices").upsert({
   status: "active",
   last_seen_at: new Date().toISOString()
 });
+
+if (upsertError) {
+  console.error(`Failed to register device: ${upsertError.message}`);
+  process.exit(1);
+}
 
 console.log(`VoiceBridge Agent online as ${device.name} (${device.id})`);
 await startRealtimeAgent({

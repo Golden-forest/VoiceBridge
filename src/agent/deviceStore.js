@@ -8,17 +8,27 @@ export function defaultDevicePath() {
 }
 
 export async function loadOrCreateDevice(filePath = defaultDevicePath()) {
+  let raw;
   try {
-    const raw = await fs.readFile(filePath, "utf8");
-    return JSON.parse(raw);
-  } catch {
-    const device = {
-      id: crypto.randomUUID(),
-      name: os.hostname(),
-      platform: process.platform
-    };
-    await fs.mkdir(path.dirname(filePath), { recursive: true });
-    await fs.writeFile(filePath, JSON.stringify(device, null, 2) + "\n", "utf8");
-    return device;
+    raw = await fs.readFile(filePath, "utf8");
+  } catch (error) {
+    if (!error || error.code !== "ENOENT") {
+      throw error;
+    }
+
+    return createDevice(filePath);
   }
+
+  return JSON.parse(raw);
+}
+
+async function createDevice(filePath) {
+  const device = {
+    id: crypto.randomUUID(),
+    name: os.hostname(),
+    platform: process.platform
+  };
+  await fs.mkdir(path.dirname(filePath), { recursive: true });
+  await fs.writeFile(filePath, JSON.stringify(device, null, 2) + "\n", "utf8");
+  return device;
 }
