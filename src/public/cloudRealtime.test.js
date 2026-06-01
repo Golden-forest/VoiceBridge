@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { CloudRealtime, getPhoneDeviceId } from "./cloudRealtime.js";
+import { CloudRealtime, getPhoneDeviceId, isDesktopDeviceCandidate } from "./cloudRealtime.js";
 
 test("getPhoneDeviceId reuses a stable localStorage id", () => {
   const values = new Map();
@@ -102,4 +102,46 @@ test("CloudRealtime sends insert text command to target device and listens for m
 
   assert.equal(acks.length, 1);
   assert.equal(acks[0].request_id, requestId);
+});
+
+test("CloudRealtime identifies phone browser presence as web", async () => {
+  let trackedPresence;
+
+  const supabase = {
+    channel() {
+      return {
+        on() {
+          return this;
+        },
+        async subscribe(callback) {
+          await callback?.("SUBSCRIBED");
+          return "ok";
+        },
+        async track(presence) {
+          trackedPresence = presence;
+          return "ok";
+        }
+      };
+    }
+  };
+
+  const realtime = new CloudRealtime({
+    supabase,
+    user: { id: "user-1" },
+    phoneDeviceId: "phone-1",
+    onDevices: () => {},
+    onAck: () => {},
+    onStatus: () => {}
+  });
+
+  await realtime.start();
+
+  assert.equal(trackedPresence.deviceId, "phone-1");
+  assert.equal(trackedPresence.platform, "web");
+});
+
+test("isDesktopDeviceCandidate excludes web devices and the current phone", () => {
+  assert.equal(isDesktopDeviceCandidate({ deviceId: "phone-1", platform: "iPhone" }, "phone-1"), false);
+  assert.equal(isDesktopDeviceCandidate({ deviceId: "phone-2", platform: "web" }, "phone-1"), false);
+  assert.equal(isDesktopDeviceCandidate({ deviceId: "desktop-1", platform: "darwin" }, "phone-1"), true);
 });

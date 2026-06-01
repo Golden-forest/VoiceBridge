@@ -1,4 +1,4 @@
-import { CloudRealtime, getPhoneDeviceId } from "./cloudRealtime.js";
+import { CloudRealtime, getPhoneDeviceId, isDesktopDeviceCandidate } from "./cloudRealtime.js";
 
 // === Element References ===
 const statusDot = document.querySelector("#statusDot");
@@ -173,13 +173,14 @@ window.addEventListener("voicebridge:auth", async (event) => {
   if (!session || !user || !window.VoiceBridgeAuth?.supabase) return;
   if ((window.__VB_CONFIG || {}).voicebridgeMode !== "cloud") return;
 
+  const phoneDeviceId = getPhoneDeviceId();
   cloudDeviceSelect.classList.remove("hidden");
   cloudRealtime = new CloudRealtime({
     supabase: window.VoiceBridgeAuth.supabase,
     user,
-    phoneDeviceId: getPhoneDeviceId(),
+    phoneDeviceId,
     onDevices: (devices) => {
-      const desktopDevices = devices.filter((device) => device.platform !== "web");
+      const desktopDevices = devices.filter((device) => isDesktopDeviceCandidate(device, phoneDeviceId));
       cloudDeviceSelect.innerHTML = desktopDevices.length
         ? desktopDevices.map((device) => `<option value="${device.deviceId}">${device.name || device.deviceId}</option>`).join("")
         : `<option value="">等待桌面端上线</option>`;

@@ -27,7 +27,8 @@ export class CloudRealtime {
         await this.presence.track({
           deviceId: this.phoneDeviceId,
           name: "Phone",
-          platform: navigator.platform || "web",
+          platform: "web",
+          runtimePlatform: navigator.platform || "web",
           status: "online"
         });
       }
@@ -74,4 +75,12 @@ export function getPhoneDeviceId() {
     localStorage.setItem(key, value);
   }
   return value;
+}
+
+export function isDesktopDeviceCandidate(device, phoneDeviceId) {
+  return Boolean(
+    device?.deviceId &&
+    device.deviceId !== phoneDeviceId &&
+    device.platform !== "web"
+  );
 }
