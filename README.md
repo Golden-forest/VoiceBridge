@@ -66,6 +66,9 @@ SUPABASE_PROJECT_ID=
 VOICEBRIDGE_AGENT_EMAIL=
 VOICEBRIDGE_AGENT_PASSWORD=
 
+VOICEBRIDGE_DESKTOP_SUPABASE_URL=
+VOICEBRIDGE_DESKTOP_SUPABASE_ANON_KEY=
+
 TENCENT_SECRET_ID=
 TENCENT_SECRET_KEY=
 TENCENT_ASR_REGION=ap-shanghai
@@ -91,6 +94,8 @@ VOICEBRIDGE_MODE=cloud npm start
 ```
 
 桌面 Agent 会使用 `VOICEBRIDGE_AGENT_EMAIL` 和 `VOICEBRIDGE_AGENT_PASSWORD` 登录 Supabase，并注册为当前账号下的 desktop device。手机端网页登录同一个账号后，会优先选择 desktop device 发送文字。
+
+Electron 桌面 App 不需要 service role key 或 Stripe/Tencent secret。打包发布前，需要把公开的 Supabase URL 和 anon key 配成 `VOICEBRIDGE_DESKTOP_SUPABASE_URL` / `VOICEBRIDGE_DESKTOP_SUPABASE_ANON_KEY`，这样用户下载后只需要输入自己的账号密码。
 
 需要部署的 Supabase 资源：
 
@@ -129,6 +134,8 @@ npm run electron:start
 生成本机安装包：
 
 ```bash
+VOICEBRIDGE_DESKTOP_SUPABASE_URL=https://gqxxknusznbunkiznnal.supabase.co \
+VOICEBRIDGE_DESKTOP_SUPABASE_ANON_KEY=SUPABASE_ANON_KEY_HERE \
 npm run make -- --arch=arm64
 ```
 

@@ -19,6 +19,7 @@ test('package exposes Electron Forge scripts without replacing the web start scr
     'https://npmmirror.com/mirrors/electron/'
   );
   assert.ok(packageJson.config.forge.packagerConfig.ignore.includes('^/out($|/)'));
+  assert.ok(packageJson.config.forge.packagerConfig.ignore.includes('^/\\.env($|\\.)'));
 });
 
 test('Electron main process uses a safe BrowserWindow shell', () => {
@@ -28,6 +29,9 @@ test('Electron main process uses a safe BrowserWindow shell', () => {
   assert.match(mainJs, /nodeIntegration:\s*false/);
   assert.match(mainJs, /preload\.cjs/);
   assert.match(mainJs, /voicebridge:version/);
+  assert.match(mainJs, /voicebridge:login/);
+  assert.match(mainJs, /startRealtimeAgent/);
+  assert.match(mainJs, /\.from\('devices'\)\.upsert/);
   assert.match(mainJs, /window-all-closed/);
 });
 
@@ -36,10 +40,14 @@ test('preload exposes a minimal VoiceBridge bridge API', () => {
   assert.doesNotMatch(preloadJs, /from 'electron'/);
   assert.match(preloadJs, /contextBridge\.exposeInMainWorld\('voicebridge'/);
   assert.match(preloadJs, /version:\s*\(\)\s*=>\s*ipcRenderer\.invoke\('voicebridge:version'\)/);
+  assert.match(preloadJs, /login:\s*\(credentials\)\s*=>\s*ipcRenderer\.invoke\('voicebridge:login'/);
+  assert.match(preloadJs, /onAgentStatus/);
 });
 
 test('renderer is a Chinese login and status shell with a content security policy', () => {
   assert.match(rendererHtml, /Content-Security-Policy/);
   assert.match(rendererHtml, /登录/);
   assert.match(rendererHtml, /连接状态/);
+  assert.match(rendererHtml, /登录并上线/);
+  assert.match(rendererHtml, /voicebridge\.login/);
 });

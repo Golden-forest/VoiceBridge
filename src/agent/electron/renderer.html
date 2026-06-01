@@ -61,6 +61,10 @@
         font-weight: 700;
       }
 
+      .status-value.error {
+        color: #b42318;
+      }
+
       form {
         display: grid;
         gap: 14px;
@@ -139,22 +143,91 @@
         </div>
       </section>
 
-      <form>
+      <form id="loginForm">
         <label>
           邮箱
-          <input type="email" autocomplete="email" placeholder="you@example.com">
+          <input id="emailInput" type="email" autocomplete="email" placeholder="you@example.com" required>
         </label>
         <label>
           密码
-          <input type="password" autocomplete="current-password" placeholder="请输入密码">
+          <input id="passwordInput" type="password" autocomplete="current-password" placeholder="请输入密码" required>
         </label>
-        <button type="button">登录</button>
+        <button id="loginButton" type="submit">登录并上线</button>
+        <button id="logoutButton" type="button" hidden>退出登录</button>
+        <p id="message" class="hint" role="status"></p>
       </form>
     </main>
 
     <script>
+      const statusEl = document.querySelector('.status-value');
+      const versionEl = document.querySelector('#version');
+      const form = document.querySelector('#loginForm');
+      const emailInput = document.querySelector('#emailInput');
+      const passwordInput = document.querySelector('#passwordInput');
+      const loginButton = document.querySelector('#loginButton');
+      const logoutButton = document.querySelector('#logoutButton');
+      const messageEl = document.querySelector('#message');
+
+      function setStatus(message, isError = false) {
+        statusEl.textContent = message;
+        statusEl.classList.toggle('error', isError);
+      }
+
+      function setMessage(message, isError = false) {
+        messageEl.textContent = message;
+        messageEl.style.color = isError ? '#b42318' : '';
+      }
+
       window.voicebridge?.version().then((version) => {
-        document.querySelector('#version').textContent = version;
+        versionEl.textContent = version;
+      });
+
+      window.voicebridge?.publicConfig().then((config) => {
+        if (!config.hasSupabaseAnonKey) {
+          setStatus('缺少配置', true);
+          setMessage('缺少 Supabase anon key。打包前请配置桌面端公开 Supabase 配置。', true);
+          loginButton.disabled = true;
+        }
+      });
+
+      window.voicebridge?.onAgentStatus((status) => {
+        setStatus(status);
+      });
+
+      form.addEventListener('submit', async (event) => {
+        event.preventDefault();
+        loginButton.disabled = true;
+        setMessage('');
+        setStatus('正在登录');
+        try {
+          const result = await window.voicebridge.login({
+            email: emailInput.value.trim(),
+            password: passwordInput.value
+          });
+          setStatus('已上线');
+          setMessage(`桌面端已上线：${result.deviceName}`);
+          logoutButton.hidden = false;
+          passwordInput.value = '';
+        } catch (error) {
+          setStatus('登录失败', true);
+          setMessage(error.message || '登录失败，请稍后重试。', true);
+        } finally {
+          loginButton.disabled = false;
+        }
+      });
+
+      logoutButton.addEventListener('click', async () => {
+        logoutButton.disabled = true;
+        try {
+          await window.voicebridge.logout();
+          logoutButton.hidden = true;
+          setStatus('等待登录');
+          setMessage('已退出登录。');
+        } catch (error) {
+          setMessage(error.message || '退出失败，请稍后重试。', true);
+        } finally {
+          logoutButton.disabled = false;
+        }
       });
     </script>
   </body>

@@ -188,7 +188,7 @@ async function sendTextToDesktop(text, { localSuccessMessage = "已发送到电�
   }
 }
 
-window.addEventListener("voicebridge:auth", async (event) => {
+async function handleAuthState(event) {
   const { session, user } = event.detail;
   updateBillingControls(Boolean(session));
   if (!isCloudMode) return;
@@ -232,7 +232,20 @@ window.addEventListener("voicebridge:auth", async (event) => {
     await stopCloudRealtime();
     resetCloudDeviceSelect();
   }
+}
+
+window.addEventListener("voicebridge:auth", (event) => {
+  void handleAuthState(event);
 });
+
+if (window.VoiceBridgeAuth) {
+  void handleAuthState({
+    detail: {
+      session: window.VoiceBridgeAuth.session,
+      user: window.VoiceBridgeAuth.user
+    }
+  });
+}
 
 cloudDeviceSelect?.addEventListener("change", () => {
   selectedCloudDeviceId = cloudDeviceSelect.value;
@@ -285,7 +298,7 @@ function updateBillingControls(hasSession) {
   billingActions?.classList.toggle("hidden", !visible);
   if (upgradeButton) upgradeButton.disabled = !visible;
   if (billingPortalButton) {
-    billingPortalButton.classList.add("hidden");
+    billingPortalButton.classList.toggle("hidden", !visible);
     billingPortalButton.disabled = !visible;
   }
 }

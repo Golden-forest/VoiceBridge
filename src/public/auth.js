@@ -7,8 +7,10 @@ const emailInput = document.querySelector("#authEmail");
 const passwordInput = document.querySelector("#authPassword");
 const submitBtn = document.querySelector("#authSubmitBtn");
 const switchBtn = document.querySelector("#authSwitchBtn");
+const logoutBtn = document.querySelector("#authLogoutButton");
 const modeLabel = document.querySelector("#authModeLabel");
 const messageEl = document.querySelector("#authMessage");
+const isCloudMode = config.voicebridgeMode === "cloud";
 
 let mode = "sign-in";
 
@@ -19,7 +21,8 @@ export const supabase = config.supabaseUrl && config.supabaseAnonKey
 window.VoiceBridgeAuth = {
   supabase,
   session: null,
-  user: null
+  user: null,
+  signOut: async () => supabase?.auth.signOut()
 };
 
 function setMessage(message, isError = false) {
@@ -39,14 +42,19 @@ function setMode(nextMode) {
 function emitAuthReady(session) {
   window.VoiceBridgeAuth.session = session;
   window.VoiceBridgeAuth.user = session?.user || null;
+  logoutBtn?.classList.toggle("hidden", !isCloudMode || !session);
   window.dispatchEvent(new CustomEvent("voicebridge:auth", {
     detail: { session, user: session?.user || null }
   }));
 }
 
-if (!supabase) {
+if (!isCloudMode) {
+  overlay?.classList.add("hidden");
+  emitAuthReady(null);
+} else if (!supabase) {
   overlay?.classList.remove("hidden");
   setMessage("缺少 Supabase 配置，请检查 /config.js。", true);
+  emitAuthReady(null);
 } else {
   const { data } = await supabase.auth.getSession();
   overlay?.classList.toggle("hidden", Boolean(data.session));
@@ -60,6 +68,18 @@ if (!supabase) {
 
 switchBtn?.addEventListener("click", () => {
   setMode(mode === "sign-in" ? "sign-up" : "sign-in");
+});
+
+logoutBtn?.addEventListener("click", async () => {
+  if (!supabase) return;
+  logoutBtn.disabled = true;
+  try {
+    await supabase.auth.signOut();
+  } catch (error) {
+    setMessage(error instanceof Error ? error.message : "退出登录失败，请稍后再试。", true);
+  } finally {
+    logoutBtn.disabled = false;
+  }
 });
 
 form?.addEventListener("submit", async (event) => {
