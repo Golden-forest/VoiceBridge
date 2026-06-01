@@ -285,7 +285,7 @@ function updateBillingControls(hasSession) {
   billingActions?.classList.toggle("hidden", !visible);
   if (upgradeButton) upgradeButton.disabled = !visible;
   if (billingPortalButton) {
-    billingPortalButton.classList.toggle("hidden", !visible);
+    billingPortalButton.classList.add("hidden");
     billingPortalButton.disabled = !visible;
   }
 }
