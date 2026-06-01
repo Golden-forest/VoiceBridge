@@ -1,4 +1,5 @@
 import { CloudRealtime, getPhoneDeviceId, isDesktopDeviceCandidate } from "./cloudRealtime.js";
+import { recordWavUntilStopped } from "./cloudRecorder.js";
 
 // === Element References ===
 const statusDot = document.querySelector("#statusDot");
@@ -1069,7 +1070,10 @@ let recordSeconds = 0;
 let isUploading = false;
 let ws = null;
 
-if ((window.__VB_CONFIG || {}).voicebridgeMode !== "cloud") {
+const isCloudMode = (window.__VB_CONFIG || {}).voicebridgeMode === "cloud";
+const BrowserAudioContext = window.AudioContext || window.webkitAudioContext;
+
+if (!isCloudMode) {
   connectWebSocket();
 }
 
@@ -1082,7 +1086,7 @@ function setActionButtonsDisabled(disabled) {
   deleteButton.disabled = disabled;
 }
 
-if (!navigator.mediaDevices?.getUserMedia || !window.MediaRecorder) {
+if (!navigator.mediaDevices?.getUserMedia || (isCloudMode ? !BrowserAudioContext : !window.MediaRecorder)) {
   showToast("当前浏览器无法直接录音，可改用音频上传兜底。", true);
   recordButton.disabled = true;
   fallbackButton.classList.remove("hidden");
@@ -1098,7 +1102,7 @@ fallbackFile.addEventListener("change", async () => {
 
 async function toggleRecording() {
   if (isUploading) return;
-  if (isRecording) stopRecording();
+  if (isRecording) await stopRecording();
   else await startRecording();
 }
 
@@ -1120,8 +1124,39 @@ function setRecordProcessing() {
   labelEl.textContent = "处理中…";
 }
 
+function beginRecordingState() {
+  isRecording = true;
+  recordSeconds = 0;
+  recordButton.classList.add("recording");
+  setRecordActive();
+  setActionButtonsDisabled(true);
+  setConnectionStatus(statusDot.className.includes("connected") ? "connected" : "connecting", "正在录音…");
+
+  maxRecordTimer = setTimeout(() => {
+    if (isRecording) {
+      void stopRecording();
+      showToast("已到 55 秒上限，正在上传音频...");
+    }
+  }, 55_000);
+
+  timerInterval = setInterval(() => {
+    recordSeconds++;
+    const mins = String(Math.floor(recordSeconds / 60)).padStart(2, "0");
+    const secs = String(recordSeconds % 60).padStart(2, "0");
+    labelEl.textContent = `${mins}:${secs}`;
+  }, 1000);
+}
+
 async function startRecording() {
   try {
+    if (isCloudMode) {
+      recorder = await recordWavUntilStopped({
+        onStopReady: async (blob) => uploadAudio(blob, "wav")
+      });
+      beginRecordingState();
+      return;
+    }
+
     const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
     chunks = [];
     const mimeType = pickMimeType();
@@ -1133,27 +1168,13 @@ async function startRecording() {
       await uploadAudio(blob, fileExtensionFor(blob.type));
     });
     recorder.start();
-    isRecording = true;
-    recordSeconds = 0;
-    recordButton.classList.add("recording");
-    setRecordActive();
-    setActionButtonsDisabled(true);
-    setConnectionStatus(statusDot.className.includes("connected") ? "connected" : "connecting", "正在录音…");
-
-    maxRecordTimer = setTimeout(() => { if (isRecording) { stopRecording(); showToast("已到 55 秒上限，正在上传音频..."); } }, 55_000);
-
-    timerInterval = setInterval(() => {
-      recordSeconds++;
-      const mins = String(Math.floor(recordSeconds / 60)).padStart(2, "0");
-      const secs = String(recordSeconds % 60).padStart(2, "0");
-      labelEl.textContent = `${mins}:${secs}`;
-    }, 1000);
+    beginRecordingState();
   } catch (error) {
     showToast(`无法访问麦克风：${error.message}`, true);
   }
 }
 
-function stopRecording() {
+async function stopRecording() {
   if (!isRecording || !recorder) return;
   isRecording = false;
   isUploading = true;
@@ -1163,6 +1184,10 @@ function stopRecording() {
   recordButton.disabled = true;
   setRecordProcessing();
   showToast("正在上传音频...");
+  if (isCloudMode && typeof recorder.stop === "function") {
+    await recorder.stop();
+    return;
+  }
   recorder.stop();
 }
 
