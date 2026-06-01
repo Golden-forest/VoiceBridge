@@ -1,7 +1,7 @@
 import { deviceChannel, presenceChannel, createRequestId, isAckMessage } from "../shared/protocol.js";
 
 export class CloudRealtime {
-  constructor({ supabase, user, phoneDeviceId, onDevices, onAck, onStatus, ackTimeoutMs = 10000 }) {
+  constructor({ supabase, user, phoneDeviceId, onDevices, onAck, onStatus, ackTimeoutMs = 10000, subscribeTimeoutMs = 10000 }) {
     this.supabase = supabase;
     this.user = user;
     this.phoneDeviceId = phoneDeviceId;
@@ -9,10 +9,12 @@ export class CloudRealtime {
     this.onAck = onAck;
     this.onStatus = onStatus;
     this.ackTimeoutMs = ackTimeoutMs;
+    this.subscribeTimeoutMs = subscribeTimeoutMs;
     this.presence = null;
     this.ackChannel = null;
     this.targetChannels = new Map();
     this.pendingRequests = new Map();
+    this.pendingSubscriptions = new Set();
     this.startGeneration = 0;
   }
 
@@ -63,19 +65,25 @@ export class CloudRealtime {
     const requestId = createRequestId();
     const channel = await this.getTargetChannel(targetDeviceId);
     this.addPendingRequest(requestId, targetDeviceId);
-    const sendStatus = await channel.send({
-      type: "broadcast",
-      event: "command",
-      payload: {
-        type: "insert_text",
-        request_id: requestId,
-        source_device_id: this.phoneDeviceId,
-        target_device_id: targetDeviceId,
-        text,
-        auto_paste: autoPaste,
-        created_at: new Date().toISOString()
-      }
-    });
+    let sendStatus;
+    try {
+      sendStatus = await channel.send({
+        type: "broadcast",
+        event: "command",
+        payload: {
+          type: "insert_text",
+          request_id: requestId,
+          source_device_id: this.phoneDeviceId,
+          target_device_id: targetDeviceId,
+          text,
+          auto_paste: autoPaste,
+          created_at: new Date().toISOString()
+        }
+      });
+    } catch (error) {
+      this.clearPendingRequest(requestId);
+      throw error;
+    }
     if (sendStatus !== "ok") {
       this.clearPendingRequest(requestId);
       throw new Error(`发送到桌面端失败：${sendStatus}`);
@@ -102,17 +110,31 @@ export class CloudRealtime {
 
   subscribeChannel(channel, label, onStatus, generation = this.startGeneration) {
     return new Promise((resolve, reject) => {
-      let settled = false;
+      const subscription = {
+        label,
+        settled: false,
+        timer: null,
+        cancel: null
+      };
       const settle = (fn, value) => {
-        if (settled) return;
-        settled = true;
-        clearTimeout(timer);
+        if (subscription.settled) return;
+        subscription.settled = true;
+        clearTimeout(subscription.timer);
+        this.pendingSubscriptions.delete(subscription);
         fn(value);
       };
-      const timer = setTimeout(() => {
+      subscription.cancel = () => {
+        settle(reject, new Error(`${label} 订阅已取消`));
+      };
+      subscription.timer = setTimeout(() => {
+        if (!this.isActiveGeneration(generation)) {
+          settle(reject, new Error(`${label} 订阅已取消`));
+          return;
+        }
         this.onStatus(`${label}:TIMED_OUT`);
         settle(reject, new Error(`${label} 订阅超时`));
-      }, 10000);
+      }, this.subscribeTimeoutMs);
+      this.pendingSubscriptions.add(subscription);
 
       let subscribeResult;
       try {
@@ -176,6 +198,9 @@ export class CloudRealtime {
 
   async stop() {
     this.startGeneration++;
+    for (const subscription of [...this.pendingSubscriptions]) {
+      subscription.cancel();
+    }
     const channels = [
       this.presence,
       this.ackChannel,

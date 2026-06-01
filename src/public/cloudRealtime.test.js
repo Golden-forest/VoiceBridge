@@ -351,6 +351,56 @@ test("CloudRealtime emits failed ack and clears pending request on ack timeout",
   assert.equal(realtime.pendingRequests.size, 0);
 });
 
+test("CloudRealtime clears pending request and does not emit timeout ack when send throws", async () => {
+  const supabase = {
+    channel(topic) {
+      return {
+        topic,
+        on() {
+          return this;
+        },
+        async subscribe(callback) {
+          await callback?.("SUBSCRIBED");
+          return "ok";
+        },
+        async track() {
+          return "ok";
+        },
+        async send() {
+          if (topic.includes("desktop-1")) {
+            throw new Error("network down");
+          }
+          return "ok";
+        },
+        async unsubscribe() {
+          return "ok";
+        }
+      };
+    }
+  };
+
+  const acks = [];
+  const realtime = new CloudRealtime({
+    supabase,
+    user: { id: "user-1" },
+    phoneDeviceId: "phone-1",
+    ackTimeoutMs: 5,
+    onDevices: () => {},
+    onAck: (ack) => acks.push(ack),
+    onStatus: () => {}
+  });
+
+  await realtime.start();
+  await assert.rejects(
+    realtime.sendText({ targetDeviceId: "desktop-1", text: "hello", autoPaste: true }),
+    /network down/
+  );
+  assert.equal(realtime.pendingRequests.size, 0);
+
+  await new Promise((resolve) => setTimeout(resolve, 20));
+  assert.equal(acks.length, 0);
+});
+
 test("CloudRealtime stop prevents delayed start callbacks from tracking presence", async () => {
   const callbacks = [];
   let tracked = false;
@@ -390,4 +440,41 @@ test("CloudRealtime stop prevents delayed start callbacks from tracking presence
   await Promise.all(callbacks.map((callback) => callback("SUBSCRIBED")));
 
   assert.equal(tracked, false);
+});
+
+test("CloudRealtime stop cancels stale subscription timeout without status mutation", async () => {
+  const statuses = [];
+  const supabase = {
+    channel() {
+      return {
+        on() {
+          return this;
+        },
+        subscribe() {
+          return undefined;
+        },
+        async unsubscribe() {
+          return "ok";
+        }
+      };
+    }
+  };
+
+  const realtime = new CloudRealtime({
+    supabase,
+    user: { id: "user-1" },
+    phoneDeviceId: "phone-1",
+    subscribeTimeoutMs: 5,
+    onDevices: () => {},
+    onAck: () => {},
+    onStatus: (status) => statuses.push(status)
+  });
+
+  const startPromise = realtime.start();
+  await new Promise((resolve) => setTimeout(resolve, 1));
+  await realtime.stop();
+
+  await assert.rejects(startPromise, /订阅已取消/);
+  await new Promise((resolve) => setTimeout(resolve, 20));
+  assert.deepEqual(statuses, []);
 });
