@@ -1,10 +1,11 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 import { corsHeaders, jsonResponse } from "../_shared/cors.ts";
+import { ERROR_CODE_QUOTA_EXCEEDED, USAGE_PROVIDER_TENCENT_CLOUD } from "../_shared/contracts.ts";
 import { getPlanLimit, isPaidStatus } from "../_shared/plan_limits.ts";
 import { transcribeTencentWav } from "../_shared/tencent_asr.ts";
 
-const PROVIDER = "tencent";
+const PROVIDER = USAGE_PROVIDER_TENCENT_CLOUD;
 type SupabaseClientLike = ReturnType<typeof createClient<any, "public", any>>;
 
 Deno.serve(async (req) => {
@@ -75,8 +76,8 @@ Deno.serve(async (req) => {
 
     const usedSeconds = await getCurrentMonthUsedSeconds(serviceClient, userId);
     if (usedSeconds + durationSeconds > limits.monthlySeconds) {
-      await recordUsage(serviceClient, { userId, requestId, durationMs, audioSizeBytes, status: "rejected", errorCode: "monthly_quota_exceeded" });
-      return errorResponse("monthly_quota_exceeded", "本月云端语音识别额度已用完。", 402);
+      await recordUsage(serviceClient, { userId, requestId, durationMs, audioSizeBytes, status: "rejected", errorCode: ERROR_CODE_QUOTA_EXCEEDED });
+      return errorResponse(ERROR_CODE_QUOTA_EXCEEDED, "本月云端语音识别额度已用完。", 429);
     }
 
     const text = await transcribeTencentWav({

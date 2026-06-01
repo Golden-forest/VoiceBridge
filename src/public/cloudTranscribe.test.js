@@ -43,9 +43,9 @@ test("transcribeCloudAudio throws the function error message for non-2xx JSON re
     () => transcribeCloudAudio({
       supabase,
       audio: new Blob(["wav"], { type: "audio/wav" }),
-      fetch: async () => jsonResponse(402, {
+      fetch: async () => jsonResponse(429, {
         ok: false,
-        code: "monthly_quota_exceeded",
+        code: "quota_exceeded",
         message: "本月云端语音识别额度已用完。"
       })
     }),
