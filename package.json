@@ -5,6 +5,7 @@
   "type": "module",
   "private": true,
   "scripts": {
+    "agent": "node src/agent/cli.js",
     "start": "node src/server/index.js",
     "test": "node --test"
   },
