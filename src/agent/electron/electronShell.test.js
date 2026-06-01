@@ -6,12 +6,16 @@ const packageJson = JSON.parse(await readFile(new URL('../../../package.json', i
 const mainJs = await readFile(new URL('./main.js', import.meta.url), 'utf8');
 const preloadJs = await readFile(new URL('./preload.cjs', import.meta.url), 'utf8');
 const rendererHtml = await readFile(new URL('./renderer.html', import.meta.url), 'utf8');
+const writeConfigJs = await readFile(new URL('../../../scripts/write-electron-config.js', import.meta.url), 'utf8');
 
 test('package exposes Electron Forge scripts without replacing the web start script', () => {
   assert.equal(packageJson.scripts.start, 'node src/server/index.js');
+  assert.equal(packageJson.scripts['electron:write-config'], 'node scripts/write-electron-config.js');
   assert.equal(packageJson.scripts['electron:start'], 'electron-forge start');
   assert.equal(packageJson.scripts.package, 'electron-forge package');
   assert.equal(packageJson.scripts.make, 'electron-forge make');
+  assert.equal(packageJson.scripts.prepackage, 'npm run electron:write-config');
+  assert.equal(packageJson.scripts.premake, 'npm run electron:write-config');
   assert.equal(packageJson.config.electron_mirror, 'https://npmmirror.com/mirrors/electron/');
   assert.equal(packageJson.config.forge.packagerConfig.prune, false);
   assert.equal(
@@ -32,6 +36,7 @@ test('Electron main process uses a safe BrowserWindow shell', () => {
   assert.match(mainJs, /voicebridge:login/);
   assert.match(mainJs, /startRealtimeAgent/);
   assert.match(mainJs, /\.from\('devices'\)\.upsert/);
+  assert.match(mainJs, /desktop-config\.json/);
   assert.match(mainJs, /window-all-closed/);
 });
 
@@ -50,4 +55,11 @@ test('renderer is a Chinese login and status shell with a content security polic
   assert.match(rendererHtml, /连接状态/);
   assert.match(rendererHtml, /登录并上线/);
   assert.match(rendererHtml, /voicebridge\.login/);
+});
+
+test('Electron packaging writes a bundled public Supabase config', () => {
+  assert.match(writeConfigJs, /VOICEBRIDGE_DESKTOP_SUPABASE_URL/);
+  assert.match(writeConfigJs, /VOICEBRIDGE_DESKTOP_SUPABASE_ANON_KEY/);
+  assert.match(writeConfigJs, /desktop-config\.json/);
+  assert.match(writeConfigJs, /process\.exit\(1\)/);
 });

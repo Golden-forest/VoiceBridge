@@ -139,7 +139,7 @@ VOICEBRIDGE_DESKTOP_SUPABASE_ANON_KEY=SUPABASE_ANON_KEY_HERE \
 npm run make -- --arch=arm64
 ```
 
-构建产物会出现在 `out/make`。项目已配置 Electron 下载镜像，国内网络下首次构建会更稳一些。
+构建前脚本会把这两个公开值写入桌面端 bundled config。缺少 anon key 时构建会失败，避免生成用户无法登录的安装包。构建产物会出现在 `out/make`。项目已配置 Electron 下载镜像，国内网络下首次构建会更稳一些。
 
 ## 启动
 

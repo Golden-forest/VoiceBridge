@@ -7,9 +7,12 @@
   "private": true,
   "scripts": {
     "agent": "node src/agent/cli.js",
+    "electron:write-config": "node scripts/write-electron-config.js",
     "electron:start": "electron-forge start",
     "package": "electron-forge package",
     "make": "electron-forge make",
+    "prepackage": "npm run electron:write-config",
+    "premake": "npm run electron:write-config",
     "start": "node src/server/index.js",
     "test": "node --test"
   },

@@ -1,4 +1,5 @@
 import { app, BrowserWindow, ipcMain } from 'electron';
+import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { loadOrCreateDevice } from '../deviceStore.js';
@@ -6,7 +7,7 @@ import { createAgentClient, startRealtimeAgent } from '../realtimeAgent.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const bundledSupabaseUrl = 'https://gqxxknusznbunkiznnal.supabase.co';
-const bundledSupabaseAnonKey = '';
+const bundledDesktopConfig = loadBundledDesktopConfig();
 
 let mainWindow = null;
 let activeAgent = null;
@@ -15,11 +16,26 @@ function getDesktopPublicConfig() {
   return {
     supabaseUrl: process.env.VOICEBRIDGE_DESKTOP_SUPABASE_URL
       || process.env.SUPABASE_URL
+      || bundledDesktopConfig.supabaseUrl
       || bundledSupabaseUrl,
     supabaseAnonKey: process.env.VOICEBRIDGE_DESKTOP_SUPABASE_ANON_KEY
       || process.env.SUPABASE_ANON_KEY
-      || bundledSupabaseAnonKey
+      || bundledDesktopConfig.supabaseAnonKey
+      || ''
   };
+}
+
+function loadBundledDesktopConfig() {
+  try {
+    const raw = readFileSync(join(__dirname, 'desktop-config.json'), 'utf8');
+    const parsed = JSON.parse(raw);
+    return {
+      supabaseUrl: typeof parsed.supabaseUrl === 'string' ? parsed.supabaseUrl : '',
+      supabaseAnonKey: typeof parsed.supabaseAnonKey === 'string' ? parsed.supabaseAnonKey : ''
+    };
+  } catch {
+    return { supabaseUrl: '', supabaseAnonKey: '' };
+  }
 }
 
 function sendAgentStatus(status) {

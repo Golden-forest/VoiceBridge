@@ -5,6 +5,7 @@ node_modules/
 tmp/*
 !tmp/.gitkeep
 certs/
+src/agent/electron/desktop-config.json
 .DS_Store
 npm-debug.log*
 .superpowers/
