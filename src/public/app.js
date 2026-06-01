@@ -1134,7 +1134,11 @@ function beginRecordingState() {
 
   maxRecordTimer = setTimeout(() => {
     if (isRecording) {
-      void stopRecording();
+      void stopRecording().catch((error) => {
+        console.error("Failed to stop recording:", error);
+        showToast(error.message || "录音停止失败，请重试。", true);
+        finishUpload();
+      });
       showToast("已到 55 秒上限，正在上传音频...");
     }
   }, 55_000);
@@ -1185,7 +1189,12 @@ async function stopRecording() {
   setRecordProcessing();
   showToast("正在上传音频...");
   if (isCloudMode && typeof recorder.stop === "function") {
-    await recorder.stop();
+    try {
+      await recorder.stop();
+    } catch (error) {
+      showToast(error.message || "录音处理失败，请重试。", true);
+      finishUpload();
+    }
     return;
   }
   recorder.stop();

@@ -1,4 +1,8 @@
 export function encodeWav16Mono(float32Samples, inputSampleRate) {
+  if (!Number.isFinite(inputSampleRate) || inputSampleRate <= 0) {
+    throw new Error("inputSampleRate must be a positive finite number");
+  }
+
   const targetSampleRate = 16000;
   const samples = resample(float32Samples, inputSampleRate, targetSampleRate);
   const buffer = new ArrayBuffer(44 + samples.length * 2);

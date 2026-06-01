@@ -35,6 +35,39 @@ test("encodeWav16Mono clamps samples to signed 16-bit PCM range", async () => {
   assert.equal(view.getInt16(52, true), 32767);
 });
 
+test("encodeWav16Mono rejects invalid sample rates", () => {
+  assert.throws(() => encodeWav16Mono(new Float32Array(1), 0), /inputSampleRate must be a positive finite number/);
+  assert.throws(() => encodeWav16Mono(new Float32Array(1), -16000), /inputSampleRate must be a positive finite number/);
+  assert.throws(() => encodeWav16Mono(new Float32Array(1), Infinity), /inputSampleRate must be a positive finite number/);
+});
+
+test("encodeWav16Mono handles empty input as a header-only WAV", async () => {
+  const blob = encodeWav16Mono(new Float32Array(), 16000);
+  const view = new DataView(await blob.arrayBuffer());
+
+  assert.equal(blob.type, "audio/wav");
+  assert.equal(blob.size, 44);
+  assert.equal(view.getUint32(40, true), 0);
+});
+
+test("encodeWav16Mono downsamples 44.1 kHz input to 16 kHz output size", async () => {
+  const blob = encodeWav16Mono(new Float32Array(44100), 44100);
+  const view = new DataView(await blob.arrayBuffer());
+
+  assert.equal(view.getUint32(24, true), 16000);
+  assert.equal(view.getUint32(40, true), 32000);
+  assert.equal(blob.size, 32044);
+});
+
+test("encodeWav16Mono upsamples 8 kHz input to 16 kHz output size", async () => {
+  const blob = encodeWav16Mono(new Float32Array(8000), 8000);
+  const view = new DataView(await blob.arrayBuffer());
+
+  assert.equal(view.getUint32(24, true), 16000);
+  assert.equal(view.getUint32(40, true), 32000);
+  assert.equal(blob.size, 32044);
+});
+
 function readString(view, offset, length) {
   let value = "";
   for (let i = 0; i < length; i++) {
