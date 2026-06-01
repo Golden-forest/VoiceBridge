@@ -84,6 +84,7 @@ Deno.serve(async (req) => {
       rateLimitPerMinute: limits.rateLimitPerMinute
     });
     if (reservationError) {
+      await recordUsage(serviceClient, { userId, requestId, durationMs, audioSizeBytes, status: "rejected", errorCode: reservationError });
       const message = reservationError === ERROR_CODE_QUOTA_EXCEEDED
         ? "本月云端语音识别额度已用完。"
         : reservationError === "rate_limited"

@@ -20,7 +20,7 @@ create or replace function public.reserve_transcribe_usage(
 )
 returns text
 language plpgsql
-security definer
+security invoker
 set search_path = public
 as $$
 declare

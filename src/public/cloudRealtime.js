@@ -32,7 +32,11 @@ export class CloudRealtime {
     this.ackChannel.on("broadcast", { event: "ack" }, ({ payload }) => {
       if (!this.isActiveGeneration(generation)) return;
       if (isAckMessage(payload, this.phoneDeviceId) && this.pendingRequests.has(payload.request_id)) {
-        this.onAck(payload);
+        try {
+          this.onAck(payload);
+        } catch (error) {
+          console.error("Cloud ack handler failed:", error);
+        }
         if (payload.status === "success") {
           this.resolvePendingRequest(payload.request_id);
         } else {
@@ -186,7 +190,11 @@ export class CloudRealtime {
           status: "failed",
           detail: "桌面端未确认，请确认客户端在线。"
         };
-        this.onAck(ack);
+        try {
+          this.onAck(ack);
+        } catch (error) {
+          console.error("Cloud ack handler failed:", error);
+        }
         reject(new Error(ack.detail));
       }, this.ackTimeoutMs);
 

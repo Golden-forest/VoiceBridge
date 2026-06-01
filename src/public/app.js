@@ -149,12 +149,13 @@ async function sendTextToDesktop(text, { localSuccessMessage = "已发送到电�
       return false;
     }
     try {
-      await cloudRealtime.sendText({
+      const sendPromise = cloudRealtime.sendText({
         targetDeviceId: selectedCloudDeviceId,
         text,
         autoPaste: autoPasteEl.checked
       });
       showToast("已发送，等待桌面端确认...");
+      await sendPromise;
       return true;
     } catch (error) {
       showToast(error.message || "发送失败，请稍后重试。", true);
