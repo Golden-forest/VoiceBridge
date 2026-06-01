@@ -4,8 +4,10 @@ import { corsHeaders, jsonResponse } from "../_shared/cors.ts";
 import { ERROR_CODE_QUOTA_EXCEEDED, USAGE_PROVIDER_TENCENT_CLOUD } from "../_shared/contracts.ts";
 import { getPlanLimit, isPaidStatus } from "../_shared/plan_limits.ts";
 import { transcribeTencentWav } from "../_shared/tencent_asr.ts";
+import { parsePcmWavDurationMs } from "../_shared/wav.ts";
 
 const PROVIDER = USAGE_PROVIDER_TENCENT_CLOUD;
+const MAX_AUDIO_BYTES = 3 * 1024 * 1024;
 type SupabaseClientLike = ReturnType<typeof createClient<any, "public", any>>;
 
 Deno.serve(async (req) => {
@@ -21,6 +23,7 @@ Deno.serve(async (req) => {
   let durationMs: number | null = null;
   let audioSizeBytes = 0;
   let serviceClient: SupabaseClientLike | null = null;
+  let usageReserved = false;
 
   try {
     const env = getEnv();
@@ -49,9 +52,13 @@ Deno.serve(async (req) => {
       await recordUsage(serviceClient, { userId, requestId, durationMs, audioSizeBytes, status: "rejected", errorCode: "unsupported_audio_format" });
       return errorResponse("unsupported_audio_format", "云端识别目前仅支持 WAV 音频。", 415);
     }
+    if (audioSizeBytes > MAX_AUDIO_BYTES) {
+      await recordUsage(serviceClient, { userId, requestId, durationMs, audioSizeBytes, status: "rejected", errorCode: "audio_too_large" });
+      return errorResponse("audio_too_large", "音频文件太大，请缩短录音后再试。", 413);
+    }
 
     const audioBytes = new Uint8Array(await audio.arrayBuffer());
-    const resolvedDurationMs = parsePcmWavDurationMs(audioBytes) ?? readClientDurationMs(formData);
+    const resolvedDurationMs = parsePcmWavDurationMs(audioBytes);
     if (typeof resolvedDurationMs !== "number" || !Number.isFinite(resolvedDurationMs) || resolvedDurationMs <= 0) {
       await recordUsage(serviceClient, { userId, requestId, durationMs, audioSizeBytes, status: "rejected", errorCode: "invalid_duration" });
       return errorResponse("invalid_duration", "无法确认音频时长，请重新录音后再试。", 400);
@@ -68,17 +75,23 @@ Deno.serve(async (req) => {
       return errorResponse("audio_too_long", `单次录音最长支持 ${limits.maxAudioSeconds} 秒。`, 413);
     }
 
-    const rateLimitCount = await countRecentUsage(serviceClient, userId);
-    if (rateLimitCount >= limits.rateLimitPerMinute) {
-      await recordUsage(serviceClient, { userId, requestId, durationMs, audioSizeBytes, status: "rejected", errorCode: "rate_limited" });
-      return errorResponse("rate_limited", "请求过于频繁，请稍后再试。", 429);
+    const reservationError = await reserveTranscribeUsage(serviceClient, {
+      userId,
+      requestId,
+      durationMs,
+      audioSizeBytes,
+      monthlySeconds: limits.monthlySeconds,
+      rateLimitPerMinute: limits.rateLimitPerMinute
+    });
+    if (reservationError) {
+      const message = reservationError === ERROR_CODE_QUOTA_EXCEEDED
+        ? "本月云端语音识别额度已用完。"
+        : reservationError === "rate_limited"
+          ? "请求过于频繁，请稍后再试。"
+          : "云端语音识别请求已存在，请稍后再试。";
+      return errorResponse(reservationError, message, 429);
     }
-
-    const usedSeconds = await getCurrentMonthUsedSeconds(serviceClient, userId);
-    if (usedSeconds + durationSeconds > limits.monthlySeconds) {
-      await recordUsage(serviceClient, { userId, requestId, durationMs, audioSizeBytes, status: "rejected", errorCode: ERROR_CODE_QUOTA_EXCEEDED });
-      return errorResponse(ERROR_CODE_QUOTA_EXCEEDED, "本月云端语音识别额度已用完。", 429);
-    }
+    usageReserved = true;
 
     const text = await transcribeTencentWav({
       audioBytes,
@@ -91,19 +104,23 @@ Deno.serve(async (req) => {
       }
     });
 
-    await recordUsage(serviceClient, { userId, requestId, durationMs, audioSizeBytes, status: "success" });
+    await updateReservedUsage(serviceClient, { userId, requestId, status: "success" });
     return jsonResponse({ ok: true, request_id: requestId, text });
   } catch (error) {
     console.error("Transcribe function error:", error);
     if (userId && serviceClient) {
-      await recordUsage(serviceClient, {
-        userId,
-        requestId,
-        durationMs,
-        audioSizeBytes,
-        status: "failed",
-        errorCode: "transcription_failed"
-      });
+      if (usageReserved) {
+        await updateReservedUsage(serviceClient, { userId, requestId, status: "failed", errorCode: "transcription_failed" });
+      } else {
+        await recordUsage(serviceClient, {
+          userId,
+          requestId,
+          durationMs,
+          audioSizeBytes,
+          status: "failed",
+          errorCode: "transcription_failed"
+        });
+      }
     }
     return errorResponse("transcription_failed", "云端语音识别失败，请稍后重试。", 500);
   }
@@ -141,40 +158,63 @@ async function getSubscription(serviceClient: SupabaseClientLike, userId: string
   return data;
 }
 
-async function getCurrentMonthUsedSeconds(serviceClient: SupabaseClientLike, userId: string) {
-  const since = new Date();
-  since.setUTCDate(1);
-  since.setUTCHours(0, 0, 0, 0);
-
-  const { data, error } = await serviceClient
-    .from("usage_events")
-    .select("audio_duration_ms")
-    .eq("user_id", userId)
-    .eq("status", "success")
-    .gte("created_at", since.toISOString());
-  if (error) {
-    console.error("Failed to fetch usage events:", error);
-    throw new Error("Usage lookup failed");
+async function reserveTranscribeUsage(
+  serviceClient: SupabaseClientLike,
+  {
+    userId,
+    requestId,
+    durationMs,
+    audioSizeBytes,
+    monthlySeconds,
+    rateLimitPerMinute
+  }: {
+    userId: string;
+    requestId: string;
+    durationMs: number;
+    audioSizeBytes: number;
+    monthlySeconds: number;
+    rateLimitPerMinute: number;
   }
-
-  return (data || []).reduce((sum, row) => {
-    const value = Number(row.audio_duration_ms || 0);
-    return sum + (Number.isFinite(value) && value > 0 ? Math.ceil(value / 1000) : 0);
-  }, 0);
+) {
+  const { data, error } = await serviceClient.rpc("reserve_transcribe_usage", {
+    p_user_id: userId,
+    p_request_id: requestId,
+    p_provider: PROVIDER,
+    p_mode: "cloud",
+    p_audio_duration_ms: Math.round(durationMs),
+    p_audio_size_bytes: audioSizeBytes,
+    p_monthly_seconds: monthlySeconds,
+    p_rate_limit_per_minute: rateLimitPerMinute
+  });
+  if (error) {
+    console.error("Failed to reserve usage:", error);
+    throw new Error("Usage reservation failed");
+  }
+  return typeof data === "string" && data ? data : null;
 }
 
-async function countRecentUsage(serviceClient: SupabaseClientLike, userId: string) {
-  const since = new Date(Date.now() - 60_000).toISOString();
-  const { count, error } = await serviceClient
-    .from("usage_events")
-    .select("id", { count: "exact", head: true })
-    .eq("user_id", userId)
-    .gte("created_at", since);
-  if (error) {
-    console.error("Failed to fetch recent usage count:", error);
-    return 0;
+async function updateReservedUsage(
+  serviceClient: SupabaseClientLike,
+  {
+    userId,
+    requestId,
+    status,
+    errorCode
+  }: {
+    userId: string;
+    requestId: string;
+    status: "success" | "failed";
+    errorCode?: string;
   }
-  return count || 0;
+) {
+  const { error } = await serviceClient
+    .from("usage_events")
+    .update({ status, error_code: errorCode || null })
+    .eq("user_id", userId)
+    .eq("request_id", requestId);
+  if (error) {
+    console.error("Failed to update usage event:", error);
+  }
 }
 
 async function recordUsage(
@@ -227,55 +267,4 @@ function isWavFile(file: File) {
 function readClientDurationMs(formData: FormData) {
   const value = Number(formData.get("duration_ms"));
   return Number.isFinite(value) && value > 0 ? value : null;
-}
-
-export function parsePcmWavDurationMs(bytes: Uint8Array) {
-  if (bytes.byteLength < 44) return null;
-  if (readAscii(bytes, 0, 4) !== "RIFF" || readAscii(bytes, 8, 4) !== "WAVE") return null;
-
-  let offset = 12;
-  let channels = 0;
-  let sampleRate = 0;
-  let bitsPerSample = 0;
-  let dataBytes = 0;
-
-  while (offset + 8 <= bytes.byteLength) {
-    const chunkId = readAscii(bytes, offset, 4);
-    const chunkSize = readUint32Le(bytes, offset + 4);
-    const dataOffset = offset + 8;
-    if (dataOffset + chunkSize > bytes.byteLength) return null;
-
-    if (chunkId === "fmt " && chunkSize >= 16) {
-      const audioFormat = readUint16Le(bytes, dataOffset);
-      if (audioFormat !== 1) return null;
-      channels = readUint16Le(bytes, dataOffset + 2);
-      sampleRate = readUint32Le(bytes, dataOffset + 4);
-      bitsPerSample = readUint16Le(bytes, dataOffset + 14);
-    } else if (chunkId === "data") {
-      dataBytes = chunkSize;
-    }
-
-    offset = dataOffset + chunkSize + (chunkSize % 2);
-  }
-
-  const bytesPerSecond = sampleRate * channels * (bitsPerSample / 8);
-  if (!bytesPerSecond || !dataBytes) return null;
-  return Math.round((dataBytes / bytesPerSecond) * 1000);
-}
-
-function readAscii(bytes: Uint8Array, offset: number, length: number) {
-  return String.fromCharCode(...bytes.subarray(offset, offset + length));
-}
-
-function readUint16Le(bytes: Uint8Array, offset: number) {
-  return bytes[offset] | (bytes[offset + 1] << 8);
-}
-
-function readUint32Le(bytes: Uint8Array, offset: number) {
-  return (
-    bytes[offset] |
-    (bytes[offset + 1] << 8) |
-    (bytes[offset + 2] << 16) |
-    (bytes[offset + 3] << 24)
-  ) >>> 0;
 }

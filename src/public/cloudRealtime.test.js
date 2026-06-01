@@ -71,16 +71,31 @@ test("CloudRealtime sends insert text command to target device and listens for m
   });
 
   await realtime.start();
-  const requestId = await realtime.sendText({
+  const firstSend = realtime.sendText({
     targetDeviceId: "desktop-1",
     text: "hello",
     autoPaste: true
   });
-  const secondRequestId = await realtime.sendText({
+  await waitFor(() => channels.get("device:user-1:desktop-1")?.sends.length === 1);
+  const requestId = channels.get("device:user-1:desktop-1").sends[0].payload.request_id;
+  ackHandler({
+    payload: {
+      type: "ack",
+      request_id: requestId,
+      source_device_id: "desktop-1",
+      target_device_id: "phone-1",
+      status: "success"
+    }
+  });
+  assert.equal(await firstSend, requestId);
+
+  const secondSend = realtime.sendText({
     targetDeviceId: "desktop-1",
     text: "again",
     autoPaste: false
   });
+  await waitFor(() => channels.get("device:user-1:desktop-1").sends.length === 2);
+  const secondRequestId = channels.get("device:user-1:desktop-1").sends[1].payload.request_id;
 
   assert.equal(createdTopics.includes("device:user-1:desktop-1"), true);
   assert.equal(createdTopics.includes("device:user-1:phone-1"), true);
@@ -101,12 +116,14 @@ test("CloudRealtime sends insert text command to target device and listens for m
   ackHandler({
     payload: {
       type: "ack",
-      request_id: requestId,
+      request_id: secondRequestId,
       source_device_id: "desktop-1",
       target_device_id: "phone-1",
       status: "success"
     }
   });
+  assert.equal(await secondSend, secondRequestId);
+
   ackHandler({
     payload: {
       type: "ack",
@@ -117,8 +134,9 @@ test("CloudRealtime sends insert text command to target device and listens for m
     }
   });
 
-  assert.equal(acks.length, 1);
+  assert.equal(acks.length, 2);
   assert.equal(acks[0].request_id, requestId);
+  assert.equal(acks[1].request_id, secondRequestId);
 
   await realtime.stop();
 
@@ -127,6 +145,128 @@ test("CloudRealtime sends insert text command to target device and listens for m
     "device:user-1:phone-1",
     "user:user-1:presence"
   ].sort());
+});
+
+test("CloudRealtime sendText resolves only after a success ack", async () => {
+  let ackHandler;
+  const supabase = {
+    channel() {
+      return {
+        on(type, filter, handler) {
+          if (type === "broadcast" && filter.event === "ack") {
+            ackHandler = handler;
+          }
+          return this;
+        },
+        async subscribe(callback) {
+          await callback?.("SUBSCRIBED");
+          return "ok";
+        },
+        async track() {
+          return "ok";
+        },
+        async send() {
+          return "ok";
+        },
+        async unsubscribe() {
+          return "ok";
+        }
+      };
+    }
+  };
+
+  const realtime = new CloudRealtime({
+    supabase,
+    user: { id: "user-1" },
+    phoneDeviceId: "phone-1",
+    ackTimeoutMs: 50,
+    onDevices: () => {},
+    onAck: () => {},
+    onStatus: () => {}
+  });
+
+  await realtime.start();
+  const sendPromise = realtime.sendText({ targetDeviceId: "desktop-1", text: "hello", autoPaste: true });
+  const earlyResult = await Promise.race([
+    sendPromise.then(() => "resolved"),
+    new Promise((resolve) => setTimeout(() => resolve("pending"), 10))
+  ]);
+
+  assert.equal(earlyResult, "pending");
+
+  const [requestId] = realtime.pendingRequests.keys();
+  ackHandler({
+    payload: {
+      type: "ack",
+      request_id: requestId,
+      source_device_id: "desktop-1",
+      target_device_id: "phone-1",
+      status: "success"
+    }
+  });
+
+  assert.equal(await sendPromise, requestId);
+});
+
+test("CloudRealtime sendText rejects on failed ack and keeps onAck notification", async () => {
+  let ackHandler;
+  const acks = [];
+  const supabase = {
+    channel() {
+      return {
+        on(type, filter, handler) {
+          if (type === "broadcast" && filter.event === "ack") {
+            ackHandler = handler;
+          }
+          return this;
+        },
+        async subscribe(callback) {
+          await callback?.("SUBSCRIBED");
+          return "ok";
+        },
+        async track() {
+          return "ok";
+        },
+        async send() {
+          return "ok";
+        },
+        async unsubscribe() {
+          return "ok";
+        }
+      };
+    }
+  };
+
+  const realtime = new CloudRealtime({
+    supabase,
+    user: { id: "user-1" },
+    phoneDeviceId: "phone-1",
+    ackTimeoutMs: 50,
+    onDevices: () => {},
+    onAck: (ack) => acks.push(ack),
+    onStatus: () => {}
+  });
+
+  await realtime.start();
+  const sendPromise = realtime.sendText({ targetDeviceId: "desktop-1", text: "hello", autoPaste: true });
+  const rejection = assert.rejects(sendPromise, /paste failed/);
+  await waitFor(() => realtime.pendingRequests.size === 1);
+  const [requestId] = realtime.pendingRequests.keys();
+
+  ackHandler({
+    payload: {
+      type: "ack",
+      request_id: requestId,
+      source_device_id: "desktop-1",
+      target_device_id: "phone-1",
+      status: "failed",
+      detail: "paste failed"
+    }
+  });
+
+  await rejection;
+  assert.equal(acks.length, 1);
+  assert.equal(acks[0].detail, "paste failed");
 });
 
 test("CloudRealtime identifies phone browser presence as web", async () => {
@@ -341,9 +481,13 @@ test("CloudRealtime emits failed ack and clears pending request on ack timeout",
   });
 
   await realtime.start();
-  const requestId = await realtime.sendText({ targetDeviceId: "desktop-1", text: "hello", autoPaste: true });
+  const sendPromise = realtime.sendText({ targetDeviceId: "desktop-1", text: "hello", autoPaste: true });
+  const rejection = assert.rejects(sendPromise, /桌面端未确认/);
+  await waitFor(() => realtime.pendingRequests.size === 1);
+  const [requestId] = realtime.pendingRequests.keys();
   await new Promise((resolve) => setTimeout(resolve, 20));
 
+  await rejection;
   assert.equal(acks.length, 1);
   assert.equal(acks[0].request_id, requestId);
   assert.equal(acks[0].status, "failed");
@@ -478,3 +622,13 @@ test("CloudRealtime stop cancels stale subscription timeout without status mutat
   await new Promise((resolve) => setTimeout(resolve, 20));
   assert.deepEqual(statuses, []);
 });
+
+async function waitFor(predicate, timeoutMs = 100) {
+  const startedAt = Date.now();
+  while (!predicate()) {
+    if (Date.now() - startedAt > timeoutMs) {
+      throw new Error("Timed out waiting for condition");
+    }
+    await new Promise((resolve) => setTimeout(resolve, 1));
+  }
+}

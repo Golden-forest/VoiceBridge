@@ -32,8 +32,12 @@ export class CloudRealtime {
     this.ackChannel.on("broadcast", { event: "ack" }, ({ payload }) => {
       if (!this.isActiveGeneration(generation)) return;
       if (isAckMessage(payload, this.phoneDeviceId) && this.pendingRequests.has(payload.request_id)) {
-        this.clearPendingRequest(payload.request_id);
         this.onAck(payload);
+        if (payload.status === "success") {
+          this.resolvePendingRequest(payload.request_id);
+        } else {
+          this.rejectPendingRequest(payload.request_id, new Error(payload.detail || "桌面端执行失败。"));
+        }
       }
     });
     this.presence.on("presence", { event: "sync" }, () => {
@@ -64,7 +68,7 @@ export class CloudRealtime {
     }
     const requestId = createRequestId();
     const channel = await this.getTargetChannel(targetDeviceId);
-    this.addPendingRequest(requestId, targetDeviceId);
+    const ackPromise = this.addPendingRequest(requestId, targetDeviceId);
     let sendStatus;
     try {
       sendStatus = await channel.send({
@@ -85,10 +89,11 @@ export class CloudRealtime {
       throw error;
     }
     if (sendStatus !== "ok") {
+      const error = new Error(`发送到桌面端失败：${sendStatus}`);
       this.clearPendingRequest(requestId);
-      throw new Error(`发送到桌面端失败：${sendStatus}`);
+      throw error;
     }
-    return requestId;
+    return await ackPromise;
   }
 
   async getTargetChannel(targetDeviceId) {
@@ -168,21 +173,46 @@ export class CloudRealtime {
   }
 
   addPendingRequest(requestId, targetDeviceId) {
-    const timer = setTimeout(() => {
-      if (!this.pendingRequests.has(requestId)) return;
-      this.pendingRequests.delete(requestId);
-      this.onStatus(`ack:${requestId}:TIMED_OUT`);
-      this.onAck({
-        type: "ack",
-        request_id: requestId,
-        source_device_id: targetDeviceId,
-        target_device_id: this.phoneDeviceId,
-        status: "failed",
-        detail: "桌面端未确认，请确认客户端在线。"
-      });
-    }, this.ackTimeoutMs);
+    return new Promise((resolve, reject) => {
+      const timer = setTimeout(() => {
+        if (!this.pendingRequests.has(requestId)) return;
+        this.pendingRequests.delete(requestId);
+        this.onStatus(`ack:${requestId}:TIMED_OUT`);
+        const ack = {
+          type: "ack",
+          request_id: requestId,
+          source_device_id: targetDeviceId,
+          target_device_id: this.phoneDeviceId,
+          status: "failed",
+          detail: "桌面端未确认，请确认客户端在线。"
+        };
+        this.onAck(ack);
+        reject(new Error(ack.detail));
+      }, this.ackTimeoutMs);
 
-    this.pendingRequests.set(requestId, { targetDeviceId, timer });
+      this.pendingRequests.set(requestId, { targetDeviceId, timer, resolve, reject });
+    });
+  }
+
+  resolvePendingRequest(requestId) {
+    const pending = this.pendingRequests.get(requestId);
+    if (!pending) return;
+    this.clearPendingRequest(requestId);
+    pending.resolve(requestId);
+  }
+
+  rejectPendingRequest(requestId, error) {
+    const pending = this.pendingRequests.get(requestId);
+    if (!pending) return;
+    this.clearPendingRequest(requestId);
+    pending.reject(error);
+  }
+
+  cancelPendingRequest(requestId) {
+    const pending = this.pendingRequests.get(requestId);
+    if (!pending) return;
+    this.clearPendingRequest(requestId);
+    pending.reject(new Error("云端连接已关闭"));
   }
 
   clearPendingRequest(requestId) {
@@ -212,7 +242,7 @@ export class CloudRealtime {
     this.ackChannel = null;
     this.targetChannels.clear();
     for (const requestId of this.pendingRequests.keys()) {
-      this.clearPendingRequest(requestId);
+      this.cancelPendingRequest(requestId);
     }
   }
 }

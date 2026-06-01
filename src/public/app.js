@@ -1218,9 +1218,11 @@ async function uploadAudio(blob, extension) {
       });
       const text = (payload.text || "").trim();
       if (!text) throw new Error("识别完成，但没有返回可用文字。");
+      textInput.value = text;
+      updateTextInputState();
       const accepted = await sendTextToDesktop(text);
-      if (!accepted) {
-        textInput.value = text;
+      if (accepted && textInput.value.trim() === text) {
+        textInput.value = "";
         updateTextInputState();
       }
       return;
