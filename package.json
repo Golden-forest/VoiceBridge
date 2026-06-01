@@ -32,9 +32,21 @@
     "electron": "^42.3.0"
   },
   "config": {
+    "electron_mirror": "https://npmmirror.com/mirrors/electron/",
     "forge": {
       "packagerConfig": {
-        "name": "VoiceBridge Agent"
+        "name": "VoiceBridge Agent",
+        "prune": false,
+        "download": {
+          "mirrorOptions": {
+            "mirror": "https://npmmirror.com/mirrors/electron/"
+          }
+        },
+        "ignore": [
+          "^/out($|/)",
+          "^/docs($|/)",
+          "^/supabase($|/)"
+        ]
       },
       "makers": [
         {
