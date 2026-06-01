@@ -1,8 +1,10 @@
 import { CloudRealtime, getPhoneDeviceId, isDesktopDeviceCandidate } from "./cloudRealtime.js";
+import { createBillingSession } from "./billing.js";
 import { recordWavUntilStopped } from "./cloudRecorder.js";
 import { transcribeCloudAudio } from "./cloudTranscribe.js";
 
 // === Element References ===
+const appConfig = window.__VB_CONFIG || {};
 const statusDot = document.querySelector("#statusDot");
 const statusBadge = document.querySelector("#statusBadge");
 const textInput = document.querySelector("#textInput");
@@ -11,6 +13,10 @@ const autoPasteEl = document.querySelector("#autoPaste");
 const toastEl = document.querySelector("#toast");
 const pageRefreshButton = document.querySelector("#pageRefreshButton");
 const cloudDeviceSelect = document.querySelector("#cloudDeviceSelect");
+const billingActions = document.querySelector("#billingActions");
+const upgradeButton = document.querySelector("#upgradeButton");
+const billingPortalButton = document.querySelector("#billingPortalButton");
+const isCloudMode = appConfig.voicebridgeMode === "cloud";
 let cloudRealtime = null;
 let selectedCloudDeviceId = "";
 let activeCloudUserId = "";
@@ -184,7 +190,8 @@ async function sendTextToDesktop(text, { localSuccessMessage = "已发送到电�
 
 window.addEventListener("voicebridge:auth", async (event) => {
   const { session, user } = event.detail;
-  if ((window.__VB_CONFIG || {}).voicebridgeMode !== "cloud") return;
+  updateBillingControls(Boolean(session));
+  if (!isCloudMode) return;
   if (!session || !user || !window.VoiceBridgeAuth?.supabase) {
     await stopCloudRealtime();
     resetCloudDeviceSelect();
@@ -272,6 +279,41 @@ function resetCloudDeviceSelect() {
   cloudDeviceSelect.replaceChildren(createCloudPlaceholderOption());
   cloudDeviceSelect.classList.add("hidden");
 }
+
+function updateBillingControls(hasSession) {
+  const visible = isCloudMode && hasSession;
+  billingActions?.classList.toggle("hidden", !visible);
+  if (upgradeButton) upgradeButton.disabled = !visible;
+  if (billingPortalButton) {
+    billingPortalButton.classList.toggle("hidden", !visible);
+    billingPortalButton.disabled = !visible;
+  }
+}
+
+async function openBillingSession(functionName, button) {
+  if (!button) return;
+  button.disabled = true;
+  try {
+    const payload = await createBillingSession({
+      supabase: window.VoiceBridgeAuth?.supabase,
+      functionName
+    });
+    location.href = payload.url;
+  } catch (error) {
+    showToast(error.message || "订阅请求失败，请稍后重试。", true);
+    button.disabled = false;
+  }
+}
+
+upgradeButton?.addEventListener("click", () => {
+  void openBillingSession("billing-create-checkout-session", upgradeButton);
+});
+
+billingPortalButton?.addEventListener("click", () => {
+  void openBillingSession("billing-create-portal-session", billingPortalButton);
+});
+
+updateBillingControls(Boolean(window.VoiceBridgeAuth?.session));
 
 // === SVG Icons ===
 const starSvg = '<svg viewBox="0 0 24 24" width="14" height="14"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>';
@@ -1074,7 +1116,6 @@ let currentRecordingDurationMs = null;
 let isUploading = false;
 let ws = null;
 
-const isCloudMode = (window.__VB_CONFIG || {}).voicebridgeMode === "cloud";
 const BrowserAudioContext = window.AudioContext || window.webkitAudioContext;
 
 if (!isCloudMode) {
