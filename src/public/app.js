@@ -1,5 +1,6 @@
 import { CloudRealtime, getPhoneDeviceId, isDesktopDeviceCandidate } from "./cloudRealtime.js";
 import { recordWavUntilStopped } from "./cloudRecorder.js";
+import { transcribeCloudAudio } from "./cloudTranscribe.js";
 
 // === Element References ===
 const statusDot = document.querySelector("#statusDot");
@@ -1067,6 +1068,8 @@ let isRecording = false;
 let maxRecordTimer = null;
 let timerInterval = null;
 let recordSeconds = 0;
+let recordingStartedAt = 0;
+let currentRecordingDurationMs = null;
 let isUploading = false;
 let ws = null;
 
@@ -1127,6 +1130,8 @@ function setRecordProcessing() {
 function beginRecordingState() {
   isRecording = true;
   recordSeconds = 0;
+  recordingStartedAt = performance.now();
+  currentRecordingDurationMs = null;
   recordButton.classList.add("recording");
   setRecordActive();
   setActionButtonsDisabled(true);
@@ -1182,6 +1187,7 @@ async function stopRecording() {
   if (!isRecording || !recorder) return;
   isRecording = false;
   isUploading = true;
+  currentRecordingDurationMs = getCurrentRecordingDurationMs();
   clearTimeout(maxRecordTimer);
   clearInterval(timerInterval);
   recordButton.classList.remove("recording");
@@ -1204,6 +1210,22 @@ async function uploadAudio(blob, extension) {
   try {
     if (!blob.size) { showToast("没有录到声音，请再试一次。", true); finishUpload(); return; }
     showToast("正在识别...");
+    if (isCloudMode) {
+      const payload = await transcribeCloudAudio({
+        audio: blob,
+        filename: `voicebridge.${extension}`,
+        durationMs: currentRecordingDurationMs
+      });
+      const text = (payload.text || "").trim();
+      if (!text) throw new Error("识别完成，但没有返回可用文字。");
+      const accepted = await sendTextToDesktop(text);
+      if (!accepted) {
+        textInput.value = text;
+        updateTextInputState();
+      }
+      return;
+    }
+
     const formData = new FormData();
     formData.append("audio", blob, `voicebridge.${extension}`);
     formData.append("autoPaste", String(autoPasteEl.checked));
@@ -1229,6 +1251,8 @@ async function uploadAudio(blob, extension) {
 
 function finishUpload() {
   isUploading = false;
+  recordingStartedAt = 0;
+  currentRecordingDurationMs = null;
   if (commandLibrary.editingId) {
     recordButton.disabled = true;
     submitButton.disabled = true;
@@ -1318,7 +1342,15 @@ function pickMimeType() {
 }
 
 function fileExtensionFor(mimeType) {
+  if (mimeType.includes("wav") || mimeType.includes("wave")) return "wav";
   if (mimeType.includes("mp4")) return "m4a";
   if (mimeType.includes("mpeg")) return "mp3";
   return "webm";
+}
+
+function getCurrentRecordingDurationMs() {
+  if (recordingStartedAt > 0 && typeof performance !== "undefined" && typeof performance.now === "function") {
+    return Math.max(1, Math.round(performance.now() - recordingStartedAt));
+  }
+  return recordSeconds > 0 ? recordSeconds * 1000 : null;
 }
