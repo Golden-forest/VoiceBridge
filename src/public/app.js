@@ -14,8 +14,8 @@ const toastEl = document.querySelector("#toast");
 const pageRefreshButton = document.querySelector("#pageRefreshButton");
 const cloudDeviceSelect = document.querySelector("#cloudDeviceSelect");
 const billingActions = document.querySelector("#billingActions");
-const upgradeButton = document.querySelector("#upgradeButton");
-const billingPortalButton = document.querySelector("#billingPortalButton");
+const planBadge = document.querySelector("#planBadge");
+const accountDrawerBtn = document.querySelector("#accountDrawerBtn");
 const isCloudMode = appConfig.voicebridgeMode === "cloud";
 let cloudRealtime = null;
 let selectedCloudDeviceId = "";
@@ -225,6 +225,16 @@ async function handleAuthState(event) {
     onStatus: () => setConnectionStatus("connected", "云端已连接")
   });
   cloudRealtime = realtime;
+  // 更新 plan badge
+  const sb = window.VoiceBridgeAuth?.supabase;
+  if (sb && planBadge) {
+    sb.from("subscriptions").select("status").eq("user_id", user.id).maybeSingle()
+      .then(({ data: sub }) => {
+        const plan = sub && isPaidStatus(sub.status) ? "pro" : "free";
+        planBadge.textContent = plan === "pro" ? "Pro" : "Free";
+        planBadge.classList.toggle("pro", plan === "pro");
+      });
+  }
   try {
     await realtime.start();
   } catch (error) {
@@ -297,14 +307,31 @@ function resetCloudDeviceSelect() {
   cloudDeviceSelect.classList.add("hidden");
 }
 
+const PLAN_LIMITS = {
+  free: { monthlySeconds: 600, maxAudioSeconds: 60, rateLimitPerMinute: 10 },
+  pro: { monthlySeconds: 18000, maxAudioSeconds: 60, rateLimitPerMinute: 30 },
+};
+
+function isPaidStatus(status) {
+  return status === "active" || status === "trialing";
+}
+
+function formatRelativeTime(diffMs) {
+  const minutes = Math.floor(diffMs / 60_000);
+  if (minutes < 1) return "刚刚";
+  if (minutes < 60) return `${minutes}分钟前`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours}小时前`;
+  const days = Math.floor(hours / 24);
+  if (days < 30) return `${days}天前`;
+  return `${Math.floor(days / 30)}个月前`;
+}
+
 function updateBillingControls(hasSession) {
   const visible = isCloudMode && hasSession;
   billingActions?.classList.toggle("hidden", !visible);
-  if (upgradeButton) upgradeButton.disabled = !visible;
-  if (billingPortalButton) {
-    billingPortalButton.classList.toggle("hidden", !visible);
-    billingPortalButton.disabled = !visible;
-  }
+  if (accountDrawerBtn) accountDrawerBtn.disabled = !visible;
+  planBadge?.classList.toggle("hidden", !visible);
 }
 
 async function openBillingSession(functionName, button) {
@@ -321,14 +348,6 @@ async function openBillingSession(functionName, button) {
     button.disabled = false;
   }
 }
-
-upgradeButton?.addEventListener("click", () => {
-  void openBillingSession("billing-create-checkout-session", upgradeButton);
-});
-
-billingPortalButton?.addEventListener("click", () => {
-  void openBillingSession("billing-create-portal-session", billingPortalButton);
-});
 
 updateBillingControls(Boolean(window.VoiceBridgeAuth?.session));
 
@@ -1428,3 +1447,89 @@ function getCurrentRecordingDurationMs() {
   }
   return recordSeconds > 0 ? recordSeconds * 1000 : null;
 }
+
+// === Account Drawer ===
+class AccountDrawer {
+  constructor() {
+    this.el = {
+      drawer: document.querySelector("#accountDrawer"),
+      overlay: document.querySelector(".account-drawer-overlay"),
+      closeBtn: document.querySelector("#accountDrawerClose"),
+      body: document.querySelector("#accountDrawerBody"),
+    };
+    this._isOpen = false;
+    this._init();
+  }
+
+  _init() {
+    this.el.closeBtn?.addEventListener("click", () => this.close());
+    this.el.overlay?.addEventListener("click", () => this.close());
+    document.addEventListener("keydown", (e) => {
+      if (e.key === "Escape" && this._isOpen) this.close();
+    });
+  }
+
+  open() {
+    this._isOpen = true;
+    this.el.drawer?.classList.remove("hidden");
+    this._render();
+  }
+
+  close() {
+    this._isOpen = false;
+    this.el.drawer?.classList.add("hidden");
+  }
+
+  async _render() {
+    const body = this.el.body;
+    if (!body) return;
+    body.innerHTML = "<p style='text-align:center;color:var(--text-muted)'>加载中…</p>";
+    try {
+      const data = await this._fetchData();
+      body.replaceChildren(
+        this._renderPlan(data),
+        this._renderPricing(data),
+        this._renderUsage(data),
+        this._renderSubscription(data),
+        this._renderProfile(data),
+        this._renderDevices(data),
+      );
+    } catch (error) {
+      body.innerHTML = `<p style='text-align:center;color:var(--danger)'>${error.message || "加载失败"}</p>`;
+    }
+  }
+
+  async _fetchData() {
+    const supabase = window.VoiceBridgeAuth?.supabase;
+    const user = window.VoiceBridgeAuth?.user;
+    if (!supabase || !user) throw new Error("请先登录");
+
+    const [subRes, usageRes, devicesRes] = await Promise.all([
+      supabase.from("subscriptions").select("*").eq("user_id", user.id).maybeSingle(),
+      supabase.from("usage_events").select("status, claim_seconds").eq("user_id", user.id),
+      supabase.from("devices").select("*").eq("user_id", user.id).order("last_seen_at", { ascending: false }),
+    ]);
+
+    const subscription = subRes.data || null;
+    const usageEvents = usageRes.data || [];
+    const devices = devicesRes.data || [];
+
+    const plan = subscription && isPaidStatus(subscription.status) ? "pro" : "free";
+    const usedSeconds = usageEvents.filter((e) => e.status === "success").reduce((sum, e) => sum + (e.claim_seconds || 0), 0);
+    const totalCount = usageEvents.length;
+    const successCount = usageEvents.filter((e) => e.status === "success").length;
+    const rejectedCount = usageEvents.filter((e) => e.status === "rejected").length;
+
+    return { subscription, plan, usedSeconds, totalCount, successCount, rejectedCount, devices, user };
+  }
+
+  _renderPlan(data) { return document.createElement("div"); }
+  _renderPricing(data) { return document.createElement("div"); }
+  _renderUsage(data) { return document.createElement("div"); }
+  _renderSubscription(data) { return document.createElement("div"); }
+  _renderProfile(data) { return document.createElement("div"); }
+  _renderDevices(data) { return document.createElement("div"); }
+}
+
+const accountDrawer = new AccountDrawer();
+accountDrawerBtn?.addEventListener("click", () => accountDrawer.open());

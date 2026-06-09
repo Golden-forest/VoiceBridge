@@ -18,6 +18,7 @@ test("cloud auth exposes logout and app starts from an existing session", () => 
   assert.match(appJs, /void handleAuthState\(\{\s*detail:/);
 });
 
-test("billing portal button is shown for signed-in cloud users", () => {
-  assert.match(appJs, /billingPortalButton\.classList\.toggle\("hidden", !visible\)/);
+test("account drawer button and plan badge are shown for signed-in cloud users", () => {
+  assert.match(appJs, /accountDrawerBtn\.disabled = !visible/);
+  assert.match(appJs, /planBadge\?\.classList\.toggle\("hidden", !visible\)/);
 });
