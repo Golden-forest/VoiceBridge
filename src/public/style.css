@@ -1472,6 +1472,17 @@ fieldset.add-cmd-fieldset legend {
     background: linear-gradient(165deg, #181716 0%, #1f1c18 40%, #1a1816 100%);
     background-attachment: fixed;
   }
+
+  .auth-card {
+    background: var(--bg-card);
+    color: var(--text-primary);
+  }
+  .auth-link-btn {
+    color: var(--text-secondary);
+  }
+  .auth-reset-info {
+    color: var(--text-secondary);
+  }
 }
 
 :focus-visible {
@@ -1531,6 +1542,26 @@ fieldset.add-cmd-fieldset legend {
 
 .auth-message.error {
   color: #b42318;
+}
+
+.auth-link-btn {
+  justify-self: start;
+  background: none;
+  border: none;
+  color: var(--text-secondary);
+  font-size: 13px;
+  cursor: pointer;
+  padding: 2px 0;
+}
+
+.auth-link-btn:hover {
+  color: var(--accent);
+}
+
+.auth-reset-info {
+  margin: 0;
+  font-size: 13px;
+  color: var(--text-secondary);
 }
 
 .cloud-device-select {

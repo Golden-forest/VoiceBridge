@@ -99,11 +99,81 @@ form?.addEventListener("submit", async (event) => {
     }
     if (mode === "sign-up" && !result.data.session) {
       setMessage("注册成功，请检查邮箱完成验证。");
+      resendBtn?.classList.remove("hidden");
     }
   } catch (error) {
     setMessage(error instanceof Error ? error.message : "认证请求失败，请稍后再试。", true);
   } finally {
     submitBtn.disabled = false;
+  }
+});
+
+// === 密码重置 ===
+const forgotBtn = document.querySelector("#authForgotBtn");
+const resetForm = document.querySelector("#authResetForm");
+const resetEmailInput = document.querySelector("#authResetEmail");
+const resetBtn = document.querySelector("#authResetBtn");
+const resetBackBtn = document.querySelector("#authResetBackBtn");
+const resendBtn = document.querySelector("#authResendBtn");
+const resetInfo = document.querySelector(".auth-reset-info");
+
+forgotBtn?.addEventListener("click", () => {
+  form?.classList.add("hidden");
+  resetForm?.classList.remove("hidden");
+  forgotBtn.classList.add("hidden");
+  switchBtn?.classList.add("hidden");
+  submitBtn?.classList.add("hidden");
+  if (resetEmailInput && emailInput) resetEmailInput.value = emailInput.value;
+  if (modeLabel) modeLabel.textContent = "重置密码";
+});
+
+resetBackBtn?.addEventListener("click", () => {
+  resetForm?.classList.add("hidden");
+  form?.classList.remove("hidden");
+  forgotBtn?.classList.remove("hidden");
+  switchBtn?.classList.remove("hidden");
+  submitBtn?.classList.remove("hidden");
+  if (modeLabel) modeLabel.textContent = "登录以连接你的设备";
+});
+
+resetBtn?.addEventListener("click", async () => {
+  if (!supabase || !resetEmailInput) return;
+  const email = resetEmailInput.value.trim();
+  if (!email) return;
+  resetBtn.disabled = true;
+  try {
+    const { error } = await supabase.auth.resetPasswordForEmail(email);
+    if (error) {
+      setMessage(error.message, true);
+      return;
+    }
+    if (resetInfo) resetInfo.textContent = "重置链接已发送到您的邮箱。";
+    resetBtn.textContent = "已发送";
+  } catch (error) {
+    setMessage(error instanceof Error ? error.message : "发送失败，请稍后重试。", true);
+  } finally {
+    resetBtn.disabled = false;
+  }
+});
+
+// === 邮箱验证重发 ===
+resendBtn?.addEventListener("click", async () => {
+  if (!supabase || !emailInput) return;
+  const email = emailInput.value.trim();
+  if (!email) return;
+  resendBtn.disabled = true;
+  try {
+    const { error } = await supabase.auth.resend({ type: "signup", email });
+    if (error) {
+      setMessage(error.message, true);
+      return;
+    }
+    resendBtn.textContent = "已发送";
+    setTimeout(() => { resendBtn.textContent = "重新发送验证邮件"; }, 3000);
+  } catch (error) {
+    setMessage(error instanceof Error ? error.message : "发送失败，请稍后重试。", true);
+  } finally {
+    resendBtn.disabled = false;
   }
 });
 
