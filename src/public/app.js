@@ -1523,12 +1523,397 @@ class AccountDrawer {
     return { subscription, plan, usedSeconds, totalCount, successCount, rejectedCount, devices, user };
   }
 
-  _renderPlan(data) { return document.createElement("div"); }
-  _renderPricing(data) { return document.createElement("div"); }
-  _renderUsage(data) { return document.createElement("div"); }
-  _renderSubscription(data) { return document.createElement("div"); }
-  _renderProfile(data) { return document.createElement("div"); }
-  _renderDevices(data) { return document.createElement("div"); }
+  _renderPlan(data) {
+    const section = document.createElement("div");
+    section.className = "account-section";
+
+    const title = document.createElement("p");
+    title.className = "account-section-title";
+    title.textContent = "当前方案";
+    section.appendChild(title);
+
+    const badge = document.createElement("span");
+    badge.className = `plan-badge ${data.plan === "pro" ? "pro" : ""}`;
+    badge.textContent = data.plan === "pro" ? "Pro" : "Free";
+    section.appendChild(badge);
+
+    const limits = PLAN_LIMITS[data.plan];
+    const pct = Math.min(100, Math.round((data.usedSeconds / limits.monthlySeconds) * 100));
+
+    const stats = document.createElement("div");
+    stats.className = "usage-stats";
+    stats.innerHTML = `
+      <div class="usage-stat-row">
+        <span class="usage-stat-label">已用 / 月额度</span>
+        <span class="usage-stat-value">${data.usedSeconds.toLocaleString()} / ${limits.monthlySeconds.toLocaleString()} 秒 (${pct}%)</span>
+      </div>
+    `;
+    section.appendChild(stats);
+
+    const track = document.createElement("div");
+    track.className = "usage-bar-track";
+    const fill = document.createElement("div");
+    fill.className = `usage-bar-fill ${pct >= 90 ? "critical" : pct >= 70 ? "warning" : ""}`;
+    fill.style.width = pct + "%";
+    track.appendChild(fill);
+    section.appendChild(track);
+
+    return section;
+  }
+  _renderPricing(data) {
+    const section = document.createElement("div");
+    section.className = "account-section";
+
+    const title = document.createElement("p");
+    title.className = "account-section-title";
+    title.textContent = "方案对比";
+    section.appendChild(title);
+
+    const grid = document.createElement("div");
+    grid.className = "pricing-grid";
+
+    for (const [key, label] of [["free", "Free"], ["pro", "Pro"]]) {
+      const card = document.createElement("div");
+      card.className = `pricing-card ${data.plan === key ? "active" : ""}`;
+
+      const name = document.createElement("p");
+      name.className = "pricing-card-name";
+      name.textContent = label + (data.plan === key ? " ✓" : "");
+      card.appendChild(name);
+
+      const limits = PLAN_LIMITS[key];
+      for (const [lKey, lLabel] of [["monthlySeconds", "月额度"], ["maxAudioSeconds", "单次最长"], ["rateLimitPerMinute", "速率(次/分)"]]) {
+        const item = document.createElement("p");
+        item.className = "pricing-card-item";
+        item.textContent = `${lLabel}: ${limits[lKey]}秒`;
+        card.appendChild(item);
+      }
+
+      if (key === "pro" && data.plan !== "pro") {
+        const btn = document.createElement("button");
+        btn.className = "pricing-card-btn";
+        btn.type = "button";
+        btn.textContent = "升级 Pro";
+        btn.addEventListener("click", () => {
+          void openBillingSession("billing-create-checkout-session", btn);
+        });
+        card.appendChild(btn);
+      } else if (key === "pro" && data.plan === "pro") {
+        const badge = document.createElement("span");
+        badge.className = "pricing-card-badge";
+        badge.textContent = "当前方案";
+        card.appendChild(badge);
+      }
+
+      grid.appendChild(card);
+    }
+
+    section.appendChild(grid);
+    return section;
+  }
+  _renderUsage(data) {
+    const section = document.createElement("div");
+    section.className = "account-section";
+
+    const title = document.createElement("p");
+    title.className = "account-section-title";
+    title.textContent = "用量明细";
+    section.appendChild(title);
+
+    const successRate = data.totalCount > 0 ? Math.round((data.successCount / data.totalCount) * 100) : 0;
+
+    const rows = [
+      ["总转写时长", `${data.usedSeconds.toLocaleString()} 秒`],
+      ["转写次数", `${data.successCount} 次`],
+      ["成功率", `${successRate}%`],
+      ["拒绝次数", `${data.rejectedCount} 次`],
+    ];
+
+    for (const [label, value] of rows) {
+      const row = document.createElement("div");
+      row.className = "account-row";
+      row.innerHTML = `<span class="account-row-label">${label}</span><span class="account-row-value">${value}</span>`;
+      section.appendChild(row);
+    }
+
+    return section;
+  }
+  _renderSubscription(data) {
+    const section = document.createElement("div");
+    section.className = "account-section";
+
+    const title = document.createElement("p");
+    title.className = "account-section-title";
+    title.textContent = "订阅管理";
+    section.appendChild(title);
+
+    const sub = data.subscription;
+    if (!sub) {
+      const hint = document.createElement("p");
+      hint.style.cssText = "margin:0;font-size:13px;color:var(--text-muted)";
+      hint.textContent = "暂无订阅";
+      section.appendChild(hint);
+      return section;
+    }
+
+    const statusMap = { active: "有效", trialing: "试用中", past_due: "逾期", canceled: "已取消", unpaid: "未支付" };
+    const rows = [
+      ["状态", statusMap[sub.status] || sub.status],
+    ];
+
+    if (sub.current_period_start && sub.current_period_end) {
+      const fmt = (d) => new Date(d).toLocaleDateString("zh-CN", { month: "numeric", day: "numeric" });
+      rows.push(["当前周期", `${fmt(sub.current_period_start)} - ${fmt(sub.current_period_end)}`]);
+    }
+
+    if (sub.cancel_at_period_end) {
+      const warn = document.createElement("p");
+      warn.style.cssText = "margin:6px 0 0;font-size:13px;color:#d97706";
+      warn.textContent = `将于 ${new Date(sub.current_period_end).toLocaleDateString("zh-CN")} 到期`;
+      section.appendChild(warn);
+    }
+
+    for (const [label, value] of rows) {
+      const row = document.createElement("div");
+      row.className = "account-row";
+      row.innerHTML = `<span class="account-row-label">${label}</span><span class="account-row-value">${value}</span>`;
+      section.appendChild(row);
+    }
+
+    const portalBtn = document.createElement("button");
+    portalBtn.className = "account-action-btn";
+    portalBtn.type = "button";
+    portalBtn.textContent = "管理订阅";
+    portalBtn.addEventListener("click", () => {
+      void openBillingSession("billing-create-portal-session", portalBtn);
+    });
+    section.appendChild(portalBtn);
+
+    return section;
+  }
+  _renderProfile(data) {
+    const section = document.createElement("div");
+    section.className = "account-section";
+
+    const title = document.createElement("p");
+    title.className = "account-section-title";
+    title.textContent = "个人资料";
+    section.appendChild(title);
+
+    // 邮箱行（脱敏）
+    const email = data.user?.email || "";
+    const masked = email.replace(/(.{2})(.*)(@.*)/, "$1***$3");
+    const emailRow = document.createElement("div");
+    emailRow.className = "account-row";
+    emailRow.innerHTML = `<span class="account-row-label">邮箱</span><span class="account-row-value">${masked}</span>`;
+    section.appendChild(emailRow);
+
+    const emailEditBtn = document.createElement("button");
+    emailEditBtn.className = "account-action-btn";
+    emailEditBtn.type = "button";
+    emailEditBtn.textContent = "修改邮箱";
+    section.appendChild(emailEditBtn);
+
+    // 密码行
+    const pwdRow = document.createElement("div");
+    pwdRow.className = "account-row";
+    pwdRow.innerHTML = `<span class="account-row-label">密码</span><span class="account-row-value">••••••</span>`;
+    section.appendChild(pwdRow);
+
+    const pwdEditBtn = document.createElement("button");
+    pwdEditBtn.className = "account-action-btn";
+    pwdEditBtn.type = "button";
+    pwdEditBtn.textContent = "修改密码";
+    section.appendChild(pwdEditBtn);
+
+    // 邮箱编辑交互
+    emailEditBtn.addEventListener("click", () => {
+      emailEditBtn.classList.add("hidden");
+      const group = document.createElement("div");
+      group.className = "profile-edit-group";
+      const input = document.createElement("input");
+      input.className = "profile-edit-input";
+      input.type = "email";
+      input.placeholder = "新邮箱";
+      const actions = document.createElement("div");
+      actions.className = "profile-edit-actions";
+      const cancel = document.createElement("button");
+      cancel.className = "account-action-btn";
+      cancel.type = "button";
+      cancel.textContent = "取消";
+      const confirm = document.createElement("button");
+      confirm.className = "account-action-btn primary";
+      confirm.type = "button";
+      confirm.textContent = "确认";
+      cancel.addEventListener("click", () => {
+        group.remove();
+        emailEditBtn.classList.remove("hidden");
+      });
+      confirm.addEventListener("click", async () => {
+        const newEmail = input.value.trim();
+        if (!newEmail) return;
+        confirm.disabled = true;
+        try {
+          const { error } = await window.VoiceBridgeAuth?.supabase.auth.updateUser({ email: newEmail });
+          if (error) throw error;
+          showToast("验证邮件已发送到新邮箱");
+          group.remove();
+          emailEditBtn.classList.remove("hidden");
+        } catch (err) {
+          showToast(err.message || "修改失败", true);
+        } finally {
+          confirm.disabled = false;
+        }
+      });
+      actions.appendChild(cancel);
+      actions.appendChild(confirm);
+      group.appendChild(input);
+      group.appendChild(actions);
+      section.insertBefore(group, emailEditBtn.nextSibling);
+      input.focus();
+    });
+
+    // 密码编辑交互
+    pwdEditBtn.addEventListener("click", () => {
+      pwdEditBtn.classList.add("hidden");
+      const group = document.createElement("div");
+      group.className = "profile-edit-group";
+      const currInput = document.createElement("input");
+      currInput.className = "profile-edit-input";
+      currInput.type = "password";
+      currInput.placeholder = "当前密码";
+      const newInput = document.createElement("input");
+      newInput.className = "profile-edit-input";
+      newInput.type = "password";
+      newInput.placeholder = "新密码（至少6位）";
+      const actions = document.createElement("div");
+      actions.className = "profile-edit-actions";
+      const cancel = document.createElement("button");
+      cancel.className = "account-action-btn";
+      cancel.type = "button";
+      cancel.textContent = "取消";
+      const confirm = document.createElement("button");
+      confirm.className = "account-action-btn primary";
+      confirm.type = "button";
+      confirm.textContent = "确认";
+      cancel.addEventListener("click", () => {
+        group.remove();
+        pwdEditBtn.classList.remove("hidden");
+      });
+      confirm.addEventListener("click", async () => {
+        const curr = currInput.value;
+        const newPwd = newInput.value;
+        if (!curr || !newPwd || newPwd.length < 6) {
+          showToast("请填写当前密码和新密码（至少6位）", true);
+          return;
+        }
+        confirm.disabled = true;
+        try {
+          const { error } = await window.VoiceBridgeAuth?.supabase.auth.updateUser({ password: newPwd });
+          if (error) throw error;
+          showToast("密码已修改");
+          group.remove();
+          pwdEditBtn.classList.remove("hidden");
+        } catch (err) {
+          showToast(err.message || "修改失败", true);
+        } finally {
+          confirm.disabled = false;
+        }
+      });
+      actions.appendChild(cancel);
+      actions.appendChild(confirm);
+      group.appendChild(currInput);
+      group.appendChild(newInput);
+      group.appendChild(actions);
+      section.insertBefore(group, pwdEditBtn.nextSibling);
+      currInput.focus();
+    });
+
+    // 退出登录按钮
+    const logoutBtn = document.createElement("button");
+    logoutBtn.className = "account-action-btn danger";
+    logoutBtn.type = "button";
+    logoutBtn.textContent = "退出登录";
+    logoutBtn.addEventListener("click", async () => {
+      this.close();
+      await window.VoiceBridgeAuth?.signOut();
+    });
+    section.appendChild(logoutBtn);
+
+    return section;
+  }
+  _renderDevices(data) {
+    const section = document.createElement("div");
+    section.className = "account-section";
+
+    const title = document.createElement("p");
+    title.className = "account-section-title";
+    title.textContent = "已连接设备";
+    section.appendChild(title);
+
+    if (!data.devices.length) {
+      const hint = document.createElement("p");
+      hint.style.cssText = "margin:0;font-size:13px;color:var(--text-muted)";
+      hint.textContent = "暂无已注册设备";
+      section.appendChild(hint);
+      return section;
+    }
+
+    const now = Date.now();
+    for (const device of data.devices) {
+      const item = document.createElement("div");
+      item.className = "device-item";
+
+      const lastSeen = device.last_seen_at ? new Date(device.last_seen_at) : null;
+      const isOnline = lastSeen && (now - lastSeen.getTime()) < 120_000;
+
+      const dot = document.createElement("span");
+      dot.className = `device-status-dot ${isOnline ? "online" : ""}`;
+      item.appendChild(dot);
+
+      const info = document.createElement("div");
+      info.className = "device-info";
+      const name = document.createElement("p");
+      name.className = "device-name";
+      name.textContent = device.device_name || device.platform || "未知设备";
+      info.appendChild(name);
+      const seen = document.createElement("p");
+      seen.className = "device-last-seen";
+      seen.textContent = lastSeen ? formatRelativeTime(now - lastSeen.getTime()) : "未知";
+      info.appendChild(seen);
+      item.appendChild(info);
+
+      const removeBtn = document.createElement("button");
+      removeBtn.className = "device-remove-btn";
+      removeBtn.type = "button";
+      removeBtn.textContent = "移除";
+      removeBtn.addEventListener("click", async () => {
+        if (removeBtn.textContent === "移除") {
+          removeBtn.textContent = "确认？";
+          setTimeout(() => { removeBtn.textContent = "移除"; }, 3000);
+          return;
+        }
+        removeBtn.disabled = true;
+        try {
+          const { error } = await window.VoiceBridgeAuth?.supabase
+            .from("devices").delete().eq("id", device.id);
+          if (error) throw error;
+          item.remove();
+          if (!section.querySelector(".device-item")) {
+            section.innerHTML = "<p style='margin:0;font-size:13px;color:var(--text-muted)'>暂无已注册设备</p>";
+          }
+        } catch (err) {
+          showToast(err.message || "移除失败", true);
+          removeBtn.disabled = false;
+        }
+      });
+      item.appendChild(removeBtn);
+
+      section.appendChild(item);
+    }
+
+    return section;
+  }
 }
 
 const accountDrawer = new AccountDrawer();
