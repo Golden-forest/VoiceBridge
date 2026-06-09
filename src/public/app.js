@@ -233,7 +233,8 @@ async function handleAuthState(event) {
         const plan = sub && isPaidStatus(sub.status) ? "pro" : "free";
         planBadge.textContent = plan === "pro" ? "Pro" : "Free";
         planBadge.classList.toggle("pro", plan === "pro");
-      });
+      })
+      .catch(() => {});
   }
   try {
     await realtime.start();
@@ -1495,7 +1496,10 @@ class AccountDrawer {
         this._renderDevices(data),
       );
     } catch (error) {
-      body.innerHTML = `<p style='text-align:center;color:var(--danger)'>${error.message || "加载失败"}</p>`;
+      const errP = document.createElement("p");
+      errP.style.cssText = "text-align:center;color:var(--danger)";
+      errP.textContent = error.message || "加载失败";
+      body.replaceChildren(errP);
     }
   }
 
@@ -1509,6 +1513,10 @@ class AccountDrawer {
       supabase.from("usage_events").select("status, claim_seconds").eq("user_id", user.id),
       supabase.from("devices").select("*").eq("user_id", user.id).order("last_seen_at", { ascending: false }),
     ]);
+
+    if (subRes.error) throw new Error("获取订阅信息失败");
+    if (usageRes.error) throw new Error("获取用量信息失败");
+    if (devicesRes.error) throw new Error("获取设备信息失败");
 
     const subscription = subRes.data || null;
     const usageEvents = usageRes.data || [];
@@ -1702,7 +1710,9 @@ class AccountDrawer {
 
     // 邮箱行（脱敏）
     const email = data.user?.email || "";
-    const masked = email.replace(/(.{2})(.*)(@.*)/, "$1***$3");
+    const masked = email.length > 2
+      ? email.replace(/(.{2})(.*)(@.*)/, "$1***$3")
+      : email;
     const emailRow = document.createElement("div");
     emailRow.className = "account-row";
     emailRow.innerHTML = `<span class="account-row-label">邮箱</span><span class="account-row-value">${masked}</span>`;
