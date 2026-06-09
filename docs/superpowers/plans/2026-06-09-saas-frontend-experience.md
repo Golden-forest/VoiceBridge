@@ -1513,3 +1513,48 @@ Expected: Clean working tree (all changes committed).
 git add -A
 git commit -m "feat(ui): finalize SaaS frontend experience — account drawer, auth enhancements"
 ```
+
+---
+
+## 代码审查修复（2026-06-10）
+
+全面巡检发现 8 个 CRITICAL、16 个 IMPORTANT、10 个性能瓶颈。以下为修复跟踪。
+
+### 第一批：低成本快速修复（subagent 并行执行）
+
+| 编号 | 文件 | 问题 | 状态 |
+|------|------|------|------|
+| C1 | app.js | XSS — error.message 通过 innerHTML 插入 | 修复中 |
+| C2 | app.js | usage_events 缺少时间范围过滤 | 待讨论 |
+| C3 | app.js | plan badge 查询缺少 .catch() | 修复中 |
+| C4 | index.html | 重置表单嵌套在 `<form>` 内导致校验拦截 | 修复中 |
+| C5 | auth.js | 密码重置按钮无冷却机制 | 修复中 |
+| I1 | app.js | _fetchData 未检查 Supabase error | 修复中 |
+| I2 | app.js | 邮箱脱敏对短邮箱不生效 | 修复中 |
+| I6 | auth.js | 重发按钮切换模式时未隐藏 | 修复中 |
+| I7 | auth.js | Token 过期提示未实现 | 修复中 |
+| I8 | index.html | Drawer 缺少 ARIA 角色 | 修复中 |
+| I9 | style.css | Drawer 与 Add-Cmd z-index 冲突 | 修复中 |
+| I15 | style.css | 320px 屏幕定价卡片过窄 | 修复中 |
+| I16 | style.css | Drawer overlay 缺少 cursor: pointer | 修复中 |
+| — | style.css | Drawer 缺少滑入动画 | 修复中 |
+| — | style.css | Drawer body 缺少滚动条样式 | 修复中 |
+
+### 第二批：需要讨论的问题
+
+| 编号 | 文件 | 问题 | 难度 | 待讨论点 |
+|------|------|------|------|---------|
+| C2 | app.js | usage_events 时间范围过滤 | 中 | 需拆分 Promise.all 为两步查询 |
+| I3 | app.js | 密码修改收集了当前密码但未使用 | 中 | 是移除 UI 还是添加 reauthenticate？ |
+| I4 | app.js | 设备移除未阻止移除当前设备 | 中 | 如何识别当前设备 ID？ |
+| C6 | windowManager.js | AppleScript 注入风险 | 高 | 需白名单或参数化方案 |
+| C7 | ws.js | WebSocket 端点无认证 | 中 | token 认证 or 限制 localhost？ |
+| I11 | commands.js | 命令文件读写无锁 | 低 | 改 SQLite 还是加文件锁？ |
+
+### 性能优化（待安排）
+
+| 排名 | 位置 | 瓶颈 | 预期改进 |
+|------|------|------|---------|
+| 1 | audioConverter + tencentCloudTranscriber | ffmpeg + base64 串行 5-10s | 跳过 ffmpeg 省 1-3s |
+| 2 | app.js AccountDrawer | 无缓存每次 3 个查询 | 30s TTL 减少 50-70% 请求 |
+| 3 | app.js CommandLibrary | render() 全量 DOM 重建 | debounce + 差量化 |
