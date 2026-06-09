@@ -60,14 +60,18 @@ if (!isCloudMode) {
   overlay?.classList.toggle("hidden", Boolean(data.session));
   emitAuthReady(data.session);
 
-  supabase.auth.onAuthStateChange((_event, session) => {
+  supabase.auth.onAuthStateChange((event, session) => {
     overlay?.classList.toggle("hidden", Boolean(session));
+    if (!session && event !== "SIGNED_OUT") {
+      setMessage("会话已过期，请重新登录");
+    }
     emitAuthReady(session);
   });
 }
 
 switchBtn?.addEventListener("click", () => {
   setMode(mode === "sign-in" ? "sign-up" : "sign-in");
+  resendBtn?.classList.add("hidden");
 });
 
 logoutBtn?.addEventListener("click", async () => {
@@ -149,10 +153,14 @@ resetBtn?.addEventListener("click", async () => {
     }
     if (resetInfo) resetInfo.textContent = "重置链接已发送到您的邮箱。";
     resetBtn.textContent = "已发送";
+    resetBtn.disabled = true;
+    setTimeout(() => {
+      resetBtn.textContent = "发送重置链接";
+      resetBtn.disabled = false;
+    }, 5000);
   } catch (error) {
-    setMessage(error instanceof Error ? error.message : "发送失败，请稍后重试。", true);
-  } finally {
     resetBtn.disabled = false;
+    setMessage(error instanceof Error ? error.message : "发送失败，请稍后重试。", true);
   }
 });
 
