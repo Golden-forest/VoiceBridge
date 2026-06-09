@@ -199,8 +199,20 @@ class WindowSelector {
   }
 
   _toggle() { this._isOpen ? this._close() : this._open(); }
-  _open() { this._isOpen = true; this.el.dropdown.classList.remove("hidden"); this.el.btn.setAttribute("aria-expanded", "true"); this._fetchWindows(); }
-  _close() { this._isOpen = false; this.el.dropdown.classList.add("hidden"); this.el.btn.setAttribute("aria-expanded", "false"); }
+  _open() {
+    this._isOpen = true;
+    const btnRect = this.el.btn.getBoundingClientRect();
+    this.el.dropdown.style.top = (btnRect.bottom + 12) + "px";
+    this.el.dropdown.classList.remove("hidden");
+    this.el.btn.setAttribute("aria-expanded", "true");
+    this._fetchWindows();
+  }
+  _close() {
+    this._isOpen = false;
+    this.el.dropdown.classList.add("hidden");
+    this.el.dropdown.style.top = "";
+    this.el.btn.setAttribute("aria-expanded", "false");
+  }
 
   _updateButton() {
     if (this.selectedWindow) {
@@ -241,6 +253,29 @@ class WindowSelector {
 
   _renderWindows(groups) {
     this.el.list.innerHTML = "";
+    // 固定选项：光标位置（始终在最顶部）
+    const cursorBtn = document.createElement("button");
+    cursorBtn.className = "window-item";
+    cursorBtn.type = "button";
+    const cursorSelected = !this.selectedWindow;
+    if (cursorSelected) cursorBtn.classList.add("selected");
+    cursorBtn.setAttribute("aria-selected", String(cursorSelected));
+    const cursorCheck = document.createElement("span");
+    cursorCheck.className = "window-item-check";
+    cursorCheck.textContent = cursorSelected ? "✓" : "";
+    cursorBtn.appendChild(cursorCheck);
+    const cursorTitle = document.createElement("span");
+    cursorTitle.className = "window-item-title";
+    cursorTitle.textContent = "光标位置";
+    cursorBtn.appendChild(cursorTitle);
+    cursorBtn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      this.selectedWindow = null;
+      this._saveSelection();
+      this._updateButton();
+      this._close();
+    });
+    this.el.list.appendChild(cursorBtn);
     groups.forEach((group) => {
       const groupEl = document.createElement("div");
       groupEl.className = "window-app-group";
