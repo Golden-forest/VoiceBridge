@@ -193,6 +193,10 @@ async function handleAuthState(event) {
   updateBillingControls(Boolean(session));
   if (!isCloudMode) return;
   if (!session || !user || !window.VoiceBridgeAuth?.supabase) {
+    if (activeCloudUserId) {
+      showToast("会话已过期，请重新登录");
+      activeCloudUserId = "";
+    }
     await stopCloudRealtime();
     resetCloudDeviceSelect();
     return;
