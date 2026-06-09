@@ -179,17 +179,17 @@
         <button id="authSubmitBtn" class="auth-submit-btn" type="submit">登录</button>
         <button id="authSwitchBtn" class="auth-switch-btn" type="button">创建账号</button>
         <p id="authMessage" class="auth-message" role="status"></p>
-        <!-- 重置密码表单（默认隐藏） -->
-        <div id="authResetForm" class="hidden">
-          <p class="auth-reset-info">输入注册邮箱，我们将发送重置链接。</p>
-          <label class="auth-label" for="authResetEmail">邮箱</label>
-          <input id="authResetEmail" class="auth-input" type="email" autocomplete="email" required />
-          <button id="authResetBtn" class="auth-submit-btn" type="button">发送重置链接</button>
-          <button id="authResetBackBtn" class="auth-switch-btn" type="button">返回登录</button>
-        </div>
         <!-- 邮箱验证重发（默认隐藏） -->
         <button id="authResendBtn" class="auth-switch-btn hidden" type="button">重新发送验证邮件</button>
       </form>
+      <!-- 重置密码表单（默认隐藏） -->
+      <div id="authResetForm" class="hidden">
+        <p class="auth-reset-info">输入注册邮箱，我们将发送重置链接。</p>
+        <label class="auth-label" for="authResetEmail">邮箱</label>
+        <input id="authResetEmail" class="auth-input" type="email" autocomplete="email" />
+        <button id="authResetBtn" class="auth-submit-btn" type="button">发送重置链接</button>
+        <button id="authResetBackBtn" class="auth-switch-btn" type="button">返回登录</button>
+      </div>
     </div>
 
     <script type="importmap">
@@ -204,9 +204,9 @@
     <script src="/app.js" type="module"></script>
 
     <!-- 账户设置抽屉 -->
-    <div id="accountDrawer" class="account-drawer hidden">
-      <div class="account-drawer-overlay"></div>
-      <div class="account-drawer-sheet">
+    <div id="accountDrawer" class="account-drawer hidden" role="presentation">
+      <div class="account-drawer-overlay" aria-hidden="true"></div>
+      <div class="account-drawer-sheet" role="dialog" aria-modal="true" aria-labelledby="accountDrawerTitle">
         <div class="account-drawer-handle"></div>
         <div class="account-drawer-header">
           <h2 class="account-drawer-title">账户设置</h2>

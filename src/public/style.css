@@ -1121,7 +1121,7 @@ fieldset.add-cmd-fieldset legend {
 .account-drawer {
   position: fixed;
   inset: 0;
-  z-index: 100;
+  z-index: 150;
 }
 .account-drawer.hidden {
   display: none;
@@ -1132,6 +1132,7 @@ fieldset.add-cmd-fieldset legend {
   background: rgba(200, 120, 50, 0.15);
   backdrop-filter: blur(4px);
   -webkit-backdrop-filter: blur(4px);
+  cursor: pointer;
 }
 .account-drawer-sheet {
   position: fixed;
@@ -1145,10 +1146,15 @@ fieldset.add-cmd-fieldset legend {
   border-radius: 22px 22px 0 0;
   background: var(--bg-card);
   box-shadow: 0 -4px 24px rgba(0, 0, 0, 0.12);
-  z-index: 101;
+  z-index: 151;
   max-height: 80svh;
   display: grid;
   grid-template-rows: auto 1fr;
+  transform: translateY(100%);
+  transition: transform 0.35s var(--ease-smooth);
+}
+.account-drawer:not(.hidden) .account-drawer-sheet {
+  transform: translateY(0);
 }
 .account-drawer-handle {
   width: 36px;
@@ -1190,6 +1196,15 @@ fieldset.add-cmd-fieldset legend {
   display: flex;
   flex-direction: column;
   gap: 16px;
+  scrollbar-width: thin;
+  scrollbar-color: var(--border-strong) transparent;
+}
+.account-drawer-body::-webkit-scrollbar {
+  width: 4px;
+}
+.account-drawer-body::-webkit-scrollbar-thumb {
+  background: var(--border-strong);
+  border-radius: 999px;
 }
 
 /* === Plan Badge === */
@@ -1718,6 +1733,15 @@ fieldset.add-cmd-fieldset legend {
 
   .input-card {
     padding: 10px;
+  }
+}
+
+@media (max-width: 395px) {
+  .pricing-grid {
+    grid-template-columns: 1fr;
+  }
+  .account-drawer-sheet {
+    padding: 16px;
   }
 }
 
