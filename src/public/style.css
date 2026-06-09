@@ -1117,6 +1117,342 @@ fieldset.add-cmd-fieldset legend {
   margin: 0 auto 14px;
 }
 
+/* === Account Drawer === */
+.account-drawer {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+}
+.account-drawer.hidden {
+  display: none;
+}
+.account-drawer-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(200, 120, 50, 0.15);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+}
+.account-drawer-sheet {
+  position: fixed;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  max-width: 430px;
+  margin: 0 auto;
+  padding: 20px;
+  padding-bottom: max(20px, env(safe-area-inset-bottom));
+  border-radius: 22px 22px 0 0;
+  background: var(--bg-card);
+  box-shadow: 0 -4px 24px rgba(0, 0, 0, 0.12);
+  z-index: 101;
+  max-height: 80svh;
+  display: grid;
+  grid-template-rows: auto 1fr;
+}
+.account-drawer-handle {
+  width: 36px;
+  height: 4px;
+  border-radius: 999px;
+  background: var(--border-strong);
+  margin: 0 auto 14px;
+}
+.account-drawer-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 16px;
+}
+.account-drawer-title {
+  font-size: 18px;
+  font-weight: 750;
+  color: var(--text-primary);
+  margin: 0;
+}
+.account-drawer-close {
+  width: 32px;
+  height: 32px;
+  border-radius: 999px;
+  border: none;
+  background: var(--bg-soft);
+  color: var(--text-secondary);
+  font-size: 16px;
+  cursor: pointer;
+  display: grid;
+  place-items: center;
+}
+.account-drawer-close:hover {
+  background: var(--border-strong);
+}
+.account-drawer-body {
+  overflow-y: auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+/* === Plan Badge === */
+.plan-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 700;
+  background: var(--bg-soft);
+  color: var(--text-secondary);
+  border: 1px solid var(--border);
+}
+.plan-badge.pro {
+  background: var(--accent-soft);
+  color: var(--accent-deep);
+  border-color: rgba(232, 121, 58, 0.2);
+}
+
+/* === Account Section === */
+.account-section {
+  padding: 14px;
+  border-radius: var(--radius-md);
+  background: var(--bg-soft);
+}
+.account-section-title {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin: 0 0 10px;
+}
+.account-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--border);
+}
+.account-row:last-child {
+  border-bottom: none;
+  padding-bottom: 0;
+}
+.account-row-label {
+  font-size: 14px;
+  color: var(--text-secondary);
+}
+.account-row-value {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+.account-action-btn {
+  padding: 6px 14px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--bg-card);
+  color: var(--text-primary);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.account-action-btn:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+.account-action-btn.primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--accent-text);
+}
+.account-action-btn.primary:hover {
+  background: var(--accent-deep);
+}
+.account-action-btn.danger {
+  color: var(--danger);
+  border-color: rgba(239, 68, 68, 0.2);
+}
+.account-action-btn.danger:hover {
+  background: #fef2f2;
+}
+
+/* === Usage Bar === */
+.usage-bar-track {
+  width: 100%;
+  height: 8px;
+  border-radius: 999px;
+  background: var(--border);
+  overflow: hidden;
+  margin-top: 6px;
+}
+.usage-bar-fill {
+  height: 100%;
+  border-radius: 999px;
+  background: var(--accent-gradient);
+  transition: width 0.4s var(--ease-smooth);
+}
+.usage-bar-fill.warning {
+  background: linear-gradient(90deg, #f59e0b, #d97706);
+}
+.usage-bar-fill.critical {
+  background: linear-gradient(90deg, #ef4444, #dc2626);
+}
+.usage-stats {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.usage-stat-row {
+  display: flex;
+  justify-content: space-between;
+  font-size: 13px;
+}
+.usage-stat-label {
+  color: var(--text-secondary);
+}
+.usage-stat-value {
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+/* === Pricing Cards === */
+.pricing-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+.pricing-card {
+  padding: 14px;
+  border-radius: var(--radius-md);
+  border: 1.5px solid var(--border);
+  background: var(--bg-card);
+  text-align: center;
+}
+.pricing-card.active {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 1px var(--accent);
+}
+.pricing-card-name {
+  font-size: 15px;
+  font-weight: 750;
+  color: var(--text-primary);
+  margin: 0 0 8px;
+}
+.pricing-card.active .pricing-card-name {
+  color: var(--accent);
+}
+.pricing-card-item {
+  font-size: 12px;
+  color: var(--text-secondary);
+  padding: 3px 0;
+}
+.pricing-card-btn {
+  margin-top: 10px;
+  width: 100%;
+  padding: 8px;
+  border-radius: 999px;
+  border: none;
+  background: var(--accent-gradient);
+  color: var(--accent-text);
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  box-shadow: var(--shadow-accent);
+}
+.pricing-card-btn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+.pricing-card-badge {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: var(--accent-soft);
+  color: var(--accent-deep);
+  font-size: 11px;
+  font-weight: 700;
+  margin-left: 4px;
+}
+
+/* === Device List === */
+.device-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--border);
+}
+.device-item:last-child {
+  border-bottom: none;
+  padding-bottom: 0;
+}
+.device-status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  background: var(--text-muted);
+  flex-shrink: 0;
+}
+.device-status-dot.online {
+  background: var(--accent);
+  box-shadow: 0 0 6px rgba(232, 121, 58, 0.4);
+}
+.device-info {
+  flex: 1;
+  min-width: 0;
+}
+.device-name {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.device-last-seen {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+.device-remove-btn {
+  padding: 4px 10px;
+  border-radius: 999px;
+  border: none;
+  background: none;
+  color: var(--text-muted);
+  font-size: 12px;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+.device-remove-btn:hover {
+  color: var(--danger);
+  background: #fef2f2;
+}
+
+/* === Profile Edit === */
+.profile-edit-group {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.profile-edit-input {
+  min-height: 38px;
+  padding: 0 12px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  background: var(--bg-card);
+  color: var(--text-primary);
+  font-size: 14px;
+}
+.profile-edit-input:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px rgba(232, 121, 58, 0.15);
+}
+.profile-edit-actions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
 .add-cmd-title {
   font-size: 18px;
   font-weight: 750;
@@ -1482,6 +1818,31 @@ fieldset.add-cmd-fieldset legend {
   }
   .auth-reset-info {
     color: var(--text-secondary);
+  }
+
+  .account-drawer-sheet {
+    background: var(--bg-card);
+    box-shadow: 0 -4px 24px rgba(0, 0, 0, 0.4);
+  }
+  .account-drawer-close {
+    background: var(--bg-soft);
+  }
+  .account-section {
+    background: var(--bg-soft);
+  }
+  .pricing-card {
+    background: var(--bg-card);
+  }
+  .profile-edit-input {
+    background: var(--bg-card);
+    color: var(--text-primary);
+  }
+  .device-remove-btn:hover {
+    background: #3b1515;
+    color: #fca5a5;
+  }
+  .account-action-btn.danger:hover {
+    background: #3b1515;
   }
 }
 
