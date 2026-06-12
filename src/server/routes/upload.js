@@ -6,11 +6,23 @@ import express from "express";
 import multer from "multer";
 
 import { transcribeAudio } from "../asr/transcriber.js";
-import { outputText } from "../input/outputText.js";
+import { createAsrTextOutputBuffer } from "../input/asrTextOutputBuffer.js";
 import { resolveAutoPaste } from "./uploadOptions.js";
 
 export function createUploadRouter({ config, wsHub, tmpDir }) {
   const router = express.Router();
+  const asrOutputBuffer = createAsrTextOutputBuffer({
+    onFlush: ({ text, output }) => {
+      wsHub.broadcast({
+        type: "output",
+        text,
+        copied: output.copied,
+        pasted: output.pasted,
+        pasteError: output.pasteError,
+        buffered: false
+      });
+    }
+  });
   const upload = multer({
     storage: multer.diskStorage({
       destination: tmpDir,
@@ -59,42 +71,38 @@ export function createUploadRouter({ config, wsHub, tmpDir }) {
         message: "正在识别..."
       });
 
-      const text = await transcribeAudio({ filePath, tmpDir }, config);
+      const rawText = await transcribeAudio({ filePath, tmpDir }, config);
+      const bufferResult = await asrOutputBuffer.handleText(rawText, {
+        autoPaste,
+        targetWindow
+      });
+      const text = bufferResult.text;
 
       wsHub.broadcast({
         type: "result",
         text,
-        message: "识别完成"
+        message: getBufferMessage(bufferResult)
       });
 
-      let output;
-      try {
-        output = await outputText(text, { autoPaste, targetWindow });
-      } catch (clipboardError) {
-        const msg = clipboardError instanceof Error ? clipboardError.message : String(clipboardError);
-        console.error("Clipboard/paste error:", clipboardError);
-        // STT succeeded but clipboard write failed — still return the text
+      const output = {
+        ...bufferResult.output,
+        command: bufferResult.command,
+        keyPressed: bufferResult.keyPressed,
+        keyError: bufferResult.keyError
+      };
+      if (!bufferResult.flushed) {
         wsHub.broadcast({
           type: "output",
           text,
-          copied: false,
-          pasted: false,
-          pasteError: msg
-        });
-        return res.json({
-          ok: true,
-          text,
-          output: { copied: false, pasted: false, pasteError: msg }
+          copied: output.copied,
+          pasted: output.pasted,
+          pasteError: output.pasteError,
+          buffered: output.buffered,
+          command: output.command,
+          keyPressed: output.keyPressed,
+          keyError: output.keyError
         });
       }
-
-      wsHub.broadcast({
-        type: "output",
-        text,
-        copied: output.copied,
-        pasted: output.pasted,
-        pasteError: output.pasteError
-      });
 
       return res.json({
         ok: true,
@@ -143,4 +151,21 @@ export function createUploadRouter({ config, wsHub, tmpDir }) {
   });
 
   return router;
+}
+
+function getBufferMessage(bufferResult) {
+  if (!bufferResult.command) {
+    return bufferResult.buffered ? "识别完成，已加入输入缓冲" : "识别完成";
+  }
+
+  switch (bufferResult.command) {
+    case "send":
+      return "已执行发送";
+    case "delete":
+      return bufferResult.keyPressed ? "已执行删除" : "已从输入缓冲删除";
+    case "clear":
+      return "已清空输入缓冲";
+    default:
+      return "已加入输入缓冲";
+  }
 }

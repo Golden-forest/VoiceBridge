@@ -1097,10 +1097,16 @@ async function uploadAudio(blob, extension) {
     const payload = await response.json();
     if (!response.ok || !payload.ok) throw new Error(payload.error || "上传失败");
     const output = payload.output || {};
-    if (output.pasted) {
+    if (output.buffered) {
+      showToast("已加入输入缓冲。");
+    } else if (output.command) {
+      showToast(output.keyError ? "语音命令执行失败。" : "已执行语音命令。", Boolean(output.keyError));
+    } else if (output.pasted) {
       showToast("已复制并自动粘贴。");
-    } else {
+    } else if (output.copied) {
       showCopyToast("已复制到电脑剪切板。", payload.text || "");
+    } else {
+      showToast("识别成功，但写入剪切板失败。", true);
     }
   } catch (error) {
     showToast(error.message, true);
@@ -1157,7 +1163,11 @@ function connectWebSocket() {
         showToast(payload.message, payload.type === "error");
       }
       if (payload.type === "output") {
-        if (!payload.copied) {
+        if (payload.buffered) {
+          showToast("已加入输入缓冲。");
+        } else if (payload.command) {
+          showToast(payload.keyError ? "语音命令执行失败。" : "已执行语音命令。", Boolean(payload.keyError));
+        } else if (!payload.copied) {
           showToast("识别成功，但写入剪切板失败。", true);
         } else if (!payload.pasted) {
           if (payload.pasteError) {

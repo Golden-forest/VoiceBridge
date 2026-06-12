@@ -125,6 +125,7 @@ export function createTencentSentenceRecognitionRequest({
     EngSerViceType: config.tencentAsrEngServiceType,
     SourceType: 1,
     VoiceFormat: config.tencentAsrVoiceFormat,
+    FilterPunc: config.tencentAsrFilterPunc ?? 1,
     UsrAudioKey: `voicebridge-${timestamp}`,
     Data: audioBase64,
     DataLen: audioLength

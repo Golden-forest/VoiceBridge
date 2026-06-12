@@ -22,6 +22,7 @@ test("createTencentSentenceRecognitionRequest builds a signed SentenceRecognitio
   assert.equal(request.headers["X-TC-Region"], "ap-shanghai");
   assert.equal(request.payload.SourceType, 1);
   assert.equal(request.payload.VoiceFormat, "wav");
+  assert.equal(request.payload.FilterPunc, 1);
   assert.equal(request.payload.Data, Buffer.from("audio").toString("base64"));
   assert.equal(request.payload.DataLen, 5);
   assert.match(request.headers.Authorization, /TC3-HMAC-SHA256 Credential=secret-id/);
