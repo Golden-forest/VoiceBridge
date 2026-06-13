@@ -25,7 +25,7 @@ test("createBillingSession posts to a Supabase Edge Function with auth headers",
   assert.equal(calls[0].url, "https://project.supabase.co/functions/v1/billing-create-checkout-session");
   assert.equal(calls[0].options.method, "POST");
   assert.equal(calls[0].options.headers.apikey, "anon-key");
-  assert.equal(calls[0].options.headers.authorization, "Bearer access-token");
+  assert.equal(calls[0].options.headers.Authorization, "Bearer access-token");
 });
 
 test("createBillingSession requires a signed-in Supabase session", async () => {

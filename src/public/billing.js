@@ -32,7 +32,7 @@ export async function createBillingSession({
     method: "POST",
     headers: {
       apikey: anonKey,
-      authorization: `Bearer ${accessToken}`
+      Authorization: `Bearer ${accessToken}`
     }
   });
   const payload = await parseJson(response);
