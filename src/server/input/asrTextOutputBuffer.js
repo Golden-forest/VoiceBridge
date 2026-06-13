@@ -4,6 +4,7 @@ import { outputText } from "./outputText.js";
 const DEFAULT_FLUSH_DELAY_MS = 2_800;
 const DEFAULT_MERGE_WINDOW_MS = 2_000;
 const TRAILING_ASR_PUNCTUATION_RE = /[\s。．.，,、；;：:？！!?…]+$/u;
+const SENTENCE_END_RE = /[。．.！!？?]$/;
 
 const COMMANDS = new Map([
   ["句号", { name: "period", insert: "。" }],
@@ -147,7 +148,8 @@ export function createAsrTextOutputBuffer({
     }
 
     cancelFlush();
-    const text = buffer;
+    let text = buffer;
+    if (!SENTENCE_END_RE.test(text)) text += "。";
     const options = pendingOptions;
     buffer = "";
     lastInputAt = null;

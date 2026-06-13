@@ -76,7 +76,7 @@ test("ASR output stays in a local buffer, merges nearby text, then flushes once 
 
   assert.deepEqual(outputs, [
     {
-      text: "我想一下继续说",
+      text: "我想一下继续说。",
       options: {
         autoPaste: true,
         targetWindow: { appName: "Notes", windowTitle: "Draft" }
@@ -129,4 +129,60 @@ test("ASR buffer handles simple voice commands before text reaches the computer 
   await buffer.handleText("删除。");
 
   assert.deepEqual(keypresses, ["enter", "delete"]);
+});
+
+test("auto-append period on flush when text has no ending punctuation", async () => {
+  const outputs = [];
+  const scheduler = createManualScheduler();
+  const buffer = createAsrTextOutputBuffer({
+    now: () => 1_000,
+    setTimer: scheduler.setTimer,
+    clearTimer: scheduler.clearTimer,
+    outputTextFn: async (text) => {
+      outputs.push(text);
+      return { copied: true, pasted: true, pasteError: null };
+    }
+  });
+
+  // 无标点 → 自动补句号
+  await buffer.handleText("今天天气不错");
+  await scheduler.runLastTimer();
+  assert.deepEqual(outputs, ["今天天气不错。"]);
+
+  // 已有句号 → 不重复
+  outputs.length = 0;
+  await buffer.handleText("你好，世界。");
+  await scheduler.runLastTimer();
+  assert.deepEqual(outputs, ["你好，世界。"]);
+
+  // 以换行结尾 → 仍然补句号
+  outputs.length = 0;
+  await buffer.handleText("第一行\n第二行");
+  await scheduler.runLastTimer();
+  assert.deepEqual(outputs, ["第一行\n第二行。"]);
+
+  // ASR 返回的？会被 stripTrailingAsrPunctuation 剥离，所以仍然补句号
+  outputs.length = 0;
+  await buffer.handleText("你好吗？");
+  await scheduler.runLastTimer();
+  assert.deepEqual(outputs, ["你好吗。"]);
+
+  // ASR 返回的！同样被剥离，补句号
+  outputs.length = 0;
+  await buffer.handleText("太好了！");
+  await scheduler.runLastTimer();
+  assert.deepEqual(outputs, ["太好了。"]);
+
+  // 英文句号结尾 → 被剥离，补中文句号
+  outputs.length = 0;
+  await buffer.handleText("Hello world.");
+  await scheduler.runLastTimer();
+  assert.deepEqual(outputs, ["Hello world。"]);
+
+  // 通过语音命令"句号"插入的句号会保留（在 buffer 内部，不经过 strip）
+  outputs.length = 0;
+  await buffer.handleText("用户说了句号");
+  await buffer.handleText("句号。");
+  await scheduler.runLastTimer();
+  assert.deepEqual(outputs, ["用户说了句号。"]);
 });
