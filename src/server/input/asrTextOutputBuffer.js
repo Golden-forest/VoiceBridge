@@ -70,6 +70,18 @@ export function createAsrTextOutputBuffer({
     buffer += text;
     lastInputAt = currentTime;
     pendingOptions = normalizeOutputOptions(options);
+
+    if (SENTENCE_END_RE.test(buffer)) {
+      await flushPending({ reason: "sentence-end" });
+      return buildResult({
+        text,
+        command,
+        buffered: false,
+        flushed: true,
+        output: pendingOutput(false)
+      });
+    }
+
     scheduleFlush();
 
     return buildResult({

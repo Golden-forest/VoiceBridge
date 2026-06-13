@@ -1093,7 +1093,10 @@ async function uploadAudio(blob, extension) {
       formData.append("targetAppName", windowSelector.targetWindow.appName);
       formData.append("targetWindowTitle", windowSelector.targetWindow.windowTitle);
     }
-    const response = await fetch("/api/upload", { method: "POST", body: formData });
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 30_000);
+    const response = await fetch("/api/upload", { method: "POST", body: formData, signal: controller.signal });
+    clearTimeout(timeout);
     const payload = await response.json();
     if (!response.ok || !payload.ok) throw new Error(payload.error || "上传失败");
     const output = payload.output || {};
@@ -1109,6 +1112,11 @@ async function uploadAudio(blob, extension) {
       showToast("识别成功，但写入剪切板失败。", true);
     }
   } catch (error) {
+    clearTimeout(timeout);
+    if (error.name === "AbortError") {
+      showToast("上传超时，请检查网络连接", true);
+      return;
+    }
     showToast(error.message, true);
   } finally {
     finishUpload();

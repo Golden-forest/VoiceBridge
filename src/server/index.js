@@ -43,7 +43,7 @@ const tlsServer = https.createServer({ key, cert }, app);
 const wsHub = createWebSocketHub(tlsServer);
 
 app.use(express.json());
-app.use(express.static(publicDir));
+app.use(express.static(publicDir, { maxAge: "7d", etag: true }));
 app.get("/api/health", (_req, res) => {
   res.json({
     ok: true,

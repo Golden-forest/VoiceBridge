@@ -7,7 +7,7 @@ const VERSION = "2019-06-14";
 const ACTION = "SentenceRecognition";
 
 const MAX_RETRIES = 2;
-const RETRY_DELAYS = [1000, 2000];
+const RETRY_DELAYS = [500, 1000];
 
 /**
  * Read a file and return its base64-encoded contents.
@@ -32,7 +32,7 @@ export async function transcribeWithTencentCloud({ filePath, config }) {
       });
 
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 30_000);
+      const timeoutId = setTimeout(() => controller.abort(), 10_000);
 
       let response;
       try {
@@ -45,7 +45,7 @@ export async function transcribeWithTencentCloud({ filePath, config }) {
       } catch (err) {
         clearTimeout(timeoutId);
         if (err.name === "AbortError") {
-          const error = new Error("Tencent ASR request timed out after 30s");
+          const error = new Error("Tencent ASR request timed out after 10s");
           error.retryable = true;
           error.publicMessage = "语音识别请求超时，请重试。";
           err = error;
@@ -72,6 +72,7 @@ export async function transcribeWithTencentCloud({ filePath, config }) {
 
         // 5xx or response error without status — retry
         const error = new Error(`Tencent ASR failed: ${message}`);
+        error.publicMessage = "腾讯云语音识别服务暂时不可用，请稍后重试。";
         throw error;
       }
 
