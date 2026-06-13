@@ -34,7 +34,8 @@ try {
 }
 
 const config = loadConfig();
-const { key, cert } = await ensureCertificates(rootDir);
+const localIp = getLocalIp();
+const { key, cert } = await ensureCertificates(rootDir, { localIp });
 
 // ---- HTTPS 主服务 ----
 const app = express();
@@ -42,7 +43,7 @@ const tlsServer = https.createServer({ key, cert }, app);
 const wsHub = createWebSocketHub(tlsServer);
 
 app.use(express.json());
-app.use(express.static(publicDir));
+app.use(express.static(publicDir, { maxAge: "7d", etag: true }));
 app.use("/shared", express.static(path.join(rootDir, "src/shared")));
 
 app.get("/config.js", (_req, res) => {
