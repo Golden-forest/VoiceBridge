@@ -34,7 +34,8 @@ try {
 }
 
 const config = loadConfig();
-const { key, cert } = await ensureCertificates(rootDir);
+const localIp = getLocalIp();
+const { key, cert } = await ensureCertificates(rootDir, { localIp });
 
 // ---- HTTPS 主服务 ----
 const app = express();
