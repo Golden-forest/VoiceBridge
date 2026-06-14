@@ -74,7 +74,8 @@ export function createUploadRouter({ config, wsHub, tmpDir }) {
       const rawText = await transcribeAudio({ filePath, tmpDir }, config);
       const bufferResult = await asrOutputBuffer.handleText(rawText, {
         autoPaste,
-        targetWindow
+        targetWindow,
+        immediate: true
       });
       const text = bufferResult.text;
 

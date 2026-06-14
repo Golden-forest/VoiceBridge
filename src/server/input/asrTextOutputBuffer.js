@@ -53,7 +53,13 @@ export function createAsrTextOutputBuffer({
       return handleCommand(command, text, options);
     }
 
-    return appendToBuffer(text, options, { honorMergeWindow: true });
+    const result = await appendToBuffer(text, options, { honorMergeWindow: true });
+
+    if (options.immediate && result.buffered) {
+      return flushPending({ reason: "immediate" });
+    }
+
+    return result;
   }
 
   async function appendToBuffer(text, options, { honorMergeWindow, command = null } = {}) {
