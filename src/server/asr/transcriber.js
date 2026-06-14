@@ -5,7 +5,26 @@ import { transcribeWithTencentCloud } from "./tencentCloudTranscriber.js";
 
 const TENCENT_MAX_AUDIO_BYTES = 3 * 1024 * 1024;
 
-const SHORT_SEGMENT_THRESHOLD = 8;
+// Always-fillers: these are almost never meaningful suffixes in Chinese.
+const ALWAYS_FILLER = "嗯呃唔噢欸诶哼嘖啧啊哦";
+const ALL_FILLER = ALWAYS_FILLER;
+
+const FILLER_RE = new RegExp(
+  `[${ALL_FILLER}][,，。？！、；：\\s]*`,
+  "g"
+);
+
+/**
+ * Remove single-character Chinese interjections / filler words from ASR text.
+ * Handles surrounding punctuation and whitespace cleanup.
+ */
+function removeFillerWords(text) {
+  if (!text) return text;
+  const cleaned = text.replace(FILLER_RE, "");
+  return cleaned.trim() || "";
+}
+
+const SHORT_SEGMENT_THRESHOLD = 15;
 const CLOSING_PARTICLES = new Set("吗呢啊吧呀哦啦嘛了的哈！？");
 
 /**
@@ -85,6 +104,7 @@ function cleanAsrPunctuation(text) {
   return joined || trimmed;
 }
 
+export { removeFillerWords, cleanAsrPunctuation };
 export async function transcribeAudio({ filePath, tmpDir }, config) {
   if (config.asrProvider !== "tencent") {
     const error = new Error(`Unsupported ASR provider: ${config.asrProvider}`);
@@ -113,7 +133,7 @@ export async function transcribeAudio({ filePath, tmpDir }, config) {
       filePath: converted.path,
       config
     });
-    return cleanAsrPunctuation(raw);
+    return cleanAsrPunctuation(removeFillerWords(raw));
   } finally {
     await fs.rm(converted.path, { force: true });
   }
