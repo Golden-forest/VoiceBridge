@@ -455,7 +455,7 @@ fieldset.add-cmd-fieldset legend {
 
 /* === Input === */
 .input-card {
-  min-height: clamp(96px, 13svh, 132px);
+  min-height: clamp(120px, 20svh, 200px);
   display: flex;
   flex-direction: column;
   padding: clamp(10px, 1.6svh, 16px);
@@ -463,7 +463,7 @@ fieldset.add-cmd-fieldset legend {
   border-radius: var(--radius-lg);
   background: var(--bg-card);
   box-shadow: var(--shadow-card);
-  flex: 0 0 auto;
+  flex: 1 1 auto;
   min-width: 0;
   transition: box-shadow 0.3s var(--ease-smooth);
 }
@@ -567,26 +567,26 @@ fieldset.add-cmd-fieldset legend {
 .util-key-btn {
   flex: 1 1 0;
   max-width: 104px;
-  min-height: 44px;
-  border-radius: 10px;
+  min-height: 52px;
+  border-radius: var(--radius-sm);
   background: var(--bg-card);
-  border: 1px solid var(--border);
+  border: none;
   color: var(--text-secondary);
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 5px;
-  font-size: 11px;
+  gap: 6px;
+  font-size: 13px;
   font-weight: 650;
   cursor: pointer;
-  padding: 0 10px;
-  box-shadow: 0 2px 0 var(--bg-page);
+  padding: 0 14px;
+  box-shadow: var(--shadow-card);
   transition: all 0.15s;
 }
 
 .util-key-btn svg {
-  width: 14px;
-  height: 14px;
+  width: 18px;
+  height: 18px;
   fill: none;
   stroke: currentColor;
   stroke-width: 2;
@@ -596,8 +596,8 @@ fieldset.add-cmd-fieldset legend {
 }
 
 .util-key-btn:active {
-  box-shadow: 0 0 0 var(--bg-page);
-  transform: translateY(2px);
+  transform: scale(0.94);
+  background: var(--accent-soft);
 }
 
 .util-key-btn.new-key {
@@ -630,21 +630,21 @@ fieldset.add-cmd-fieldset legend {
 .side-action-btn {
   flex: 1 1 0;
   min-width: 0;
-  min-height: clamp(54px, 8svh, 72px);
-  max-width: 96px;
+  min-height: clamp(60px, 9svh, 80px);
+  max-width: 120px;
   display: inline-flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
   gap: 3px;
   padding: 6px 0;
-  border: 1px solid var(--border);
+  border: none;
   border-radius: var(--radius-sm);
   background: var(--bg-card);
   color: var(--text-secondary);
   font-size: clamp(11px, 1.5svh, 14px);
   font-weight: 650;
-  box-shadow: var(--shadow-button);
+  box-shadow: var(--shadow-card);
   cursor: pointer;
   transition: all 0.2s var(--ease-bounce);
 }
@@ -961,7 +961,7 @@ fieldset.add-cmd-fieldset legend {
   user-select: none;
   gap: 3px;
   padding: 0 6px;
-  border: 1.5px solid var(--border);
+  border: none;
   border-radius: 999px;
   background: var(--bg-card);
   color: var(--text-secondary);
@@ -972,12 +972,11 @@ fieldset.add-cmd-fieldset legend {
   white-space: nowrap;
   cursor: pointer;
   transition: all 0.2s var(--ease-bounce);
-  box-shadow: var(--shadow-button);
+  box-shadow: var(--shadow-card);
 }
 
 .cmd-btn:active {
   transform: scale(0.92);
-  border-color: var(--accent);
   background: var(--accent);
   color: var(--accent-text);
   box-shadow: var(--shadow-accent);
@@ -986,13 +985,11 @@ fieldset.add-cmd-fieldset legend {
 .cmd-btn.cmd-recent {
   background: rgba(253, 110, 158, 0.12);
   color: #F53F80;
-  border-color: rgba(253, 110, 158, 0.3);
 }
 
 .cmd-btn.slash {
   background: var(--accent-dim);
   color: var(--accent);
-  border-color: rgba(255, 140, 66, 0.3);
   font-family: "SF Mono", Menlo, "Courier New", monospace;
   font-size: 12px;
 }
@@ -1321,13 +1318,13 @@ fieldset.add-cmd-fieldset legend {
   }
 
   .util-key-btn {
-    min-height: 32px;
-    font-size: 10px;
+    min-height: 44px;
+    font-size: 12px;
     padding: 0 8px;
   }
 
   .side-action-btn {
-    min-height: 48px;
+    min-height: 54px;
     padding: 4px 0;
     font-size: 10px;
   }

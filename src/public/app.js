@@ -104,53 +104,11 @@ function updateTextInputState() {
   }
 }
 
-let lastAutoPastedText = "";
-let lastAutoPasteTimer = null;
-
-function sendTextInput() {
-  const text = textInput.value.trim();
-  if (!text) return;
-  if (text.length > 2000) {
-    showToast("文本过长，最多支持 2000 个字符", true);
-    return;
-  }
-  if (text === lastAutoPastedText) {
-    textInput.value = "";
-    updateTextInputState();
-    lastAutoPastedText = "";
-    clearTimeout(lastAutoPasteTimer);
-    lastAutoPasteTimer = null;
-    showToast("该文本已通过语音自动发送。");
-    return;
-  }
-  lastAutoPastedText = "";
-  clearTimeout(lastAutoPasteTimer);
-  lastAutoPasteTimer = null;
-  if (ws && ws.readyState === WebSocket.OPEN) {
-    const msg = {
-      type: "phrase",
-      text,
-      autoPaste: autoPasteEl.checked
-    };
-    if (windowSelector.targetWindow) {
-      msg.targetWindow = windowSelector.targetWindow;
-    }
-    copyToPhoneClipboard(text);
-    ws.send(JSON.stringify(msg));
-    textInput.value = "";
-    updateTextInputState();
-    showToast("已发送到电脑。");
-  } else {
-    showToast("发送失败，请检查连接。", true);
-  }
-}
-
 // === SVG Icons ===
 const starSvg = '<svg viewBox="0 0 24 24" width="14" height="14"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>';
 
 // === Record Button ===
 const recordButton = document.querySelector("#recordButton");
-const submitButton = document.querySelector("#submitButton");
 const enterButton = document.querySelector("#enterButton");
 const fallbackButton = document.querySelector("#fallbackButton");
 const fallbackFile = document.querySelector("#fallbackFile");
@@ -565,8 +523,6 @@ class CommandLibrary {
     document.getElementById("editCancelBtn").classList.add("hidden");
 
     // Disable primary actions during edit
-    document.getElementById("submitButton").disabled = true;
-    document.getElementById("submitButton").classList.add("dimmed");
     document.getElementById("recordButton").disabled = true;
     document.getElementById("recordButton").classList.add("dimmed");
     document.getElementById("enterButton").disabled = true;
@@ -607,8 +563,6 @@ class CommandLibrary {
     document.getElementById("editCancelBtn").classList.add("hidden");
 
     // Re-enable primary actions
-    document.getElementById("submitButton").disabled = false;
-    document.getElementById("submitButton").classList.remove("dimmed");
     document.getElementById("recordButton").disabled = false;
     document.getElementById("recordButton").classList.remove("dimmed");
     document.getElementById("enterButton").disabled = false;
@@ -803,9 +757,6 @@ const commandLibrary = new CommandLibrary(document.getElementById("commandLibrar
 updateTextInputState();
 
 textInput.addEventListener("input", () => {
-  lastAutoPastedText = "";
-  clearTimeout(lastAutoPasteTimer);
-  lastAutoPasteTimer = null;
   updateTextInputState();
 });
 
@@ -814,7 +765,6 @@ textInput.addEventListener("keydown", (e) => {
     if (e.key === "Escape") { e.preventDefault(); commandLibrary._exitEditMode(false); }
     return;
   }
-  if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendTextInput(); }
 });
 
 // === Edit Mode Button Events ===
@@ -907,10 +857,6 @@ function sendQuickCommand(text, label) {
 }
 
 // === Action Buttons ===
-submitButton.addEventListener("click", () => {
-  sendTextInput();
-});
-
 enterButton.addEventListener("click", () => {
   if (ws && ws.readyState === WebSocket.OPEN) {
     ws.send(JSON.stringify({ type: "enter" }));
@@ -990,7 +936,6 @@ let ws = null;
 connectWebSocket();
 
 function setActionButtonsDisabled(disabled) {
-  submitButton.disabled = disabled;
   enterButton.disabled = disabled;
   pasteButton.disabled = disabled;
   undoButton.disabled = disabled;
@@ -1033,7 +978,7 @@ function setRecordActive() {
 function setRecordProcessing() {
   iconEl.className = "record-icon record-icon-mic";
   iconEl.innerHTML = micSvg;
-  labelEl.textContent = "处理中…";
+  labelEl.textContent = "";
 }
 
 async function startRecording() {
@@ -1127,7 +1072,6 @@ function finishUpload() {
   isUploading = false;
   if (commandLibrary.editingId) {
     recordButton.disabled = true;
-    submitButton.disabled = true;
     enterButton.disabled = true;
   } else {
     recordButton.disabled = false;
@@ -1161,9 +1105,6 @@ function connectWebSocket() {
       if (payload.type === "result" && payload.text) {
         if (!commandLibrary.editingId) {
           textInput.value = payload.text;
-          lastAutoPastedText = payload.text.trim();
-          clearTimeout(lastAutoPasteTimer);
-          lastAutoPasteTimer = setTimeout(() => { lastAutoPastedText = ""; lastAutoPasteTimer = null; }, 5000);
           updateTextInputState();
         }
       }

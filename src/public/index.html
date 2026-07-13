@@ -63,7 +63,7 @@
         <!-- 文本输入 -->
         <section class="input-card" id="inputCard">
           <input id="editLabelInput" class="edit-label-input hidden" type="text" placeholder="按钮显示名称…" maxlength="100" aria-label="编辑指令名称" />
-          <textarea id="textInput" class="text-input" placeholder="输入文字，或语音识别…" enterkeyhint="send" rows="3" maxlength="2000" aria-label="文字输入"></textarea>
+          <textarea id="textInput" class="text-input" placeholder="输入文字，或语音识别…" enterkeyhint="send" rows="5" maxlength="2000" aria-label="文字输入"></textarea>
           <div class="input-card-footer">
             <div class="footer-actions">
               <button id="savePhraseBtn" class="save-btn save-btn-sm hidden" type="button">
@@ -80,12 +80,12 @@
 
         <!-- 主操作 -->
         <section class="primary-actions">
-          <button id="submitButton" class="side-action-btn" type="button">
+          <button id="pasteButton" class="side-action-btn" type="button">
             <svg viewBox="0 0 24 24" aria-hidden="true">
-              <path d="m22 2-7 20-4-9-9-4 20-7Z" />
-              <path d="M22 2 11 13" />
+              <path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2" />
+              <rect x="8" y="2" width="8" height="4" rx="1" ry="1" />
             </svg>
-            <span>发送</span>
+            <span>粘贴</span>
           </button>
           <button id="recordButton" class="record-button" type="button">
             <span class="record-icon record-icon-mic">
@@ -117,13 +117,6 @@
               <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
             </svg>
             <span>删除</span>
-          </button>
-          <button id="pasteButton" class="util-key-btn" type="button">
-            <svg viewBox="0 0 24 24" aria-hidden="true">
-              <path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2" />
-              <rect x="8" y="2" width="8" height="4" rx="1" ry="1" />
-            </svg>
-            <span>粘贴</span>
           </button>
           <button id="undoButton" class="util-key-btn" type="button">
             <svg viewBox="0 0 24 24" aria-hidden="true">
