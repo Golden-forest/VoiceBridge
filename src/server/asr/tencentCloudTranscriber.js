@@ -126,7 +126,11 @@ export function createTencentSentenceRecognitionRequest({
     EngSerViceType: config.tencentAsrEngServiceType,
     SourceType: 1,
     VoiceFormat: config.tencentAsrVoiceFormat,
-    FilterPunc: config.tencentAsrFilterPunc ?? 1,
+    // 智能标点策略：让腾讯云正常加标点，由后处理做智能清洗
+    FilterDirty: config.tencentAsrFilterDirty ?? 0,
+    FilterModal: config.tencentAsrFilterModal ?? 1,
+    FilterPunc: config.tencentAsrFilterPunc ?? 0,
+    ConvertNumMode: config.tencentAsrConvertNumMode ?? 1,
     UsrAudioKey: `voicebridge-${timestamp}`,
     Data: audioBase64,
     DataLen: audioLength

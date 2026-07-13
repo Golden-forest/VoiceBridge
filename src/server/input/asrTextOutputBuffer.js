@@ -43,11 +43,13 @@ export function createAsrTextOutputBuffer({
   let pendingOptions = defaultOutputOptions();
 
   async function handleText(rawText, options = {}) {
-    const text = stripTrailingAsrPunctuation(rawText);
+    // 信任 ASR 返回的标点，不做 strip
+    const text = typeof rawText === "string" ? rawText.trim() : "";
     if (!text) {
       return buildResult({ text, buffered: Boolean(buffer) });
     }
 
+    // 语音命令需要 strip 标点来匹配（如"句号。"→"句号"）
     const command = parseVoiceCommand(text);
     if (command) {
       return handleCommand(command, text, options);
@@ -166,8 +168,7 @@ export function createAsrTextOutputBuffer({
     }
 
     cancelFlush();
-    let text = buffer;
-    if (!SENTENCE_END_RE.test(text)) text += "。";
+    const text = buffer;
     const options = pendingOptions;
     buffer = "";
     lastInputAt = null;
