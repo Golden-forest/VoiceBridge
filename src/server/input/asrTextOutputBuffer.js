@@ -55,19 +55,23 @@ export function createAsrTextOutputBuffer({
       return handleCommand(command, text, options);
     }
 
-    const result = await appendToBuffer(text, options, { honorMergeWindow: true });
+    await appendToBuffer(text, options);
 
-    if (options.immediate && result.buffered) {
-      return flushPending({ reason: "immediate" });
+    // handleText 是唯一的 flush 决策点：
+    // 1. immediate（录音停止）→ 立即 flush
+    // 2. 句末标点 → 立即 flush
+    // 3. 其他 → 等定时器
+    const shouldFlush = options.immediate || SENTENCE_END_RE.test(buffer);
+    if (shouldFlush) {
+      return flushPending({ reason: options.immediate ? "immediate" : "sentence-end" });
     }
 
-    return result;
+    return buildResult({ text, buffered: true, output: pendingOutput(true) });
   }
 
-  async function appendToBuffer(text, options, { honorMergeWindow, command = null } = {}) {
+  async function appendToBuffer(text, options) {
     const currentTime = now();
     if (
-      honorMergeWindow &&
       buffer &&
       lastInputAt !== null &&
       currentTime - lastInputAt > mergeWindowMs
@@ -78,33 +82,23 @@ export function createAsrTextOutputBuffer({
     buffer += text;
     lastInputAt = currentTime;
     pendingOptions = normalizeOutputOptions(options);
-
-    if (SENTENCE_END_RE.test(buffer)) {
-      await flushPending({ reason: "sentence-end" });
-      return buildResult({
-        text,
-        command,
-        buffered: false,
-        flushed: true,
-        output: pendingOutput(false)
-      });
-    }
-
     scheduleFlush();
-
-    return buildResult({
-      text,
-      command,
-      buffered: true,
-      output: pendingOutput(true)
-    });
   }
 
   async function handleCommand(command, text, options) {
     if (command.insert) {
-      return appendToBuffer(command.insert, options, {
-        honorMergeWindow: false,
-        command: command.name
+      await appendToBuffer(command.insert, options);
+      // 句末标点（。！？）触发立即 flush，其他（，、\n）等定时器
+      if (SENTENCE_END_RE.test(buffer)) {
+        const result = await flushPending({ reason: "insert-command" });
+        result.command = command.name;
+        return result;
+      }
+      return buildResult({
+        text,
+        command: command.name,
+        buffered: true,
+        output: pendingOutput(true)
       });
     }
 
