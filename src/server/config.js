@@ -25,6 +25,11 @@ export function loadConfig(env = process.env) {
     tencentAsrRegion: env.TENCENT_ASR_REGION || "ap-shanghai",
     tencentAsrEngServiceType: env.TENCENT_ASR_ENG_SERVICE_TYPE || "16k_zh",
     tencentAsrVoiceFormat: "wav",
+    // ASR 过滤参数（智能标点策略默认值）
+    tencentAsrFilterDirty: parseAsrFilter(env.TENCENT_ASR_FILTER_DIRTY, 0),
+    tencentAsrFilterModal: parseAsrFilter(env.TENCENT_ASR_FILTER_MODAL, 1),
+    tencentAsrFilterPunc: parseAsrFilter(env.TENCENT_ASR_FILTER_PUNC, 0),
+    tencentAsrConvertNumMode: parseAsrFilter(env.TENCENT_ASR_CONVERT_NUM_MODE, 1),
     autoPaste: parseBoolean(env.AUTO_PASTE, true),
     voicebridgeMode: env.VOICEBRIDGE_MODE || "local",
     supabaseUrl: env.SUPABASE_URL || "",
@@ -45,4 +50,10 @@ export function buildPublicConfig(config) {
     supabaseUrl: config.supabaseUrl,
     supabaseAnonKey: config.supabaseAnonKey
   };
+}
+
+function parseAsrFilter(value, fallback) {
+  if (value === undefined || value === null || value === "") return fallback;
+  const num = Number.parseInt(value, 10);
+  return Number.isFinite(num) ? num : fallback;
 }

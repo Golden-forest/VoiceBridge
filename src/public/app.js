@@ -370,7 +370,6 @@ const starSvg = '<svg viewBox="0 0 24 24" width="14" height="14"><polygon points
 
 // === Record Button ===
 const recordButton = document.querySelector("#recordButton");
-const submitButton = document.querySelector("#submitButton");
 const enterButton = document.querySelector("#enterButton");
 const fallbackButton = document.querySelector("#fallbackButton");
 const fallbackFile = document.querySelector("#fallbackFile");
@@ -419,8 +418,20 @@ class WindowSelector {
   }
 
   _toggle() { this._isOpen ? this._close() : this._open(); }
-  _open() { this._isOpen = true; this.el.dropdown.classList.remove("hidden"); this.el.btn.setAttribute("aria-expanded", "true"); this._fetchWindows(); }
-  _close() { this._isOpen = false; this.el.dropdown.classList.add("hidden"); this.el.btn.setAttribute("aria-expanded", "false"); }
+  _open() {
+    this._isOpen = true;
+    const btnRect = this.el.btn.getBoundingClientRect();
+    this.el.dropdown.style.top = (btnRect.bottom + 12) + "px";
+    this.el.dropdown.classList.remove("hidden");
+    this.el.btn.setAttribute("aria-expanded", "true");
+    this._fetchWindows();
+  }
+  _close() {
+    this._isOpen = false;
+    this.el.dropdown.classList.add("hidden");
+    this.el.dropdown.style.top = "";
+    this.el.btn.setAttribute("aria-expanded", "false");
+  }
 
   _updateButton() {
     if (this.selectedWindow) {
@@ -461,6 +472,29 @@ class WindowSelector {
 
   _renderWindows(groups) {
     this.el.list.innerHTML = "";
+    // 固定选项：光标位置（始终在最顶部）
+    const cursorBtn = document.createElement("button");
+    cursorBtn.className = "window-item";
+    cursorBtn.type = "button";
+    const cursorSelected = !this.selectedWindow;
+    if (cursorSelected) cursorBtn.classList.add("selected");
+    cursorBtn.setAttribute("aria-selected", String(cursorSelected));
+    const cursorCheck = document.createElement("span");
+    cursorCheck.className = "window-item-check";
+    cursorCheck.textContent = cursorSelected ? "✓" : "";
+    cursorBtn.appendChild(cursorCheck);
+    const cursorTitle = document.createElement("span");
+    cursorTitle.className = "window-item-title";
+    cursorTitle.textContent = "光标位置";
+    cursorBtn.appendChild(cursorTitle);
+    cursorBtn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      this.selectedWindow = null;
+      this._saveSelection();
+      this._updateButton();
+      this._close();
+    });
+    this.el.list.appendChild(cursorBtn);
     groups.forEach((group) => {
       const groupEl = document.createElement("div");
       groupEl.className = "window-app-group";
@@ -750,8 +784,6 @@ class CommandLibrary {
     document.getElementById("editCancelBtn").classList.add("hidden");
 
     // Disable primary actions during edit
-    document.getElementById("submitButton").disabled = true;
-    document.getElementById("submitButton").classList.add("dimmed");
     document.getElementById("recordButton").disabled = true;
     document.getElementById("recordButton").classList.add("dimmed");
     document.getElementById("enterButton").disabled = true;
@@ -792,8 +824,6 @@ class CommandLibrary {
     document.getElementById("editCancelBtn").classList.add("hidden");
 
     // Re-enable primary actions
-    document.getElementById("submitButton").disabled = false;
-    document.getElementById("submitButton").classList.remove("dimmed");
     document.getElementById("recordButton").disabled = false;
     document.getElementById("recordButton").classList.remove("dimmed");
     document.getElementById("enterButton").disabled = false;
@@ -988,9 +1018,6 @@ const commandLibrary = new CommandLibrary(document.getElementById("commandLibrar
 updateTextInputState();
 
 textInput.addEventListener("input", () => {
-  lastAutoPastedText = "";
-  clearTimeout(lastAutoPasteTimer);
-  lastAutoPasteTimer = null;
   updateTextInputState();
 });
 
@@ -999,7 +1026,6 @@ textInput.addEventListener("keydown", (e) => {
     if (e.key === "Escape") { e.preventDefault(); commandLibrary._exitEditMode(false); }
     return;
   }
-  if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendTextInput(); }
 });
 
 // === Edit Mode Button Events ===
@@ -1084,10 +1110,6 @@ async function sendQuickCommand(text, label) {
 }
 
 // === Action Buttons ===
-submitButton.addEventListener("click", () => {
-  sendTextInput();
-});
-
 enterButton.addEventListener("click", () => {
   if (ws && ws.readyState === WebSocket.OPEN) {
     ws.send(JSON.stringify({ type: "enter" }));
@@ -1173,7 +1195,6 @@ if (!isCloudMode) {
 }
 
 function setActionButtonsDisabled(disabled) {
-  submitButton.disabled = disabled;
   enterButton.disabled = disabled;
   pasteButton.disabled = disabled;
   undoButton.disabled = disabled;
@@ -1216,7 +1237,7 @@ function setRecordActive() {
 function setRecordProcessing() {
   iconEl.className = "record-icon record-icon-mic";
   iconEl.innerHTML = micSvg;
-  labelEl.textContent = "处理中…";
+  labelEl.textContent = "";
 }
 
 function beginRecordingState() {
@@ -1327,16 +1348,30 @@ async function uploadAudio(blob, extension) {
       formData.append("targetAppName", windowSelector.targetWindow.appName);
       formData.append("targetWindowTitle", windowSelector.targetWindow.windowTitle);
     }
-    const response = await fetch("/api/upload", { method: "POST", body: formData });
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 30_000);
+    const response = await fetch("/api/upload", { method: "POST", body: formData, signal: controller.signal });
+    clearTimeout(timeout);
     const payload = await response.json();
     if (!response.ok || !payload.ok) throw new Error(payload.error || "上传失败");
     const output = payload.output || {};
-    if (output.pasted) {
+    if (output.buffered) {
+      showToast("已加入输入缓冲。");
+    } else if (output.command) {
+      showToast(output.keyError ? "语音命令执行失败。" : "已执行语音命令。", Boolean(output.keyError));
+    } else if (output.pasted) {
       showToast("已复制并自动粘贴。");
-    } else {
+    } else if (output.copied) {
       showCopyToast("已复制到电脑剪切板。", payload.text || "");
+    } else {
+      showToast("识别成功，但写入剪切板失败。", true);
     }
   } catch (error) {
+    clearTimeout(timeout);
+    if (error.name === "AbortError") {
+      showToast("上传超时，请检查网络连接", true);
+      return;
+    }
     showToast(error.message, true);
   } finally {
     finishUpload();
@@ -1349,7 +1384,6 @@ function finishUpload() {
   currentRecordingDurationMs = null;
   if (commandLibrary.editingId) {
     recordButton.disabled = true;
-    submitButton.disabled = true;
     enterButton.disabled = true;
   } else {
     recordButton.disabled = false;
@@ -1383,9 +1417,6 @@ function connectWebSocket() {
       if (payload.type === "result" && payload.text) {
         if (!commandLibrary.editingId) {
           textInput.value = payload.text;
-          lastAutoPastedText = payload.text.trim();
-          clearTimeout(lastAutoPasteTimer);
-          lastAutoPasteTimer = setTimeout(() => { lastAutoPastedText = ""; lastAutoPasteTimer = null; }, 5000);
           updateTextInputState();
         }
       }
@@ -1393,7 +1424,11 @@ function connectWebSocket() {
         showToast(payload.message, payload.type === "error");
       }
       if (payload.type === "output") {
-        if (!payload.copied) {
+        if (payload.buffered) {
+          showToast("已加入输入缓冲。");
+        } else if (payload.command) {
+          showToast(payload.keyError ? "语音命令执行失败。" : "已执行语音命令。", Boolean(payload.keyError));
+        } else if (!payload.copied) {
           showToast("识别成功，但写入剪切板失败。", true);
         } else if (!payload.pasted) {
           if (payload.pasteError) {

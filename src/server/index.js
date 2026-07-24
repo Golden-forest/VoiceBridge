@@ -52,6 +52,7 @@ app.get("/config.js", (_req, res) => {
   res.send(`window.__VB_CONFIG = ${JSON.stringify(buildPublicConfig(config))};`);
 });
 
+
 app.get("/api/health", (_req, res) => {
   res.json({
     ok: true,
