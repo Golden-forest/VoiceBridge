@@ -25,6 +25,7 @@
     "dotenv": "^16.4.7",
     "express": "^4.21.2",
     "multer": "^2.0.2",
+    "qrcode": "^1.5.4",
     "qrcode-terminal": "^0.12.0",
     "stripe": "^22.2.0",
     "ws": "^8.18.0"
@@ -39,7 +40,8 @@
     "forge": {
       "packagerConfig": {
         "name": "VoiceBridge Agent",
-        "prune": false,
+        "icon": "assets/icon",
+        "prune": true,
         "download": {
           "mirrorOptions": {
             "mirror": "https://npmmirror.com/mirrors/electron/"
@@ -47,9 +49,16 @@
         },
         "ignore": [
           "^/out($|/)",
+          "^/hosted-pwa($|/)",
+          "^/\\.superpowers($|/)",
           "^/\\.env($|\\.)",
+          "^/certs($|/)",
           "^/docs($|/)",
-          "^/supabase($|/)"
+          "^/supabase($|/)",
+          "^/scripts($|/)",
+          "^/src/public($|/)",
+          "^/src/.*\\.test\\.js$",
+          "^/package-lock\\.json$"
         ]
       },
       "makers": [
