@@ -17,25 +17,31 @@ test('package exposes Electron Forge scripts without replacing the web start scr
   assert.equal(packageJson.scripts.prepackage, 'npm run electron:write-config');
   assert.equal(packageJson.scripts.premake, 'npm run electron:write-config');
   assert.equal(packageJson.config.electron_mirror, 'https://npmmirror.com/mirrors/electron/');
-  assert.equal(packageJson.config.forge.packagerConfig.prune, false);
+  assert.equal(packageJson.config.forge.packagerConfig.prune, true);
+  assert.equal(packageJson.config.forge.packagerConfig.icon, 'assets/icon');
   assert.equal(
     packageJson.config.forge.packagerConfig.download.mirrorOptions.mirror,
     'https://npmmirror.com/mirrors/electron/'
   );
   assert.ok(packageJson.config.forge.packagerConfig.ignore.includes('^/out($|/)'));
+  assert.ok(packageJson.config.forge.packagerConfig.ignore.includes('^/hosted-pwa($|/)'));
   assert.ok(packageJson.config.forge.packagerConfig.ignore.includes('^/\\.env($|\\.)'));
+  assert.ok(packageJson.config.forge.packagerConfig.ignore.includes('^/src/public($|/)'));
 });
 
 test('Electron main process uses a safe BrowserWindow shell', () => {
   assert.match(mainJs, /width:\s*420/);
-  assert.match(mainJs, /height:\s*560/);
+  assert.match(mainJs, /height:\s*620/);
   assert.match(mainJs, /contextIsolation:\s*true/);
   assert.match(mainJs, /nodeIntegration:\s*false/);
   assert.match(mainJs, /preload\.cjs/);
   assert.match(mainJs, /voicebridge:version/);
-  assert.match(mainJs, /voicebridge:login/);
+  assert.match(mainJs, /voicebridge:initialize/);
+  assert.match(mainJs, /signInAnonymously/);
+  assert.match(mainJs, /device-pairing/);
+  assert.match(mainJs, /QRCode\.toDataURL/);
   assert.match(mainJs, /startRealtimeAgent/);
-  assert.match(mainJs, /\.from\('devices'\)\.upsert/);
+  assert.match(mainJs, /\.from\('devices'\)/);
   assert.match(mainJs, /desktop-config\.json/);
   assert.match(mainJs, /window-all-closed/);
 });
@@ -45,21 +51,25 @@ test('preload exposes a minimal VoiceBridge bridge API', () => {
   assert.doesNotMatch(preloadJs, /from 'electron'/);
   assert.match(preloadJs, /contextBridge\.exposeInMainWorld\('voicebridge'/);
   assert.match(preloadJs, /version:\s*\(\)\s*=>\s*ipcRenderer\.invoke\('voicebridge:version'\)/);
-  assert.match(preloadJs, /login:\s*\(credentials\)\s*=>\s*ipcRenderer\.invoke\('voicebridge:login'/);
+  assert.match(preloadJs, /initialize:\s*\(\)\s*=>\s*ipcRenderer\.invoke\('voicebridge:initialize'\)/);
+  assert.match(preloadJs, /refreshPairing/);
+  assert.match(preloadJs, /unpair/);
   assert.match(preloadJs, /onAgentStatus/);
 });
 
-test('renderer is a Chinese login and status shell with a content security policy', () => {
+test('renderer is a Chinese QR pairing and status shell with a content security policy', () => {
   assert.match(rendererHtml, /Content-Security-Policy/);
-  assert.match(rendererHtml, /登录/);
+  assert.match(rendererHtml, /手机扫码绑定/);
   assert.match(rendererHtml, /连接状态/);
-  assert.match(rendererHtml, /登录并上线/);
-  assert.match(rendererHtml, /voicebridge\.login/);
+  assert.match(rendererHtml, /刷新二维码/);
+  assert.match(rendererHtml, /voicebridge\?\.initialize/);
 });
 
 test('Electron packaging writes a bundled public Supabase config', () => {
   assert.match(writeConfigJs, /VOICEBRIDGE_DESKTOP_SUPABASE_URL/);
   assert.match(writeConfigJs, /VOICEBRIDGE_DESKTOP_SUPABASE_ANON_KEY/);
   assert.match(writeConfigJs, /desktop-config\.json/);
+  assert.match(writeConfigJs, /VOICEBRIDGE_WEB_APP_URL/);
+  assert.match(writeConfigJs, /voicebridge-cloud\.hl19970903\.chatgpt\.site/);
   assert.match(writeConfigJs, /process\.exit\(1\)/);
 });

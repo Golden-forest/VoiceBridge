@@ -26,7 +26,7 @@ Deno.serve(async (req) => {
   let usageReserved = false;
 
   try {
-    const env = getEnv();
+    const env = getSupabaseEnv();
     const authHeader = req.headers.get("Authorization") || "";
     const authClient = createClient(env.supabaseUrl, env.supabaseAnonKey, {
       global: { headers: { Authorization: authHeader } }
@@ -94,14 +94,15 @@ Deno.serve(async (req) => {
     }
     usageReserved = true;
 
+    const tencentEnv = getTencentEnv();
     const text = await transcribeTencentWav({
       audioBytes,
       requestId,
       config: {
-        secretId: env.tencentSecretId,
-        secretKey: env.tencentSecretKey,
-        region: env.tencentAsrRegion,
-        engServiceType: env.tencentAsrEngServiceType
+        secretId: tencentEnv.secretId,
+        secretKey: tencentEnv.secretKey,
+        region: tencentEnv.region,
+        engServiceType: tencentEnv.engServiceType
       }
     });
 
@@ -127,15 +128,20 @@ Deno.serve(async (req) => {
   }
 });
 
-function getEnv() {
+function getSupabaseEnv() {
   return {
     supabaseUrl: requireEnv("SUPABASE_URL"),
     supabaseAnonKey: requireEnv("SUPABASE_ANON_KEY"),
-    supabaseServiceRoleKey: requireEnv("SUPABASE_SERVICE_ROLE_KEY"),
-    tencentSecretId: requireEnv("TENCENT_SECRET_ID"),
-    tencentSecretKey: requireEnv("TENCENT_SECRET_KEY"),
-    tencentAsrRegion: Deno.env.get("TENCENT_ASR_REGION") || "ap-shanghai",
-    tencentAsrEngServiceType: Deno.env.get("TENCENT_ASR_ENG_SERVICE_TYPE") || "16k_zh"
+    supabaseServiceRoleKey: requireEnv("SUPABASE_SERVICE_ROLE_KEY")
+  };
+}
+
+function getTencentEnv() {
+  return {
+    secretId: requireEnv("TENCENT_SECRET_ID"),
+    secretKey: requireEnv("TENCENT_SECRET_KEY"),
+    region: Deno.env.get("TENCENT_ASR_REGION") || "ap-shanghai",
+    engServiceType: Deno.env.get("TENCENT_ASR_ENG_SERVICE_TYPE") || "16k_zh"
   };
 }
 

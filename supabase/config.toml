@@ -1,5 +1,8 @@
 [functions.transcribe]
-verify_jwt = true
+verify_jwt = false
+
+[functions.device-pairing]
+verify_jwt = false
 
 [functions.billing-create-checkout-session]
 verify_jwt = true

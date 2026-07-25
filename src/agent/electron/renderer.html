@@ -9,137 +9,167 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>VoiceBridge Agent</title>
     <style>
-      /* === Web Fonts (Variable, latin subset, Electron-local) === */
-      @font-face {
-        font-family: "Nunito";
-        font-style: normal;
-        font-weight: 400 800;
-        font-display: swap;
-        src: url("./fonts/Nunito-Variable.woff2") format("woff2");
-      }
-      @font-face {
-        font-family: "JetBrains Mono";
-        font-style: normal;
-        font-weight: 400 700;
-        font-display: swap;
-        src: url("./fonts/JetBrainsMono-Variable.woff2") format("woff2");
-      }
-
       :root {
-        color-scheme: light dark;
-        --font-sans: "SF Pro Rounded", "Nunito", -apple-system, BlinkMacSystemFont,
-                     "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
-        --font-mono: "JetBrains Mono", "SF Mono", Menlo, Consolas, monospace;
-        font-family: var(--font-sans);
+        color-scheme: light;
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        color: #201b24;
+        background: #f7f6f9;
       }
-
+      * { box-sizing: border-box; }
       body {
         margin: 0;
         min-height: 100vh;
-        background: #f6f7f9;
-        color: #17202a;
+        overflow: hidden;
+        background:
+          radial-gradient(circle at 90% 0%, rgba(255, 178, 196, 0.26), transparent 34%),
+          #f7f6f9;
+        color: #201b24;
       }
-
       main {
-        box-sizing: border-box;
-        display: flex;
-        min-height: 100vh;
-        flex-direction: column;
-        gap: 24px;
-        padding: 32px;
-      }
-
-      h1,
-      p {
-        margin: 0;
-      }
-
-      h1 {
-        font-size: 24px;
-        font-weight: 800;
-      }
-
-      .status {
         display: grid;
-        gap: 12px;
-        padding: 16px;
-        border: 1px solid #d9dee7;
-        border-radius: 8px;
-        background: #ffffff;
+        min-height: 100vh;
+        align-content: start;
+        gap: 14px;
+        padding: 24px 26px 18px;
       }
-
-      .status-row {
+      header {
         display: flex;
-        justify-content: space-between;
-        gap: 16px;
-        font-size: 14px;
+        align-items: center;
+        gap: 13px;
       }
-
+      header img {
+        width: 52px;
+        height: 52px;
+        border-radius: 15px;
+        box-shadow: 0 10px 24px rgba(240, 82, 115, 0.18);
+      }
+      h1, h2, p { margin: 0; }
+      h1 {
+        font-size: 22px;
+        letter-spacing: -0.035em;
+      }
+      .hint {
+        color: #746a77;
+        font-size: 12px;
+        line-height: 1.55;
+      }
+      .eyebrow {
+        margin-bottom: 3px;
+        color: #938797;
+        font-size: 9px;
+        font-weight: 800;
+        letter-spacing: .12em;
+      }
+      .status {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        min-height: 42px;
+        padding: 10px 13px;
+        border: 1px solid #e6e1e7;
+        border-radius: 13px;
+        background: rgba(255, 255, 255, .82);
+        font-size: 12px;
+        font-weight: 650;
+      }
       .status-value {
+        display: inline-flex;
+        align-items: center;
+        gap: 7px;
         color: #23715d;
         font-weight: 800;
       }
-
-      .status-value.error {
+      .status-value::before {
+        content: "";
+        width: 7px;
+        height: 7px;
+        border-radius: 50%;
+        background: currentColor;
+        box-shadow: 0 0 0 4px rgba(35, 113, 93, .1);
+      }
+      .status-value.error { color: #b42318; }
+      .panel {
+        display: grid;
+        justify-items: center;
+        gap: 10px;
+        padding: 17px;
+        border: 1px solid rgba(56, 44, 61, .08);
+        border-radius: 22px;
+        background: #fff;
+        box-shadow: 0 18px 50px rgba(67, 45, 72, .1);
+        text-align: center;
+      }
+      .panel[hidden] { display: none; }
+      .panel h2 {
+        font-size: 19px;
+        letter-spacing: -0.03em;
+      }
+      #qrImage {
+        width: 230px;
+        height: 230px;
+        padding: 9px;
+        border: 1px solid #eee9ef;
+        border-radius: 18px;
+        background: #fff;
+        image-rendering: pixelated;
+      }
+      .device-name {
+        max-width: 100%;
+        overflow: hidden;
+        color: #4a3f4e;
+        font-size: 12px;
+        font-weight: 750;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      button, a.button {
+        display: inline-flex;
+        min-height: 40px;
+        align-items: center;
+        justify-content: center;
+        border: 1px solid #211b25;
+        border-radius: 12px;
+        padding: 9px 14px;
+        background: #211b25;
+        color: #fff;
+        font: inherit;
+        font-size: 12px;
+        font-weight: 750;
+        text-decoration: none;
+        white-space: nowrap;
+        cursor: pointer;
+        transition: transform 120ms ease, background 160ms ease;
+      }
+      button:hover, a.button:hover {
+        background: #352d39;
+      }
+      button:active, a.button:active {
+        transform: scale(.98);
+      }
+      button.secondary {
+        border-color: #d9d3db;
+        background: #fff;
+        color: #4a3f4e;
+      }
+      .actions {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 10px;
+        width: 100%;
+        margin-top: 2px;
+      }
+      .footer {
+        display: flex;
+        justify-content: space-between;
+        gap: 10px;
+        padding: 0 2px;
+      }
+      #message.error {
         color: #b42318;
       }
-
-      form {
-        display: grid;
-        gap: 14px;
-      }
-
-      label {
-        display: grid;
-        gap: 6px;
-        font-size: 13px;
-        font-weight: 700;
-      }
-
-      input {
-        box-sizing: border-box;
-        width: 100%;
-        border: 1px solid #c8ced8;
-        border-radius: 6px;
-        padding: 11px 12px;
-        font: inherit;
-      }
-
-      button {
-        border: 0;
-        border-radius: 6px;
-        padding: 12px 14px;
-        background: #1f6feb;
-        color: #ffffff;
-        font: inherit;
-        font-weight: 800;
-      }
-
-      .hint {
-        color: #667085;
-        font-size: 13px;
-        line-height: 1.5;
-      }
-
-      @media (prefers-color-scheme: dark) {
-        body {
-          background: #101418;
-          color: #eef2f6;
-        }
-
-        .status {
-          border-color: #303946;
-          background: #171d24;
-        }
-
-        input {
-          border-color: #3a4655;
-          background: #101418;
-          color: #eef2f6;
-        }
-
-        .hint {
-          color: #a7b0bd;
+      @media (prefers-reduced-motion: reduce) {
+        *, *::before, *::after {
+          transition-duration: .01ms !important;
         }
       }
     </style>
@@ -147,44 +177,53 @@
   <body>
     <main>
       <header>
-        <h1>VoiceBridge Agent</h1>
-        <p class="hint">登录后保持本机输入代理在线。</p>
+        <img src="../../../assets/icon.png" alt="">
+        <div>
+          <p class="eyebrow">VOICEBRIDGE DESKTOP</p>
+          <h1>连接你的手机</h1>
+          <p class="hint">扫码登录，无需在电脑输入密码</p>
+        </div>
       </header>
 
       <section class="status" aria-label="连接状态">
-        <div class="status-row">
-          <span>连接状态</span>
-          <span class="status-value">等待登录</span>
-        </div>
-        <div class="status-row">
-          <span>版本</span>
-          <span id="version">读取中</span>
+        <span>连接状态</span>
+        <span class="status-value">正在初始化</span>
+      </section>
+
+      <section id="pairingPanel" class="panel" hidden>
+        <h2>手机扫码绑定</h2>
+        <img id="qrImage" alt="VoiceBridge 手机配对二维码">
+        <p class="device-name" id="deviceName"></p>
+        <p class="hint">扫码后可以登录或注册，再确认绑定。二维码 10 分钟内有效。</p>
+        <div class="actions">
+          <button id="refreshButton" type="button">刷新二维码</button>
+          <a id="phoneUrl" class="button" href="#" target="_blank" rel="noreferrer">打开手机网页</a>
         </div>
       </section>
 
-      <form id="loginForm">
-        <label>
-          邮箱
-          <input id="emailInput" type="email" autocomplete="email" placeholder="you@example.com" required>
-        </label>
-        <label>
-          密码
-          <input id="passwordInput" type="password" autocomplete="current-password" placeholder="请输入密码" required>
-        </label>
-        <button id="loginButton" type="submit">登录并上线</button>
-        <button id="logoutButton" type="button" hidden>退出登录</button>
+      <section id="onlinePanel" class="panel" hidden>
+        <h2>电脑端已上线</h2>
+        <p class="device-name" id="onlineDeviceName"></p>
+        <p class="hint">现在可以在手机端录音。转写完成后会自动发送并粘贴到这台电脑。</p>
+        <button id="unpairButton" class="secondary" type="button">解除绑定</button>
+      </section>
+
+      <footer class="footer">
         <p id="message" class="hint" role="status"></p>
-      </form>
+        <p class="hint">v<span id="version">…</span></p>
+      </footer>
     </main>
 
     <script>
       const statusEl = document.querySelector('.status-value');
-      const versionEl = document.querySelector('#version');
-      const form = document.querySelector('#loginForm');
-      const emailInput = document.querySelector('#emailInput');
-      const passwordInput = document.querySelector('#passwordInput');
-      const loginButton = document.querySelector('#loginButton');
-      const logoutButton = document.querySelector('#logoutButton');
+      const pairingPanel = document.querySelector('#pairingPanel');
+      const onlinePanel = document.querySelector('#onlinePanel');
+      const qrImage = document.querySelector('#qrImage');
+      const deviceName = document.querySelector('#deviceName');
+      const onlineDeviceName = document.querySelector('#onlineDeviceName');
+      const refreshButton = document.querySelector('#refreshButton');
+      const unpairButton = document.querySelector('#unpairButton');
+      const phoneUrl = document.querySelector('#phoneUrl');
       const messageEl = document.querySelector('#message');
 
       function setStatus(message, isError = false) {
@@ -194,60 +233,68 @@
 
       function setMessage(message, isError = false) {
         messageEl.textContent = message;
-        messageEl.style.color = isError ? '#b42318' : '';
+        messageEl.classList.toggle('error', isError);
+      }
+
+      function renderState(state) {
+        pairingPanel.hidden = state?.mode !== 'pairing';
+        onlinePanel.hidden = state?.mode !== 'online';
+        if (state?.mode === 'pairing') {
+          setStatus('等待手机扫码');
+          qrImage.src = state.qrDataUrl;
+          deviceName.textContent = state.deviceName || '';
+          setMessage('请用手机相机扫描二维码。');
+        } else if (state?.mode === 'online') {
+          setStatus('已上线');
+          onlineDeviceName.textContent = state.deviceName || '';
+          setMessage('绑定成功，保持此应用运行即可。');
+        }
       }
 
       window.voicebridge?.version().then((version) => {
-        versionEl.textContent = version;
+        document.querySelector('#version').textContent = version;
       });
-
       window.voicebridge?.publicConfig().then((config) => {
-        if (!config.hasSupabaseAnonKey) {
-          setStatus('缺少配置', true);
-          setMessage('缺少 Supabase anon key。打包前请配置桌面端公开 Supabase 配置。', true);
-          loginButton.disabled = true;
-        }
+        phoneUrl.href = config.webAppUrl;
       });
-
+      window.voicebridge?.onDesktopState(renderState);
       window.voicebridge?.onAgentStatus((status) => {
-        setStatus(status);
+        if (String(status).includes('SUBSCRIBED')) setStatus('已上线');
       });
 
-      form.addEventListener('submit', async (event) => {
-        event.preventDefault();
-        loginButton.disabled = true;
-        setMessage('');
-        setStatus('正在登录');
+      refreshButton.addEventListener('click', async () => {
+        refreshButton.disabled = true;
+        setStatus('正在刷新');
         try {
-          const result = await window.voicebridge.login({
-            email: emailInput.value.trim(),
-            password: passwordInput.value
-          });
-          setStatus('已上线');
-          setMessage(`桌面端已上线：${result.deviceName}`);
-          logoutButton.hidden = false;
-          passwordInput.value = '';
+          renderState(await window.voicebridge.refreshPairing());
         } catch (error) {
-          setStatus('登录失败', true);
-          setMessage(error.message || '登录失败，请稍后重试。', true);
+          setStatus('刷新失败', true);
+          setMessage(error.message || '刷新二维码失败。', true);
         } finally {
-          loginButton.disabled = false;
+          refreshButton.disabled = false;
         }
       });
 
-      logoutButton.addEventListener('click', async () => {
-        logoutButton.disabled = true;
+      unpairButton.addEventListener('click', async () => {
+        unpairButton.disabled = true;
+        setStatus('正在解除绑定');
         try {
-          await window.voicebridge.logout();
-          logoutButton.hidden = true;
-          setStatus('等待登录');
-          setMessage('已退出登录。');
+          renderState(await window.voicebridge.unpair());
         } catch (error) {
-          setMessage(error.message || '退出失败，请稍后重试。', true);
+          setStatus('操作失败', true);
+          setMessage(error.message || '解除绑定失败。', true);
         } finally {
-          logoutButton.disabled = false;
+          unpairButton.disabled = false;
         }
       });
+
+      setStatus('正在初始化');
+      window.voicebridge?.initialize()
+        .then(renderState)
+        .catch((error) => {
+          setStatus('初始化失败', true);
+          setMessage(error.message || '无法初始化电脑端。', true);
+        });
     </script>
   </body>
 </html>

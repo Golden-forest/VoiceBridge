@@ -56,6 +56,12 @@ create table if not exists public.stripe_events (
   processed_at timestamptz not null default now()
 );
 
+create index if not exists devices_user_id_idx
+  on public.devices (user_id);
+
+create index if not exists subscriptions_user_id_idx
+  on public.subscriptions (user_id);
+
 alter table public.profiles enable row level security;
 alter table public.devices enable row level security;
 alter table public.subscriptions enable row level security;
@@ -67,43 +73,50 @@ grant select, insert, update on public.devices to authenticated;
 grant select on public.subscriptions to authenticated;
 grant select on public.usage_events to authenticated;
 
+drop policy if exists profiles_select_own on public.profiles;
 create policy profiles_select_own
   on public.profiles
   for select
   to authenticated
-  using (user_id = auth.uid());
+  using (user_id = (select auth.uid()));
 
+drop policy if exists devices_select_own on public.devices;
 create policy devices_select_own
   on public.devices
   for select
   to authenticated
-  using (user_id = auth.uid());
+  using (user_id = (select auth.uid()));
 
+drop policy if exists devices_insert_own on public.devices;
 create policy devices_insert_own
   on public.devices
   for insert
   to authenticated
-  with check (user_id = auth.uid());
+  with check (user_id = (select auth.uid()));
 
+drop policy if exists devices_update_own on public.devices;
 create policy devices_update_own
   on public.devices
   for update
   to authenticated
-  using (user_id = auth.uid())
-  with check (user_id = auth.uid());
+  using (user_id = (select auth.uid()))
+  with check (user_id = (select auth.uid()));
 
+drop policy if exists subscriptions_select_own on public.subscriptions;
 create policy subscriptions_select_own
   on public.subscriptions
   for select
   to authenticated
-  using (user_id = auth.uid());
+  using (user_id = (select auth.uid()));
 
+drop policy if exists usage_events_select_own on public.usage_events;
 create policy usage_events_select_own
   on public.usage_events
   for select
   to authenticated
-  using (user_id = auth.uid());
+  using (user_id = (select auth.uid()));
 
+drop policy if exists "realtime_own_device_broadcast_select" on realtime.messages;
 create policy "realtime_own_device_broadcast_select"
   on realtime.messages for select to authenticated
   using (
@@ -111,6 +124,7 @@ create policy "realtime_own_device_broadcast_select"
     and (select realtime.topic()) like 'device:' || (select auth.uid()) || ':%'
   );
 
+drop policy if exists "realtime_own_device_broadcast_insert" on realtime.messages;
 create policy "realtime_own_device_broadcast_insert"
   on realtime.messages for insert to authenticated
   with check (
@@ -118,6 +132,7 @@ create policy "realtime_own_device_broadcast_insert"
     and (select realtime.topic()) like 'device:' || (select auth.uid()) || ':%'
   );
 
+drop policy if exists "realtime_own_presence_select" on realtime.messages;
 create policy "realtime_own_presence_select"
   on realtime.messages for select to authenticated
   using (
@@ -125,6 +140,7 @@ create policy "realtime_own_presence_select"
     and (select realtime.topic()) = 'user:' || (select auth.uid()) || ':presence'
   );
 
+drop policy if exists "realtime_own_presence_insert" on realtime.messages;
 create policy "realtime_own_presence_insert"
   on realtime.messages for insert to authenticated
   with check (

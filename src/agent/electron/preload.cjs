@@ -3,14 +3,17 @@ const { contextBridge, ipcRenderer } = require('electron');
 contextBridge.exposeInMainWorld('voicebridge', {
   version: () => ipcRenderer.invoke('voicebridge:version'),
   publicConfig: () => ipcRenderer.invoke('voicebridge:public-config'),
-  login: (credentials) => ipcRenderer.invoke('voicebridge:login', {
-    email: String(credentials?.email || ''),
-    password: String(credentials?.password || '')
-  }),
-  logout: () => ipcRenderer.invoke('voicebridge:logout'),
+  initialize: () => ipcRenderer.invoke('voicebridge:initialize'),
+  refreshPairing: () => ipcRenderer.invoke('voicebridge:refresh-pairing'),
+  unpair: () => ipcRenderer.invoke('voicebridge:unpair'),
   onAgentStatus: (callback) => {
     const listener = (_event, status) => callback(status);
     ipcRenderer.on('voicebridge:agent-status', listener);
     return () => ipcRenderer.removeListener('voicebridge:agent-status', listener);
+  },
+  onDesktopState: (callback) => {
+    const listener = (_event, state) => callback(state);
+    ipcRenderer.on('voicebridge:desktop-state', listener);
+    return () => ipcRenderer.removeListener('voicebridge:desktop-state', listener);
   }
 });

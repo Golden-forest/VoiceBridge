@@ -7,6 +7,8 @@ const supabaseUrl = process.env.VOICEBRIDGE_DESKTOP_SUPABASE_URL
 const supabaseAnonKey = process.env.VOICEBRIDGE_DESKTOP_SUPABASE_ANON_KEY
   || process.env.SUPABASE_ANON_KEY
   || "";
+const webAppUrl = process.env.VOICEBRIDGE_WEB_APP_URL
+  || "https://voicebridge-cloud.hl19970903.chatgpt.site";
 
 if (!supabaseUrl || !supabaseAnonKey) {
   console.error(
@@ -19,7 +21,8 @@ if (!supabaseUrl || !supabaseAnonKey) {
 const outputPath = path.resolve("src/agent/electron/desktop-config.json");
 const payload = {
   supabaseUrl,
-  supabaseAnonKey
+  supabaseAnonKey,
+  webAppUrl
 };
 
 await mkdir(path.dirname(outputPath), { recursive: true });
