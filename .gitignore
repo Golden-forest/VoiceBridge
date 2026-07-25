@@ -10,3 +10,7 @@ src/agent/electron/desktop-config.json
 npm-debug.log*
 .superpowers/
 src/public/commands.json
+
+# 独立子项目与构建产物（assets/ 保留：应用图标）
+hosted-pwa/
+out/
