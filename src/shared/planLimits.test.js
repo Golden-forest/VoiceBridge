@@ -3,7 +3,11 @@ import assert from "node:assert/strict";
 import { getPlanLimit, isPaidStatus } from "./planLimits.js";
 
 test("getPlanLimit returns free fallback", () => {
-  assert.equal(getPlanLimit("unknown").monthlySeconds, 600);
+  assert.deepEqual(getPlanLimit("unknown"), {
+    monthlySeconds: 18000,
+    maxAudioSeconds: 60,
+    rateLimitPerMinute: 30
+  });
 });
 
 test("paid statuses are trialing and active only", () => {

@@ -1,8 +1,8 @@
 export const PLAN_LIMITS = Object.freeze({
   free: {
-    monthlySeconds: 600,
+    monthlySeconds: 18000,
     maxAudioSeconds: 60,
-    rateLimitPerMinute: 10
+    rateLimitPerMinute: 30
   },
   pro: {
     monthlySeconds: 18000,
