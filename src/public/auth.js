@@ -7,6 +7,7 @@ const emailInput = document.querySelector("#authEmail");
 const passwordInput = document.querySelector("#authPassword");
 const submitBtn = document.querySelector("#authSubmitBtn");
 const switchBtn = document.querySelector("#authSwitchBtn");
+const githubBtn = document.querySelector("#authGithubBtn");
 const logoutBtn = document.querySelector("#authLogoutButton");
 const modeLabel = document.querySelector("#authModeLabel");
 const messageEl = document.querySelector("#authMessage");
@@ -33,10 +34,15 @@ function setMessage(message, isError = false) {
 
 function setMode(nextMode) {
   mode = nextMode;
-  if (submitBtn) submitBtn.textContent = mode === "sign-in" ? "登录" : "注册";
-  if (switchBtn) switchBtn.textContent = mode === "sign-in" ? "创建账号" : "已有账号，去登录";
-  if (modeLabel) modeLabel.textContent = mode === "sign-in" ? "登录以连接你的设备" : "创建账号后开始使用";
+  if (submitBtn) submitBtn.textContent = mode === "sign-in" ? "登录" : "注册账号";
+  if (switchBtn) switchBtn.textContent = mode === "sign-in" ? "没有账号？创建账号" : "已有账号？返回登录";
+  if (modeLabel) {
+    modeLabel.textContent = mode === "sign-in"
+      ? "登录后，手机录音会自动出现在电脑光标处"
+      : "创建免费账号，在任意网络连接手机和电脑";
+  }
   if (passwordInput) passwordInput.autocomplete = mode === "sign-in" ? "current-password" : "new-password";
+  form?.classList.toggle("is-sign-up", mode === "sign-up");
 }
 
 function emitAuthReady(session) {
@@ -72,6 +78,26 @@ if (!isCloudMode) {
 switchBtn?.addEventListener("click", () => {
   setMode(mode === "sign-in" ? "sign-up" : "sign-in");
   resendBtn?.classList.add("hidden");
+});
+
+githubBtn?.addEventListener("click", async () => {
+  if (!supabase) return;
+  setMessage("");
+  githubBtn.disabled = true;
+  try {
+    const redirectTo = new URL("/", window.location.href).href;
+    const { error } = await supabase.auth.signInWithOAuth({
+      provider: "github",
+      options: { redirectTo }
+    });
+    if (error) {
+      setMessage(error.message, true);
+      githubBtn.disabled = false;
+    }
+  } catch (error) {
+    setMessage(error instanceof Error ? error.message : "GitHub 登录失败，请稍后再试。", true);
+    githubBtn.disabled = false;
+  }
 });
 
 logoutBtn?.addEventListener("click", async () => {
@@ -124,20 +150,14 @@ const resetInfo = document.querySelector(".auth-reset-info");
 forgotBtn?.addEventListener("click", () => {
   form?.classList.add("hidden");
   resetForm?.classList.remove("hidden");
-  forgotBtn.classList.add("hidden");
-  switchBtn?.classList.add("hidden");
-  submitBtn?.classList.add("hidden");
   if (resetEmailInput && emailInput) resetEmailInput.value = emailInput.value;
-  if (modeLabel) modeLabel.textContent = "重置密码";
+  if (modeLabel) modeLabel.textContent = "找回你的 VoiceBridge 账号";
 });
 
 resetBackBtn?.addEventListener("click", () => {
   resetForm?.classList.add("hidden");
   form?.classList.remove("hidden");
-  forgotBtn?.classList.remove("hidden");
-  switchBtn?.classList.remove("hidden");
-  submitBtn?.classList.remove("hidden");
-  if (modeLabel) modeLabel.textContent = "登录以连接你的设备";
+  setMode("sign-in");
 });
 
 resetBtn?.addEventListener("click", async () => {

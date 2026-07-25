@@ -42,8 +42,15 @@ export async function handleDesktopMessage({
   }
 }
 
-export function createAgentClient({ supabaseUrl, supabaseAnonKey }) {
-  return createClient(supabaseUrl, supabaseAnonKey);
+export function createAgentClient({ supabaseUrl, supabaseAnonKey, storage }) {
+  return createClient(supabaseUrl, supabaseAnonKey, {
+    auth: {
+      storage,
+      persistSession: true,
+      autoRefreshToken: true,
+      detectSessionInUrl: false
+    }
+  });
 }
 
 export async function startRealtimeAgent({
