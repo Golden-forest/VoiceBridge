@@ -309,7 +309,7 @@ function resetCloudDeviceSelect() {
 }
 
 const PLAN_LIMITS = {
-  free: { monthlySeconds: 600, maxAudioSeconds: 60, rateLimitPerMinute: 10 },
+  free: { monthlySeconds: 18000, maxAudioSeconds: 60, rateLimitPerMinute: 30 },
   pro: { monthlySeconds: 18000, maxAudioSeconds: 60, rateLimitPerMinute: 30 },
 };
 
@@ -1545,7 +1545,7 @@ class AccountDrawer {
 
     const [subRes, usageRes, devicesRes] = await Promise.all([
       supabase.from("subscriptions").select("*").eq("user_id", user.id).maybeSingle(),
-      supabase.from("usage_events").select("status, claim_seconds").eq("user_id", user.id),
+      supabase.from("usage_events").select("status, audio_duration_ms").eq("user_id", user.id),
       supabase.from("devices").select("*").eq("user_id", user.id).order("last_seen_at", { ascending: false }),
     ]);
 
@@ -1558,7 +1558,9 @@ class AccountDrawer {
     const devices = devicesRes.data || [];
 
     const plan = subscription && isPaidStatus(subscription.status) ? "pro" : "free";
-    const usedSeconds = usageEvents.filter((e) => e.status === "success").reduce((sum, e) => sum + (e.claim_seconds || 0), 0);
+    const usedSeconds = usageEvents
+      .filter((event) => event.status === "success")
+      .reduce((sum, event) => sum + Math.ceil((event.audio_duration_ms || 0) / 1000), 0);
     const totalCount = usageEvents.length;
     const successCount = usageEvents.filter((e) => e.status === "success").length;
     const rejectedCount = usageEvents.filter((e) => e.status === "rejected").length;
@@ -1759,16 +1761,21 @@ class AccountDrawer {
     emailEditBtn.textContent = "修改邮箱";
     section.appendChild(emailEditBtn);
 
+    const providers = Array.isArray(data.user?.app_metadata?.providers)
+      ? data.user.app_metadata.providers
+      : [];
+    const usesGithubWithoutEmailPassword = providers.includes("github") && !providers.includes("email");
+
     // 密码行
     const pwdRow = document.createElement("div");
     pwdRow.className = "account-row";
-    pwdRow.innerHTML = `<span class="account-row-label">密码</span><span class="account-row-value">••••••</span>`;
+    pwdRow.innerHTML = `<span class="account-row-label">桌面登录密码</span><span class="account-row-value">${usesGithubWithoutEmailPassword ? "未设置" : "已设置"}</span>`;
     section.appendChild(pwdRow);
 
     const pwdEditBtn = document.createElement("button");
     pwdEditBtn.className = "account-action-btn";
     pwdEditBtn.type = "button";
-    pwdEditBtn.textContent = "修改密码";
+    pwdEditBtn.textContent = usesGithubWithoutEmailPassword ? "设置桌面登录密码" : "修改密码";
     section.appendChild(pwdEditBtn);
 
     // 邮箱编辑交互
@@ -1823,14 +1830,16 @@ class AccountDrawer {
       pwdEditBtn.classList.add("hidden");
       const group = document.createElement("div");
       group.className = "profile-edit-group";
-      const currInput = document.createElement("input");
-      currInput.className = "profile-edit-input";
-      currInput.type = "password";
-      currInput.placeholder = "当前密码";
       const newInput = document.createElement("input");
       newInput.className = "profile-edit-input";
       newInput.type = "password";
       newInput.placeholder = "新密码（至少6位）";
+      newInput.autocomplete = "new-password";
+      const confirmInput = document.createElement("input");
+      confirmInput.className = "profile-edit-input";
+      confirmInput.type = "password";
+      confirmInput.placeholder = "再次输入新密码";
+      confirmInput.autocomplete = "new-password";
       const actions = document.createElement("div");
       actions.className = "profile-edit-actions";
       const cancel = document.createElement("button");
@@ -1846,17 +1855,22 @@ class AccountDrawer {
         pwdEditBtn.classList.remove("hidden");
       });
       confirm.addEventListener("click", async () => {
-        const curr = currInput.value;
         const newPwd = newInput.value;
-        if (!curr || !newPwd || newPwd.length < 6) {
-          showToast("请填写当前密码和新密码（至少6位）", true);
+        if (!newPwd || newPwd.length < 6) {
+          showToast("新密码至少需要6位", true);
+          return;
+        }
+        if (newPwd !== confirmInput.value) {
+          showToast("两次输入的密码不一致", true);
           return;
         }
         confirm.disabled = true;
         try {
           const { error } = await window.VoiceBridgeAuth?.supabase.auth.updateUser({ password: newPwd });
           if (error) throw error;
-          showToast("密码已修改");
+          showToast("桌面登录密码已设置，可在电脑端使用");
+          pwdRow.querySelector(".account-row-value").textContent = "已设置";
+          pwdEditBtn.textContent = "修改密码";
           group.remove();
           pwdEditBtn.classList.remove("hidden");
         } catch (err) {
@@ -1867,8 +1881,8 @@ class AccountDrawer {
       });
       actions.appendChild(cancel);
       actions.appendChild(confirm);
-      group.appendChild(currInput);
       group.appendChild(newInput);
+      group.appendChild(confirmInput);
       group.appendChild(actions);
       section.insertBefore(group, pwdEditBtn.nextSibling);
       currInput.focus();
