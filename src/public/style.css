@@ -1,5 +1,29 @@
+/* === Web Fonts (Variable, latin subset) === */
+/* Apple: SF Pro Rounded (system). Non-Apple: Nunito (variable, 400-800). */
+@font-face {
+  font-family: "Nunito";
+  font-style: normal;
+  font-weight: 400 800;
+  font-display: swap;
+  src: url("/fonts/Nunito-Variable.woff2") format("woff2");
+}
+
+/* Mono: JetBrains Mono (variable, 400-700). */
+@font-face {
+  font-family: "JetBrains Mono";
+  font-style: normal;
+  font-weight: 400 700;
+  font-display: swap;
+  src: url("/fonts/JetBrainsMono-Variable.woff2") format("woff2");
+}
+
 /* === Design Tokens === */
 :root {
+  /* Fonts: SF Pro Rounded first (Apple system rounded), Nunito fallback (non-Apple),
+     then system fallbacks. */
+  --font-sans: "SF Pro Rounded", "Nunito", -apple-system, BlinkMacSystemFont,
+               "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
+  --font-mono: "JetBrains Mono", "SF Mono", Menlo, Consolas, monospace;
   --bg-page: #fffbf5;
   --bg-card: #ffffff;
   --bg-soft: #fff5eb;
@@ -33,7 +57,7 @@
   --ease-bounce: cubic-bezier(0.34, 1.56, 0.64, 1);
   --ease-smooth: cubic-bezier(0.4, 0, 0.2, 1);
   color-scheme: light dark;
-  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Segoe UI", sans-serif;
+  font-family: var(--font-sans);
   background: linear-gradient(165deg, #fffbf5 0%, #fff5eb 40%, #fef7f0 100%);
   background-attachment: fixed;
   color: var(--text-primary);
@@ -129,7 +153,7 @@ svg {
   text-overflow: ellipsis;
   white-space: nowrap;
   font-size: clamp(20px, 2.8svh, 30px);
-  font-weight: 750;
+  font-weight: 800;
   letter-spacing: 0;
   color: var(--text-primary);
 }
@@ -146,7 +170,7 @@ fieldset.add-cmd-fieldset {
 
 fieldset.add-cmd-fieldset legend {
   font-size: 18px;
-  font-weight: 750;
+  font-weight: 800;
   color: var(--text-primary);
   margin-bottom: 14px;
   padding: 0;
@@ -195,7 +219,7 @@ fieldset.add-cmd-fieldset legend {
   background: var(--bg-card);
   color: var(--text-secondary);
   font-size: 12px;
-  font-weight: 700;
+  font-weight: 800;
   cursor: pointer;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -290,7 +314,7 @@ fieldset.add-cmd-fieldset legend {
   background: var(--accent-soft);
   color: var(--accent-deep);
   font-size: clamp(11px, 1.4svh, 13px);
-  font-weight: 650;
+  font-weight: 700;
   white-space: nowrap;
 }
 
@@ -324,7 +348,7 @@ fieldset.add-cmd-fieldset legend {
   background: transparent;
   color: var(--text-primary);
   font-size: clamp(13px, 2svh, 17px);
-  font-weight: 600;
+  font-weight: 700;
   text-align: left;
   cursor: pointer;
 }
@@ -393,7 +417,7 @@ fieldset.add-cmd-fieldset legend {
   padding: 7px 12px 3px;
   color: var(--text-muted);
   font-size: 11px;
-  font-weight: 700;
+  font-weight: 800;
 }
 
 .window-item {
@@ -454,7 +478,7 @@ fieldset.add-cmd-fieldset legend {
   background: var(--text-primary);
   color: var(--bg-card);
   font-size: 13px;
-  font-weight: 600;
+  font-weight: 700;
   box-shadow: 0 8px 24px rgba(15, 23, 42, 0.18);
   opacity: 0;
   visibility: hidden;
@@ -524,13 +548,13 @@ fieldset.add-cmd-fieldset legend {
   background: transparent;
   color: var(--text-primary);
   font-size: 14px;
-  font-weight: 600;
+  font-weight: 700;
   outline: none;
 }
 
 .edit-label-input::placeholder {
   color: var(--text-placeholder);
-  font-weight: 500;
+  font-weight: 600;
 }
 
 .edit-label-input:focus {
@@ -575,7 +599,7 @@ fieldset.add-cmd-fieldset legend {
 
 .char-count {
   font-size: 13px;
-  font-weight: 600;
+  font-weight: 700;
   color: var(--text-muted);
   white-space: nowrap;
 }
@@ -614,7 +638,7 @@ fieldset.add-cmd-fieldset legend {
   justify-content: center;
   gap: 6px;
   font-size: 13px;
-  font-weight: 650;
+  font-weight: 700;
   cursor: pointer;
   padding: 0 14px;
   box-shadow: var(--shadow-card);
@@ -680,7 +704,7 @@ fieldset.add-cmd-fieldset legend {
   background: var(--bg-card);
   color: var(--text-secondary);
   font-size: clamp(11px, 1.5svh, 14px);
-  font-weight: 650;
+  font-weight: 700;
   box-shadow: var(--shadow-card);
   cursor: pointer;
   transition: all 0.2s var(--ease-bounce);
@@ -772,7 +796,7 @@ fieldset.add-cmd-fieldset legend {
 
 .record-label {
   font-size: clamp(12px, 1.75svh, 16px);
-  font-weight: 700;
+  font-weight: 800;
   line-height: 1.1;
 }
 
@@ -784,7 +808,7 @@ fieldset.add-cmd-fieldset legend {
   border-radius: var(--radius-md);
   background: var(--bg-card);
   color: var(--text-primary);
-  font-weight: 650;
+  font-weight: 700;
   cursor: pointer;
   flex: 0 0 auto;
 }
@@ -835,7 +859,7 @@ fieldset.add-cmd-fieldset legend {
   background: transparent;
   color: var(--text-secondary);
   font-size: 13px;
-  font-weight: 650;
+  font-weight: 700;
   cursor: pointer;
   white-space: nowrap;
   transition: all 0.2s var(--ease-smooth);
@@ -850,7 +874,7 @@ fieldset.add-cmd-fieldset legend {
 
 .tab-count {
   font-size: 10px;
-  font-weight: 700;
+  font-weight: 800;
   min-width: 16px;
   height: 16px;
   display: inline-flex;
@@ -889,7 +913,7 @@ fieldset.add-cmd-fieldset legend {
   background: transparent;
   color: var(--text-secondary);
   font-size: 13px;
-  font-weight: 650;
+  font-weight: 700;
   cursor: pointer;
   transition: all 0.2s var(--ease-bounce);
 }
@@ -947,7 +971,7 @@ fieldset.add-cmd-fieldset legend {
   background: var(--bg-soft);
   color: var(--text-primary);
   font-size: 14px;
-  font-weight: 500;
+  font-weight: 600;
   transition: border-color 0.2s var(--ease-smooth);
 }
 
@@ -1003,7 +1027,7 @@ fieldset.add-cmd-fieldset legend {
   background: var(--bg-card);
   color: var(--text-secondary);
   font-size: clamp(12px, 1.7svh, 15px);
-  font-weight: 600;
+  font-weight: 700;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -1027,7 +1051,7 @@ fieldset.add-cmd-fieldset legend {
 .cmd-btn.slash {
   background: var(--accent-dim);
   color: var(--accent);
-  font-family: "SF Mono", Menlo, "Courier New", monospace;
+  font-family: var(--font-mono);
   font-size: 12px;
 }
 
@@ -1043,7 +1067,7 @@ fieldset.add-cmd-fieldset legend {
   gap: 5px;
   font-size: 12px;
   border-radius: 999px;
-  font-weight: 650;
+  font-weight: 700;
   cursor: pointer;
   box-shadow: none;
   border: 1px solid rgba(232, 121, 58, 0.2);
@@ -1167,7 +1191,7 @@ fieldset.add-cmd-fieldset legend {
 }
 .account-drawer-title {
   font-size: 18px;
-  font-weight: 750;
+  font-weight: 800;
   color: var(--text-primary);
   margin: 0;
 }
@@ -1211,7 +1235,7 @@ fieldset.add-cmd-fieldset legend {
   padding: 3px 10px;
   border-radius: 999px;
   font-size: 12px;
-  font-weight: 700;
+  font-weight: 800;
   background: var(--bg-soft);
   color: var(--text-secondary);
   border: 1px solid var(--border);
@@ -1230,7 +1254,7 @@ fieldset.add-cmd-fieldset legend {
 }
 .account-section-title {
   font-size: 13px;
-  font-weight: 700;
+  font-weight: 800;
   color: var(--text-secondary);
   text-transform: uppercase;
   letter-spacing: 0.5px;
@@ -1253,7 +1277,7 @@ fieldset.add-cmd-fieldset legend {
 }
 .account-row-value {
   font-size: 14px;
-  font-weight: 600;
+  font-weight: 700;
   color: var(--text-primary);
 }
 .account-action-btn {
@@ -1263,7 +1287,7 @@ fieldset.add-cmd-fieldset legend {
   background: var(--bg-card);
   color: var(--text-primary);
   font-size: 13px;
-  font-weight: 600;
+  font-weight: 700;
   cursor: pointer;
 }
 .account-action-btn:hover {
@@ -1321,7 +1345,7 @@ fieldset.add-cmd-fieldset legend {
   color: var(--text-secondary);
 }
 .usage-stat-value {
-  font-weight: 600;
+  font-weight: 700;
   color: var(--text-primary);
 }
 
@@ -1344,7 +1368,7 @@ fieldset.add-cmd-fieldset legend {
 }
 .pricing-card-name {
   font-size: 15px;
-  font-weight: 750;
+  font-weight: 800;
   color: var(--text-primary);
   margin: 0 0 8px;
 }
@@ -1365,7 +1389,7 @@ fieldset.add-cmd-fieldset legend {
   background: var(--accent-gradient);
   color: var(--accent-text);
   font-size: 13px;
-  font-weight: 700;
+  font-weight: 800;
   cursor: pointer;
   box-shadow: var(--shadow-accent);
 }
@@ -1380,7 +1404,7 @@ fieldset.add-cmd-fieldset legend {
   background: var(--accent-soft);
   color: var(--accent-deep);
   font-size: 11px;
-  font-weight: 700;
+  font-weight: 800;
   margin-left: 4px;
 }
 
@@ -1413,7 +1437,7 @@ fieldset.add-cmd-fieldset legend {
 }
 .device-name {
   font-size: 14px;
-  font-weight: 600;
+  font-weight: 700;
   color: var(--text-primary);
   white-space: nowrap;
   overflow: hidden;
@@ -1466,14 +1490,14 @@ fieldset.add-cmd-fieldset legend {
 
 .add-cmd-title {
   font-size: 18px;
-  font-weight: 750;
+  font-weight: 800;
   color: var(--text-primary);
   margin-bottom: 14px;
 }
 
 .add-cmd-label {
   font-size: 13px;
-  font-weight: 650;
+  font-weight: 700;
   color: var(--text-secondary);
   margin-bottom: 6px;
 }
@@ -1501,7 +1525,7 @@ fieldset.add-cmd-fieldset legend {
   background: var(--bg-soft);
   color: var(--text-primary);
   font-size: 15px;
-  font-weight: 500;
+  font-weight: 600;
   margin-bottom: 8px;
 }
 
@@ -1531,7 +1555,7 @@ fieldset.add-cmd-fieldset legend {
   background: var(--bg-card);
   color: var(--text-secondary);
   font-size: 15px;
-  font-weight: 700;
+  font-weight: 800;
   cursor: pointer;
 }
 
@@ -1543,7 +1567,7 @@ fieldset.add-cmd-fieldset legend {
   background: var(--accent-gradient);
   color: var(--accent-text);
   font-size: 15px;
-  font-weight: 700;
+  font-weight: 800;
   cursor: pointer;
   box-shadow: var(--shadow-accent);
 }
@@ -1560,7 +1584,7 @@ fieldset.add-cmd-fieldset legend {
   background: var(--bg-card);
   color: var(--text-primary);
   font-size: clamp(14px, 2svh, 18px);
-  font-weight: 750;
+  font-weight: 800;
   box-shadow: var(--shadow-button);
   cursor: pointer;
 }
@@ -1586,7 +1610,7 @@ fieldset.add-cmd-fieldset legend {
   border-radius: 999px;
   background: var(--accent-soft);
   color: var(--accent);
-  font-weight: 650;
+  font-weight: 700;
   cursor: pointer;
   box-shadow: none;
 }
@@ -1603,7 +1627,7 @@ fieldset.add-cmd-fieldset legend {
   gap: 10px;
   color: var(--text-secondary);
   font-size: clamp(13px, 1.9svh, 17px);
-  font-weight: 600;
+  font-weight: 700;
   cursor: pointer;
   user-select: none;
 }
