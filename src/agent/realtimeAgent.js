@@ -1,12 +1,49 @@
 import { createClient } from "@supabase/supabase-js";
-import { deviceChannel, presenceChannel, isInsertTextMessage } from "../shared/protocol.js";
+import { deviceChannel, presenceChannel, isInsertTextMessage, isKeyMessage } from "../shared/protocol.js";
 import { outputText } from "../server/input/outputText.js";
+import { pasteClipboard, pressEnter, pressEscape, pressUndo, pressDelete } from "../server/input/paste.js";
 
 export async function handleDesktopMessage({
   payload,
   myDeviceId,
   output = outputText
 }) {
+  if (isKeyMessage(payload, myDeviceId)) {
+    const { key, request_id, source_device_id } = payload;
+    try {
+      switch (key) {
+        case "paste": await pasteClipboard(); break;
+        case "enter": await pressEnter(); break;
+        case "escape": await pressEscape(); break;
+        case "undo": await pressUndo(); break;
+        case "delete": await pressDelete(); break;
+      }
+      return {
+        handled: true,
+        ack: {
+          type: "ack",
+          request_id,
+          source_device_id: myDeviceId,
+          target_device_id: source_device_id,
+          status: "success",
+          detail: `key:${key}`
+        }
+      };
+    } catch (error) {
+      return {
+        handled: true,
+        ack: {
+          type: "ack",
+          request_id,
+          source_device_id: myDeviceId,
+          target_device_id: source_device_id,
+          status: "failed",
+          detail: error instanceof Error ? error.message : String(error)
+        }
+      };
+    }
+  }
+
   if (!isInsertTextMessage(payload, myDeviceId)) {
     return { handled: false };
   }

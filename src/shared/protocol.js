@@ -39,3 +39,27 @@ export function isAckMessage(payload, myDeviceId) {
     ["success", "failed"].includes(payload.status)
   );
 }
+
+export const ALLOWED_KEYS = Object.freeze(["paste", "enter", "escape", "undo", "delete"]);
+
+export function isKeyMessage(payload, myDeviceId) {
+  return Boolean(
+    payload &&
+    payload.type === MESSAGE_TYPES.KEY &&
+    typeof payload.request_id === "string" &&
+    typeof payload.source_device_id === "string" &&
+    payload.target_device_id === myDeviceId &&
+    typeof payload.key === "string" &&
+    ALLOWED_KEYS.includes(payload.key)
+  );
+}
+
+export function buildKeyMessage({ sourceDeviceId, targetDeviceId, key }) {
+  return {
+    type: MESSAGE_TYPES.KEY,
+    request_id: createRequestId(),
+    source_device_id: sourceDeviceId,
+    target_device_id: targetDeviceId,
+    key
+  };
+}
