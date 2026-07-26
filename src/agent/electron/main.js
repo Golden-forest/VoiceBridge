@@ -9,7 +9,7 @@ import { createAgentClient, startRealtimeAgent } from '../realtimeAgent.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const bundledSupabaseUrl = 'https://gqxxknusznbunkiznnal.supabase.co';
-const bundledWebAppUrl = 'https://voicebridge-cloud.hl19970903.chatgpt.site';
+const bundledWebAppUrl = 'https://voicebridge-6kr.pages.dev';
 const bundledDesktopConfig = loadBundledDesktopConfig();
 
 let mainWindow = null;

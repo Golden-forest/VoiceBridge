@@ -8,7 +8,7 @@ const supabaseAnonKey = process.env.VOICEBRIDGE_DESKTOP_SUPABASE_ANON_KEY
   || process.env.SUPABASE_ANON_KEY
   || "";
 const webAppUrl = process.env.VOICEBRIDGE_WEB_APP_URL
-  || "https://voicebridge-cloud.hl19970903.chatgpt.site";
+  || "https://voicebridge-6kr.pages.dev";
 
 if (!supabaseUrl || !supabaseAnonKey) {
   console.error(
