@@ -28,11 +28,19 @@ export async function transcribeTencentWav({
     config
   });
 
-  const response = await fetchImpl(`https://${ENDPOINT}`, {
-    method: "POST",
-    headers: request.headers,
-    body: request.body
-  });
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 10_000);
+  let response;
+  try {
+    response = await fetchImpl(`https://${ENDPOINT}`, {
+      method: "POST",
+      headers: request.headers,
+      body: request.body,
+      signal: controller.signal
+    });
+  } finally {
+    clearTimeout(timeoutId);
+  }
   const payload = await response.json().catch(() => ({}));
 
   if (!response.ok || payload.Response?.Error) {

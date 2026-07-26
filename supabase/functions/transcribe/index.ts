@@ -106,13 +106,17 @@ Deno.serve(async (req) => {
       }
     });
 
-    await updateReservedUsage(serviceClient, { userId, requestId, status: "success" });
+    // Fire-and-forget: 不阻塞响应等待 usage_event 更新
+    void updateReservedUsage(serviceClient, { userId, requestId, status: "success" })
+      .catch((err) => console.error("Background updateReservedUsage failed:", err));
     return jsonResponse({ ok: true, request_id: requestId, text });
   } catch (error) {
     console.error("Transcribe function error:", error);
     if (userId && serviceClient) {
       if (usageReserved) {
-        await updateReservedUsage(serviceClient, { userId, requestId, status: "failed", errorCode: "transcription_failed" });
+        // Fire-and-forget: 失败路径同样不阻塞错误响应
+        void updateReservedUsage(serviceClient, { userId, requestId, status: "failed", errorCode: "transcription_failed" })
+          .catch((err) => console.error("Background updateReservedUsage (failed) failed:", err));
       } else {
         await recordUsage(serviceClient, {
           userId,
