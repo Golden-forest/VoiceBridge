@@ -8,7 +8,6 @@ const passwordInput = document.querySelector("#authPassword");
 const submitBtn = document.querySelector("#authSubmitBtn");
 const switchBtn = document.querySelector("#authSwitchBtn");
 const githubBtn = document.querySelector("#authGithubBtn");
-const logoutBtn = document.querySelector("#authLogoutButton");
 const modeLabel = document.querySelector("#authModeLabel");
 const messageEl = document.querySelector("#authMessage");
 const isCloudMode = config.voicebridgeMode === "cloud";
@@ -48,7 +47,6 @@ function setMode(nextMode) {
 function emitAuthReady(session) {
   window.VoiceBridgeAuth.session = session;
   window.VoiceBridgeAuth.user = session?.user || null;
-  logoutBtn?.classList.toggle("hidden", !isCloudMode || !session);
   window.dispatchEvent(new CustomEvent("voicebridge:auth", {
     detail: { session, user: session?.user || null }
   }));
@@ -97,18 +95,6 @@ githubBtn?.addEventListener("click", async () => {
   } catch (error) {
     setMessage(error instanceof Error ? error.message : "GitHub 登录失败，请稍后再试。", true);
     githubBtn.disabled = false;
-  }
-});
-
-logoutBtn?.addEventListener("click", async () => {
-  if (!supabase) return;
-  logoutBtn.disabled = true;
-  try {
-    await supabase.auth.signOut();
-  } catch (error) {
-    setMessage(error instanceof Error ? error.message : "退出登录失败，请稍后再试。", true);
-  } finally {
-    logoutBtn.disabled = false;
   }
 });
 

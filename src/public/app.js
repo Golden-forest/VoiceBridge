@@ -2,6 +2,7 @@ import { CloudRealtime, getPhoneDeviceId, isDesktopDeviceCandidate } from "./clo
 import { createBillingSession } from "./billing.js";
 import { recordWavUntilStopped } from "./cloudRecorder.js";
 import { transcribeCloudAudio } from "./cloudTranscribe.js";
+import { commandStore } from "./commandStore.js";
 
 // === Element References ===
 const appConfig = window.__VB_CONFIG || {};
@@ -210,7 +211,28 @@ async function handleAuthState(event) {
   await stopCloudRealtime();
   activeCloudUserId = user.id;
   activeCloudPhoneDeviceId = phoneDeviceId;
-  cloudDeviceSelect.classList.remove("hidden");
+
+  // 登记/刷新手机端自己的设备记录，使 Realtime RLS policy 能通过
+  // （policy 要求订阅 device:<user_id>:<device_id> 时 devices 表里有对应行）
+  try {
+    const sbAuth = window.VoiceBridgeAuth?.supabase;
+    if (sbAuth) {
+      await sbAuth.from("devices").upsert({
+        id: phoneDeviceId,
+        user_id: user.id,
+        runtime_user_id: user.id,
+        name: "Phone",
+        device_type: "phone",
+        platform: "web",
+        app_version: navigator.userAgent,
+        status: "active",
+        last_seen_at: new Date().toISOString()
+      }, { onConflict: "id" });
+    }
+  } catch (error) {
+    console.warn("Failed to register phone device:", error);
+  }
+
   const realtime = new CloudRealtime({
     supabase: window.VoiceBridgeAuth.supabase,
     user,
@@ -264,6 +286,65 @@ if (window.VoiceBridgeAuth) {
 
 cloudDeviceSelect?.addEventListener("change", () => {
   selectedCloudDeviceId = cloudDeviceSelect.value;
+  syncDeviceSelectorLabel();
+});
+
+// === 设备/窗口两行折叠交互 ===
+const deviceRowPrimary = document.querySelector("#deviceRowPrimary");
+const deviceRowExpand = document.querySelector("#deviceRowExpand");
+
+function isDeviceRowExpanded() {
+  return deviceRowPrimary?.classList.contains("is-expanded");
+}
+
+function setDeviceRowExpanded(expanded) {
+  if (!deviceRowPrimary || !deviceRowExpand) return;
+  deviceRowPrimary.classList.toggle("is-expanded", expanded);
+  deviceRowExpand.classList.toggle("hidden", !expanded);
+}
+
+// 第一行任意空白点击均可展开/收起；但点击内部控件（按钮/输入）不触发
+deviceRowPrimary?.addEventListener("click", (event) => {
+  if (event.target.closest("button,input,label,.toggle-switch")) return;
+  setDeviceRowExpanded(!isDeviceRowExpanded());
+});
+
+// === 自定义设备下拉 ===
+const deviceSelectorBtn = document.querySelector("#deviceSelectorBtn");
+const deviceSelectorDropdown = document.querySelector("#deviceSelectorDropdown");
+const deviceSelectorList = document.querySelector("#deviceSelectorList");
+const deviceSelectorLabel = document.querySelector("#deviceSelectorLabel");
+
+function isDeviceSelectorOpen() {
+  return !deviceSelectorDropdown?.classList.contains("hidden");
+}
+
+function setDeviceSelectorOpen(open) {
+  if (!deviceSelectorDropdown || !deviceSelectorBtn) return;
+  deviceSelectorDropdown.classList.toggle("hidden", !open);
+  deviceSelectorBtn.setAttribute("aria-expanded", open ? "true" : "false");
+}
+
+function syncDeviceSelectorLabel() {
+  if (!deviceSelectorLabel || !cloudDeviceSelect) return;
+  const value = cloudDeviceSelect.value;
+  if (!value) {
+    deviceSelectorLabel.textContent = "设备";
+    return;
+  }
+  const opt = Array.from(cloudDeviceSelect.options).find((o) => o.value === value);
+  deviceSelectorLabel.textContent = opt?.textContent || value;
+}
+
+deviceSelectorBtn?.addEventListener("click", (event) => {
+  event.stopPropagation();
+  setDeviceSelectorOpen(!isDeviceSelectorOpen());
+});
+
+document.addEventListener("click", (event) => {
+  if (isDeviceSelectorOpen() && !deviceSelectorDropdown?.contains(event.target) && event.target !== deviceSelectorBtn) {
+    setDeviceSelectorOpen(false);
+  }
 });
 
 function renderCloudDeviceOptions(desktopDevices) {
@@ -286,6 +367,35 @@ function renderCloudDeviceOptions(desktopDevices) {
     selectedCloudDeviceId = desktopDevices[0]?.deviceId || "";
     cloudDeviceSelect.value = selectedCloudDeviceId;
   }
+
+  renderDeviceSelectorList(desktopDevices);
+  syncDeviceSelectorLabel();
+}
+
+function renderDeviceSelectorList(desktopDevices) {
+  if (!deviceSelectorList) return;
+  deviceSelectorList.replaceChildren();
+  if (!desktopDevices.length) {
+    const p = document.createElement("p");
+    p.className = "window-list-loading";
+    p.textContent = "等待桌面端上线";
+    deviceSelectorList.appendChild(p);
+    return;
+  }
+  for (const device of desktopDevices) {
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "window-list-item";
+    btn.dataset.deviceId = device.deviceId;
+    btn.textContent = device.name || device.deviceId;
+    btn.addEventListener("click", () => {
+      selectedCloudDeviceId = device.deviceId;
+      cloudDeviceSelect.value = device.deviceId;
+      syncDeviceSelectorLabel();
+      setDeviceSelectorOpen(false);
+    });
+    deviceSelectorList.appendChild(btn);
+  }
 }
 
 function createCloudPlaceholderOption() {
@@ -305,7 +415,14 @@ async function stopCloudRealtime() {
 function resetCloudDeviceSelect() {
   selectedCloudDeviceId = "";
   cloudDeviceSelect.replaceChildren(createCloudPlaceholderOption());
-  cloudDeviceSelect.classList.add("hidden");
+  if (deviceSelectorList) {
+    deviceSelectorList.replaceChildren();
+    const p = document.createElement("p");
+    p.className = "window-list-loading";
+    p.textContent = "等待桌面端上线";
+    deviceSelectorList.appendChild(p);
+  }
+  syncDeviceSelectorLabel?.();
 }
 
 const PLAN_LIMITS = {
@@ -559,7 +676,23 @@ class CommandLibrary {
       this.render();
     });
 
-    this.container.addEventListener("click", (e) => {
+    this.container.addEventListener("click", async (e) => {
+      // Import seed button (only visible when library is empty)
+      if (e.target.id === "import-seed-btn") {
+        const btn = e.target;
+        btn.disabled = true;
+        btn.textContent = "导入中...";
+        try {
+          const { imported } = await commandStore.importSeedCommands();
+          showToast(`已导入 ${imported} 条指令。`);
+          await this.load();
+        } catch (err) {
+          showToast(err.message || "导入失败。", true);
+          btn.disabled = false;
+          btn.textContent = "导入种子指令（142 条）";
+        }
+        return;
+      }
       // Command button click — disabled during edit mode
       const btn = e.target.closest(".cmd-btn");
       if (!btn) return;
@@ -596,13 +729,7 @@ class CommandLibrary {
 
   async load() {
     try {
-      const res = await fetch("/api/commands");
-      if (!res.ok) {
-        console.error("API error:", res.status, await res.text().catch(() => ""));
-        this.commands = [];
-      } else {
-        this.commands = await res.json();
-      }
+      this.commands = await commandStore.list();
       // If "最近" is active but no commands have been used, fall back to first category
       if (this.activeCategory === "最近" && !this.commands.some(c => c.lastUsedAt)) {
         const cats = this._getCategories();
@@ -691,7 +818,15 @@ class CommandLibrary {
     this.container.innerHTML = "";
 
     if (this.commands.length === 0) {
-      this.container.innerHTML = '<p style="padding:12px;color:var(--text-muted);text-align:center;">暂无指令</p>';
+      this.container.innerHTML =
+        '<div style="padding:16px;color:var(--text-muted);text-align:center;">' +
+        '<p style="margin:0 0 8px;">指令库为空</p>' +
+        '<button id="import-seed-btn" type="button" ' +
+        'style="display:inline-block;padding:8px 16px;border:1px solid var(--accent-color,#0a84ff);' +
+        'border-radius:8px;background:transparent;color:var(--accent-color,#0a84ff);' +
+        'font-size:14px;cursor:pointer;">' +
+        '导入种子指令（142 条）</button>' +
+        '</div>';
       return;
     }
 
@@ -847,7 +982,7 @@ class CommandLibrary {
 
   async _deleteCommand(id) {
     try {
-      await fetch(`/api/commands/${id}`, { method: "DELETE" });
+      await commandStore.remove(id);
       this.commands = this.commands.filter(c => c.id !== id);
       showToast("已删除指令。");
       this._exitEditMode(false);
@@ -859,61 +994,33 @@ class CommandLibrary {
 
   async _updateCommand(id, updates) {
     try {
-      const res = await fetch(`/api/commands/${id}`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(updates)
-      });
-      if (!res.ok) {
-        console.error("API error:", res.status, await res.text().catch(() => ""));
-        return;
-      }
-      const updated = await res.json();
+      const updated = await commandStore.update(id, updates);
       const idx = this.commands.findIndex(c => c.id === id);
       if (idx !== -1) this.commands[idx] = updated;
-    } catch {
-      // silently fail, stale data will refresh on next load
+    } catch (err) {
+      console.error("commandStore.update failed:", err);
     }
   }
 
   async touchCommand(id) {
     try {
-      const res = await fetch(`/api/commands/${id}`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ lastUsedAt: Date.now() })
-      });
-      if (!res.ok) {
-        console.error("API error:", res.status, await res.text().catch(() => ""));
-        return;
-      }
-      const updated = await res.json();
+      const updated = await commandStore.update(id, { lastUsedAt: Date.now() });
       const idx = this.commands.findIndex(c => c.id === id);
       if (idx !== -1) this.commands[idx] = updated;
       this.renderTabs();
       this.render();
-    } catch {
-      // silently fail
+    } catch (err) {
+      console.error("commandStore.update (touch) failed:", err);
     }
   }
 
   async addCommand(text, category) {
     try {
-      const res = await fetch("/api/commands", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          text,
-          label: text.length > 8 ? text.slice(0, 8) + "\u2026" : text,
-          category: category || "通用"
-        })
+      const created = await commandStore.create({
+        text,
+        label: text.length > 8 ? text.slice(0, 8) + "\u2026" : text,
+        category: category || "通用"
       });
-      if (!res.ok) {
-        console.error("API error:", res.status, await res.text().catch(() => ""));
-        showToast("添加失败。", true);
-        return;
-      }
-      const created = await res.json();
       this.commands.unshift(created);
       // Switch to the category of the newly added command
       this.activeCategory = created.category || "未分类";
@@ -986,24 +1093,15 @@ class CommandLibrary {
       if (localStorage.getItem(migratedKey)) return;
       for (const phrase of phrases) {
         if (phrase.text) {
-          await fetch("/api/commands", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              text: phrase.text,
-              label: phrase.text.length > 8 ? phrase.text.slice(0, 8) + "\u2026" : phrase.text,
-              category: "通用",
-            }),
+          await commandStore.create({
+            text: phrase.text,
+            label: phrase.text.length > 8 ? phrase.text.slice(0, 8) + "\u2026" : phrase.text,
+            category: "通用",
           });
         }
       }
       localStorage.setItem(migratedKey, "true");
-      const res = await fetch("/api/commands");
-      if (!res.ok) {
-        console.error("API error:", res.status, await res.text().catch(() => ""));
-      } else {
-        this.commands = await res.json();
-      }
+      this.commands = await commandStore.list();
       this.renderTabs();
       this.render();
     } catch { }
@@ -1069,40 +1167,39 @@ const undoButton = document.querySelector("#undoButton");
 const escButton = document.querySelector("#escButton");
 const deleteButton = document.querySelector("#deleteButton");
 
-pasteButton.addEventListener("click", () => {
+function sendKeyCommand(key, successMessage) {
+  if (isCloudMode) {
+    if (!cloudRealtime || !selectedCloudDeviceId) {
+      showToast("请先打开桌面客户端。", true);
+      return;
+    }
+    cloudRealtime.sendKey({ targetDeviceId: selectedCloudDeviceId, key })
+      .then(() => showToast(successMessage))
+      .catch((error) => showToast(error.message || "发送失败，请稍后重试。", true));
+    return;
+  }
   if (ws && ws.readyState === WebSocket.OPEN) {
-    ws.send(JSON.stringify({ type: "paste" }));
-    showToast("已粘贴。");
+    ws.send(JSON.stringify({ type: key }));
+    showToast(successMessage);
   } else {
     showToast("发送失败，请检查连接。", true);
   }
+}
+
+pasteButton.addEventListener("click", () => {
+  sendKeyCommand("paste", "已粘贴。");
 });
 
 undoButton.addEventListener("click", () => {
-  if (ws && ws.readyState === WebSocket.OPEN) {
-    ws.send(JSON.stringify({ type: "undo" }));
-    showToast("已撤销。");
-  } else {
-    showToast("发送失败，请检查连接。", true);
-  }
+  sendKeyCommand("undo", "已撤销。");
 });
 
 escButton.addEventListener("click", () => {
-  if (ws && ws.readyState === WebSocket.OPEN) {
-    ws.send(JSON.stringify({ type: "escape" }));
-    showToast("已按 Esc。");
-  } else {
-    showToast("发送失败，请检查连接。", true);
-  }
+  sendKeyCommand("escape", "已按 Esc。");
 });
 
 deleteButton.addEventListener("click", () => {
-  if (ws && ws.readyState === WebSocket.OPEN) {
-    ws.send(JSON.stringify({ type: "delete" }));
-    showToast("已按删除。");
-  } else {
-    showToast("发送失败，请检查连接。", true);
-  }
+  sendKeyCommand("delete", "已按删除。");
 });
 
 async function sendQuickCommand(text, label) {
@@ -1111,12 +1208,7 @@ async function sendQuickCommand(text, label) {
 
 // === Action Buttons ===
 enterButton.addEventListener("click", () => {
-  if (ws && ws.readyState === WebSocket.OPEN) {
-    ws.send(JSON.stringify({ type: "enter" }));
-    showToast("已按回车。");
-  } else {
-    showToast("发送失败，请检查连接。", true);
-  }
+  sendKeyCommand("enter", "已按回车。");
 });
 
 // === Save / Add Command Button ===

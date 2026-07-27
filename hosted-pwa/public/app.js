@@ -211,7 +211,6 @@ async function handleAuthState(event) {
   await stopCloudRealtime();
   activeCloudUserId = user.id;
   activeCloudPhoneDeviceId = phoneDeviceId;
-  cloudDeviceSelect.classList.remove("hidden");
 
   // 登记/刷新手机端自己的设备记录，使 Realtime RLS policy 能通过
   // （policy 要求订阅 device:<user_id>:<device_id> 时 devices 表里有对应行）
@@ -287,6 +286,65 @@ if (window.VoiceBridgeAuth) {
 
 cloudDeviceSelect?.addEventListener("change", () => {
   selectedCloudDeviceId = cloudDeviceSelect.value;
+  syncDeviceSelectorLabel();
+});
+
+// === 设备/窗口两行折叠交互 ===
+const deviceRowPrimary = document.querySelector("#deviceRowPrimary");
+const deviceRowExpand = document.querySelector("#deviceRowExpand");
+
+function isDeviceRowExpanded() {
+  return deviceRowPrimary?.classList.contains("is-expanded");
+}
+
+function setDeviceRowExpanded(expanded) {
+  if (!deviceRowPrimary || !deviceRowExpand) return;
+  deviceRowPrimary.classList.toggle("is-expanded", expanded);
+  deviceRowExpand.classList.toggle("hidden", !expanded);
+}
+
+// 第一行任意空白点击均可展开/收起；但点击内部控件（按钮/输入）不触发
+deviceRowPrimary?.addEventListener("click", (event) => {
+  if (event.target.closest("button,input,label,.toggle-switch")) return;
+  setDeviceRowExpanded(!isDeviceRowExpanded());
+});
+
+// === 自定义设备下拉 ===
+const deviceSelectorBtn = document.querySelector("#deviceSelectorBtn");
+const deviceSelectorDropdown = document.querySelector("#deviceSelectorDropdown");
+const deviceSelectorList = document.querySelector("#deviceSelectorList");
+const deviceSelectorLabel = document.querySelector("#deviceSelectorLabel");
+
+function isDeviceSelectorOpen() {
+  return !deviceSelectorDropdown?.classList.contains("hidden");
+}
+
+function setDeviceSelectorOpen(open) {
+  if (!deviceSelectorDropdown || !deviceSelectorBtn) return;
+  deviceSelectorDropdown.classList.toggle("hidden", !open);
+  deviceSelectorBtn.setAttribute("aria-expanded", open ? "true" : "false");
+}
+
+function syncDeviceSelectorLabel() {
+  if (!deviceSelectorLabel || !cloudDeviceSelect) return;
+  const value = cloudDeviceSelect.value;
+  if (!value) {
+    deviceSelectorLabel.textContent = "设备";
+    return;
+  }
+  const opt = Array.from(cloudDeviceSelect.options).find((o) => o.value === value);
+  deviceSelectorLabel.textContent = opt?.textContent || value;
+}
+
+deviceSelectorBtn?.addEventListener("click", (event) => {
+  event.stopPropagation();
+  setDeviceSelectorOpen(!isDeviceSelectorOpen());
+});
+
+document.addEventListener("click", (event) => {
+  if (isDeviceSelectorOpen() && !deviceSelectorDropdown?.contains(event.target) && event.target !== deviceSelectorBtn) {
+    setDeviceSelectorOpen(false);
+  }
 });
 
 function renderCloudDeviceOptions(desktopDevices) {
@@ -309,6 +367,35 @@ function renderCloudDeviceOptions(desktopDevices) {
     selectedCloudDeviceId = desktopDevices[0]?.deviceId || "";
     cloudDeviceSelect.value = selectedCloudDeviceId;
   }
+
+  renderDeviceSelectorList(desktopDevices);
+  syncDeviceSelectorLabel();
+}
+
+function renderDeviceSelectorList(desktopDevices) {
+  if (!deviceSelectorList) return;
+  deviceSelectorList.replaceChildren();
+  if (!desktopDevices.length) {
+    const p = document.createElement("p");
+    p.className = "window-list-loading";
+    p.textContent = "等待桌面端上线";
+    deviceSelectorList.appendChild(p);
+    return;
+  }
+  for (const device of desktopDevices) {
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "window-list-item";
+    btn.dataset.deviceId = device.deviceId;
+    btn.textContent = device.name || device.deviceId;
+    btn.addEventListener("click", () => {
+      selectedCloudDeviceId = device.deviceId;
+      cloudDeviceSelect.value = device.deviceId;
+      syncDeviceSelectorLabel();
+      setDeviceSelectorOpen(false);
+    });
+    deviceSelectorList.appendChild(btn);
+  }
 }
 
 function createCloudPlaceholderOption() {
@@ -328,7 +415,14 @@ async function stopCloudRealtime() {
 function resetCloudDeviceSelect() {
   selectedCloudDeviceId = "";
   cloudDeviceSelect.replaceChildren(createCloudPlaceholderOption());
-  cloudDeviceSelect.classList.add("hidden");
+  if (deviceSelectorList) {
+    deviceSelectorList.replaceChildren();
+    const p = document.createElement("p");
+    p.className = "window-list-loading";
+    p.textContent = "等待桌面端上线";
+    deviceSelectorList.appendChild(p);
+  }
+  syncDeviceSelectorLabel?.();
 }
 
 const PLAN_LIMITS = {

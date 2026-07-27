@@ -182,11 +182,15 @@ fieldset.add-cmd-fieldset legend {
   display: grid;
   place-items: center;
   border: 0;
-  border-radius: 999px;
-  background: var(--accent-soft);
-  color: var(--accent);
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-secondary);
   cursor: pointer;
-  transition: background 0.2s var(--ease-smooth), transform 0.2s var(--ease-bounce);
+  transition: background 0.15s var(--ease-smooth), transform 0.2s var(--ease-bounce);
+}
+
+.refresh-button:hover {
+  background: var(--bg-soft);
 }
 
 .refresh-button:active {
@@ -214,9 +218,9 @@ fieldset.add-cmd-fieldset legend {
   min-height: 32px;
   max-width: 76px;
   padding: 0 9px;
-  border: 1px solid rgba(232, 121, 58, 0.18);
-  border-radius: 8px;
-  background: var(--bg-card);
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
   color: var(--text-secondary);
   font-size: 12px;
   font-weight: 800;
@@ -224,7 +228,11 @@ fieldset.add-cmd-fieldset legend {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  box-shadow: var(--shadow-button);
+  transition: background 0.15s var(--ease-smooth);
+}
+
+.billing-button:hover:not(:disabled) {
+  background: var(--bg-soft);
 }
 
 .billing-button:disabled {
@@ -240,17 +248,61 @@ fieldset.add-cmd-fieldset legend {
 
 /* === Target Device === */
 .device-pill {
-  min-height: clamp(44px, 6svh, 58px);
   display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: clamp(5px, 1.5vw, 10px);
+  flex-direction: column;
+  gap: 0;
   padding: 6px clamp(8px, 2vw, 12px);
   border: 0;
   border-radius: var(--radius-lg);
   background: var(--bg-card);
   flex: 0 0 auto;
   min-width: 0;
+  overflow: visible;
+}
+
+.device-row {
+  display: flex;
+  align-items: center;
+  gap: clamp(5px, 1.5vw, 10px);
+  min-height: clamp(34px, 4.5svh, 42px);
+  min-width: 0;
+}
+
+.device-row-primary {
+  cursor: pointer;
+  position: relative;
+}
+
+.device-row-expand {
+  border-top: 1px solid var(--border);
+  padding-top: 6px;
+  margin-top: 4px;
+  gap: clamp(8px, 2vw, 14px);
+  flex-wrap: nowrap;
+  justify-content: space-between;
+}
+
+.device-row-expand.hidden {
+  display: none;
+}
+
+.device-expand-arrow {
+  flex: 0 0 auto;
+  color: var(--text-muted);
+  font-size: 12px;
+  transition: transform 0.2s var(--ease-smooth);
+  margin-left: 2px;
+}
+
+.device-row-primary.is-expanded .device-expand-arrow {
+  transform: rotate(180deg);
+}
+
+.device-selector {
+  position: relative;
+  flex: 0 1 auto;
+  min-width: 0;
+  max-width: 65%;
 }
 
 .device-icon {
@@ -309,7 +361,7 @@ fieldset.add-cmd-fieldset legend {
 .status-badge {
   flex: 0 0 auto;
   padding: 3px 8px;
-  border: 1px solid rgba(232, 121, 58, 0.15);
+  border: 0;
   border-radius: 999px;
   background: var(--accent-soft);
   color: var(--accent-deep);
@@ -319,13 +371,11 @@ fieldset.add-cmd-fieldset legend {
 }
 
 .status-badge.error {
-  border-color: #f3c6c6;
   background: #fef2f2;
   color: var(--danger);
 }
 
 .status-badge.connecting {
-  border-color: var(--border);
   background: var(--bg-soft);
   color: var(--text-secondary);
 }
@@ -1238,12 +1288,11 @@ fieldset.add-cmd-fieldset legend {
   font-weight: 800;
   background: var(--bg-soft);
   color: var(--text-secondary);
-  border: 1px solid var(--border);
+  border: 0;
 }
 .plan-badge.pro {
   background: var(--accent-soft);
   color: var(--accent-deep);
-  border-color: rgba(232, 121, 58, 0.2);
 }
 
 /* === Account Section === */
@@ -2354,10 +2403,28 @@ fieldset.add-cmd-fieldset legend {
 }
 
 .cloud-device-select {
-  min-width: 120px;
-  max-width: 180px;
-  height: 34px;
-  border-radius: 8px;
-  border: 1px solid rgba(0, 0, 0, 0.12);
-  background: #fff;
+  flex: 0 1 auto;
+  min-width: 0;
+  max-width: 140px;
+  height: 28px;
+  padding: 0 4px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-primary);
+  font-size: clamp(12px, 1.6svh, 14px);
+  font-weight: 700;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.cloud-device-select:hover {
+  background: var(--bg-soft);
+}
+
+.cloud-device-select option {
+  background: var(--bg-card);
+  color: var(--text-primary);
 }
