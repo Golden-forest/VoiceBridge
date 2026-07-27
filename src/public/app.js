@@ -18,10 +18,43 @@ const billingActions = document.querySelector("#billingActions");
 const planBadge = document.querySelector("#planBadge");
 const accountDrawerBtn = document.querySelector("#accountDrawerBtn");
 const isCloudMode = appConfig.voicebridgeMode === "cloud";
+const lanCommandStore = {
+  list: () => requestLanCommands("/api/commands"),
+  create: (command) => requestLanCommands("/api/commands", {
+    method: "POST",
+    body: JSON.stringify(command)
+  }),
+  update: (id, updates) => requestLanCommands(`/api/commands/${encodeURIComponent(id)}`, {
+    method: "PUT",
+    body: JSON.stringify(updates)
+  }),
+  remove: (id) => requestLanCommands(`/api/commands/${encodeURIComponent(id)}`, {
+    method: "DELETE"
+  })
+};
+const activeCommandStore = isCloudMode ? commandStore : lanCommandStore;
 let cloudRealtime = null;
 let selectedCloudDeviceId = "";
 let activeCloudUserId = "";
 let activeCloudPhoneDeviceId = "";
+
+async function requestLanCommands(path, init = {}) {
+  const response = await fetch(path, {
+    ...init,
+    headers: { "Content-Type": "application/json", ...(init.headers || {}) }
+  });
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(payload.error || "指令操作失败。");
+  if (Array.isArray(payload)) {
+    return payload.map((command) => ({
+      ...command,
+      source: "user",
+      requiredPlan: "free",
+      locked: false
+    }));
+  }
+  return { ...payload, source: "user", requiredPlan: "free", locked: false };
+}
 
 // === Phone Clipboard ===
 async function copyToPhoneClipboard(text) {
@@ -250,9 +283,9 @@ async function handleAuthState(event) {
   // 更新 plan badge
   const sb = window.VoiceBridgeAuth?.supabase;
   if (sb && planBadge) {
-    sb.from("subscriptions").select("status").eq("user_id", user.id).maybeSingle()
+    sb.from("subscriptions").select("plan,status").eq("user_id", user.id).maybeSingle()
       .then(({ data: sub }) => {
-        const plan = sub && isPaidStatus(sub.status) ? "pro" : "free";
+        const plan = sub?.plan === "pro" && isPaidStatus(sub.status) ? "pro" : "free";
         planBadge.textContent = plan === "pro" ? "Pro" : "Free";
         planBadge.classList.toggle("pro", plan === "pro");
       })
@@ -677,22 +710,6 @@ class CommandLibrary {
     });
 
     this.container.addEventListener("click", async (e) => {
-      // Import seed button (only visible when library is empty)
-      if (e.target.id === "import-seed-btn") {
-        const btn = e.target;
-        btn.disabled = true;
-        btn.textContent = "导入中...";
-        try {
-          const { imported } = await commandStore.importSeedCommands();
-          showToast(`已导入 ${imported} 条指令。`);
-          await this.load();
-        } catch (err) {
-          showToast(err.message || "导入失败。", true);
-          btn.disabled = false;
-          btn.textContent = "导入种子指令（142 条）";
-        }
-        return;
-      }
       // Command button click — disabled during edit mode
       const btn = e.target.closest(".cmd-btn");
       if (!btn) return;
@@ -700,6 +717,10 @@ class CommandLibrary {
       const id = btn.dataset.id;
       const cmd = this.commands.find(c => c.id === id);
       if (!cmd) return;
+      if (cmd.locked) {
+        showToast("升级 Pro 后可使用这条指令。", true);
+        return;
+      }
       sendQuickCommand(cmd.text, cmd.label);
       this.touchCommand(id);
     });
@@ -708,6 +729,8 @@ class CommandLibrary {
       const btn = e.target.closest(".cmd-btn");
       if (!btn || this.editingId) return;
       const id = btn.dataset.id;
+      const cmd = this.commands.find(c => c.id === id);
+      if (!cmd || cmd.source !== "user" || cmd.locked) return;
       this._longPressTriggered = false;
       this._longPressStartX = e.clientX;
       this._longPressStartY = e.clientY;
@@ -729,7 +752,7 @@ class CommandLibrary {
 
   async load() {
     try {
-      this.commands = await commandStore.list();
+      this.commands = await activeCommandStore.list();
       // If "最近" is active but no commands have been used, fall back to first category
       if (this.activeCategory === "最近" && !this.commands.some(c => c.lastUsedAt)) {
         const cats = this._getCategories();
@@ -818,15 +841,7 @@ class CommandLibrary {
     this.container.innerHTML = "";
 
     if (this.commands.length === 0) {
-      this.container.innerHTML =
-        '<div style="padding:16px;color:var(--text-muted);text-align:center;">' +
-        '<p style="margin:0 0 8px;">指令库为空</p>' +
-        '<button id="import-seed-btn" type="button" ' +
-        'style="display:inline-block;padding:8px 16px;border:1px solid var(--accent-color,#0a84ff);' +
-        'border-radius:8px;background:transparent;color:var(--accent-color,#0a84ff);' +
-        'font-size:14px;cursor:pointer;">' +
-        '导入种子指令（142 条）</button>' +
-        '</div>';
+      this.container.innerHTML = '<p style="padding:12px;color:var(--text-muted);text-align:center;">指令库为空</p>';
       return;
     }
 
@@ -880,6 +895,11 @@ class CommandLibrary {
       btn.type = "button";
       btn.dataset.id = cmd.id;
       btn.title = cmd.text;
+      if (cmd.locked) {
+        btn.classList.add("is-locked");
+        btn.setAttribute("aria-disabled", "true");
+        btn.title = "升级 Pro 后可用";
+      }
       if (cmd.text.startsWith("/") || /^(npm|node|copyclaw|npx)\b/.test(cmd.text)) {
         btn.classList.add("slash");
       }
@@ -888,6 +908,12 @@ class CommandLibrary {
       labelSpan.className = "cmd-label";
       labelSpan.textContent = cmd.label;
       btn.appendChild(labelSpan);
+      if (cmd.locked) {
+        const lock = document.createElement("span");
+        lock.className = "cmd-lock";
+        lock.textContent = "Pro";
+        btn.appendChild(lock);
+      }
       grid.appendChild(btn);
     });
     this.container.appendChild(grid);
@@ -896,6 +922,10 @@ class CommandLibrary {
   _enterEditMode(id) {
     const cmd = this.commands.find(c => c.id === id);
     if (!cmd) return;
+    if (cmd.source !== "user" || cmd.locked) {
+      showToast(cmd.locked ? "升级 Pro 后可编辑这条指令。" : "系统预置指令不可编辑。", true);
+      return;
+    }
     this.editingId = id;
 
     // Populate input area
@@ -982,7 +1012,7 @@ class CommandLibrary {
 
   async _deleteCommand(id) {
     try {
-      await commandStore.remove(id);
+      await activeCommandStore.remove(id);
       this.commands = this.commands.filter(c => c.id !== id);
       showToast("已删除指令。");
       this._exitEditMode(false);
@@ -994,7 +1024,7 @@ class CommandLibrary {
 
   async _updateCommand(id, updates) {
     try {
-      const updated = await commandStore.update(id, updates);
+      const updated = await activeCommandStore.update(id, updates);
       const idx = this.commands.findIndex(c => c.id === id);
       if (idx !== -1) this.commands[idx] = updated;
     } catch (err) {
@@ -1003,8 +1033,10 @@ class CommandLibrary {
   }
 
   async touchCommand(id) {
+    const command = this.commands.find(c => c.id === id);
+    if (!command || command.source !== "user") return;
     try {
-      const updated = await commandStore.update(id, { lastUsedAt: Date.now() });
+      const updated = await activeCommandStore.update(id, { lastUsedAt: Date.now() });
       const idx = this.commands.findIndex(c => c.id === id);
       if (idx !== -1) this.commands[idx] = updated;
       this.renderTabs();
@@ -1016,7 +1048,7 @@ class CommandLibrary {
 
   async addCommand(text, category) {
     try {
-      const created = await commandStore.create({
+      const created = await activeCommandStore.create({
         text,
         label: text.length > 8 ? text.slice(0, 8) + "\u2026" : text,
         category: category || "通用"
@@ -1093,7 +1125,7 @@ class CommandLibrary {
       if (localStorage.getItem(migratedKey)) return;
       for (const phrase of phrases) {
         if (phrase.text) {
-          await commandStore.create({
+          await activeCommandStore.create({
             text: phrase.text,
             label: phrase.text.length > 8 ? phrase.text.slice(0, 8) + "\u2026" : phrase.text,
             category: "通用",

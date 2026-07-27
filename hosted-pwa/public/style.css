@@ -1086,6 +1086,26 @@ fieldset.add-cmd-fieldset legend {
   box-shadow: var(--shadow-card);
 }
 
+.cmd-btn.is-locked {
+  border: 1px dashed currentColor;
+  opacity: .48;
+  filter: grayscale(.35);
+}
+
+.cmd-btn.is-locked:hover {
+  transform: none;
+}
+
+.cmd-lock {
+  margin-left: auto;
+  border: 1px solid currentColor;
+  border-radius: 999px;
+  padding: 1px 5px;
+  font-size: 8px;
+  font-weight: 800;
+  letter-spacing: .04em;
+}
+
 .cmd-btn:active {
   transform: scale(0.92);
   background: var(--accent);
