@@ -582,7 +582,23 @@ class CommandLibrary {
       this.render();
     });
 
-    this.container.addEventListener("click", (e) => {
+    this.container.addEventListener("click", async (e) => {
+      // Import seed button (only visible when library is empty)
+      if (e.target.id === "import-seed-btn") {
+        const btn = e.target;
+        btn.disabled = true;
+        btn.textContent = "导入中...";
+        try {
+          const { imported } = await commandStore.importSeedCommands();
+          showToast(`已导入 ${imported} 条指令。`);
+          await this.load();
+        } catch (err) {
+          showToast(err.message || "导入失败。", true);
+          btn.disabled = false;
+          btn.textContent = "导入种子指令（142 条）";
+        }
+        return;
+      }
       // Command button click — disabled during edit mode
       const btn = e.target.closest(".cmd-btn");
       if (!btn) return;
@@ -708,7 +724,15 @@ class CommandLibrary {
     this.container.innerHTML = "";
 
     if (this.commands.length === 0) {
-      this.container.innerHTML = '<p style="padding:12px;color:var(--text-muted);text-align:center;">暂无指令</p>';
+      this.container.innerHTML =
+        '<div style="padding:16px;color:var(--text-muted);text-align:center;">' +
+        '<p style="margin:0 0 8px;">指令库为空</p>' +
+        '<button id="import-seed-btn" type="button" ' +
+        'style="display:inline-block;padding:8px 16px;border:1px solid var(--accent-color,#0a84ff);' +
+        'border-radius:8px;background:transparent;color:var(--accent-color,#0a84ff);' +
+        'font-size:14px;cursor:pointer;">' +
+        '导入种子指令（142 条）</button>' +
+        '</div>';
       return;
     }
 

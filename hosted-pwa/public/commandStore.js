@@ -1,15 +1,16 @@
-// Local command store backed by localStorage.
-// Mirrors the semantics of the LAN Express endpoint (src/server/routes/commands.js)
-// so the PWA can run on Cloudflare Pages without /api/commands.
+// Cloud command store backed by Supabase (user_commands table, RLS-isolated).
+// Mirrors the response shape of the LAN route (src/server/routes/commands.js)
+// so callers (app.js) work unchanged.
+//
+// Auth: reuses the global Supabase client exposed at window.VoiceBridgeAuth.supabase
+// (same pattern as cloudTranscribe.js / cloudRealtime.js).
+// RLS guarantees user_id = auth.uid() — no user identity is hardcoded here.
 
-const STORAGE_KEY = "voicebridge_commands";
 const SEED_URL = "/commands.json";
 
-// Field validation constants must stay in sync with the LAN route.
+// Fields the client is allowed to send to update();
+// matches ALLOWED_UPDATE_FIELDS in the previous Edge Function version.
 const ALLOWED_UPDATE_FIELDS = ["text", "label", "category", "lastUsedAt"];
-const MAX_TEXT_LEN = 2000;
-const MAX_LABEL_LEN = 100;
-const MAX_CATEGORY_LEN = 50;
 
 class NotFoundError extends Error {
   constructor(message) {
@@ -19,110 +20,76 @@ class NotFoundError extends Error {
   }
 }
 
-function uuid() {
-  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
-    return crypto.randomUUID();
+function getSupabaseClient() {
+  const supabase = globalThis.window?.VoiceBridgeAuth?.supabase;
+  if (!supabase) {
+    throw new Error("请先登录后再使用指令库。");
   }
-  // RFC4122 v4 fallback for older browsers.
-  return ([1e7] + -1e3 + -4e3 + -8e3 + -1e11).replace(
-    /[018]/g,
-    (c) => {
-      const rnd = (crypto.getRandomValues(new Uint8Array(1))[0] ?? 0) & 15;
-      const v = c ^ (rnd >> (c / 4));
-      return v.toString(16);
-    }
-  );
+  return supabase;
 }
 
-function isString(v) {
-  return typeof v === "string";
+// snake_case DB row -> camelCase client command
+function fromDb(row) {
+  if (!row) return null;
+  return {
+    id: row.id,
+    text: row.text,
+    label: row.label,
+    category: row.category,
+    sortOrder: row.sort_order ?? 0,
+    isFavorite: row.is_favorite ?? false,
+    createdAt: row.created_at ? new Date(row.created_at).getTime() : null,
+    lastUsedAt: row.last_used_at ? new Date(row.last_used_at).getTime() : null
+  };
 }
 
-function validateCommandFields({ text, label, category }) {
-  if (!text || !label || !category) {
-    throw new Error("缺少 text, label 或 category 字段");
+function wrapError(error, fallbackMessage) {
+  const message = error?.message || fallbackMessage;
+  if (error?.code === "PGRST116" || error?.code === "42P01") {
+    return new NotFoundError(message);
   }
-  if (
-    !isString(text) ||
-    !isString(label) ||
-    !isString(category) ||
-    text.length > MAX_TEXT_LEN ||
-    label.length > MAX_LABEL_LEN ||
-    category.length > MAX_CATEGORY_LEN
-  ) {
-    throw new Error("字段值无效");
-  }
-}
-
-async function readAll() {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return null;
-    const parsed = JSON.parse(raw);
-    if (parsed && Array.isArray(parsed.commands)) return parsed.commands;
-    if (Array.isArray(parsed)) return parsed;
-    return null;
-  } catch (err) {
-    console.warn("commandStore.readAll: failed to parse storage:", err);
-    return null;
-  }
-}
-
-async function writeAll(commands) {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify({ commands }));
-}
-
-async function ensureSeeded() {
-  const existing = await readAll();
-  if (existing) return existing;
-  try {
-    const res = await fetch(SEED_URL);
-    if (!res.ok) {
-      console.warn("commandStore: seed fetch failed:", res.status);
-      await writeAll([]);
-      return [];
-    }
-    const data = await res.json();
-    const commands = Array.isArray(data?.commands)
-      ? data.commands
-      : Array.isArray(data)
-        ? data
-        : [];
-    await writeAll(commands);
-    return commands;
-  } catch (err) {
-    console.warn("commandStore: seed fetch threw:", err);
-    await writeAll([]);
-    return [];
-  }
+  const err = new Error(message);
+  err.status = error?.status || 500;
+  return err;
 }
 
 export const commandStore = {
-  // GET /api/commands -> array
+  // GET user_commands ordered by sort_order -> Command[]
   async list() {
-    return await ensureSeeded();
+    const supabase = getSupabaseClient();
+    const { data, error } = await supabase
+      .from("user_commands")
+      .select("*")
+      .order("sort_order", { ascending: true })
+      .order("created_at", { ascending: true });
+    if (error) throw wrapError(error, "获取指令列表失败。");
+    return (data || []).map(fromDb);
   },
 
-  // POST /api/commands -> created command object
+  // POST insert -> created Command
   async create({ text, label, category }) {
-    validateCommandFields({ text, label, category });
-    const now = Date.now();
-    const cmd = {
-      id: uuid(),
-      text,
-      label,
-      category,
-      createdAt: now,
-      lastUsedAt: null,
-    };
-    const commands = await ensureSeeded();
-    commands.push(cmd);
-    await writeAll(commands);
-    return cmd;
+    if (!text || !label || !category) {
+      throw new Error("缺少 text, label 或 category 字段");
+    }
+    const supabase = getSupabaseClient();
+    const { data, error } = await supabase
+      .from("user_commands")
+      .insert({
+        text,
+        label,
+        category
+      })
+      .select("*")
+      .single();
+    if (error) throw wrapError(error, "保存指令失败。");
+    return fromDb(data);
   },
 
-  // PUT /api/commands/:id -> updated command object
+  // PATCH update -> updated Command
   async update(id, updates) {
+    if (!id) {
+      throw new Error("缺少指令 id");
+    }
     const filtered = {};
     if (updates && typeof updates === "object") {
       for (const key of ALLOWED_UPDATE_FIELDS) {
@@ -134,27 +101,80 @@ export const commandStore = {
     if (filtered.lastUsedAt != null) {
       filtered.lastUsedAt = Number(filtered.lastUsedAt) || Date.now();
     }
-    const commands = await ensureSeeded();
-    const idx = commands.findIndex((c) => c.id === id);
-    if (idx === -1) {
-      throw new NotFoundError("指令不存在");
+
+    // camelCase -> snake_case
+    const dbUpdates = {};
+    if ("text" in filtered) dbUpdates.text = filtered.text;
+    if ("label" in filtered) dbUpdates.label = filtered.label;
+    if ("category" in filtered) dbUpdates.category = filtered.category;
+    if ("lastUsedAt" in filtered) {
+      dbUpdates.last_used_at = filtered.lastUsedAt
+        ? new Date(filtered.lastUsedAt).toISOString()
+        : null;
     }
-    commands[idx] = { ...commands[idx], ...filtered, id };
-    await writeAll(commands);
-    return commands[idx];
+
+    if (Object.keys(dbUpdates).length === 0) {
+      throw new Error("没有可更新的字段。");
+    }
+
+    const supabase = getSupabaseClient();
+    const { data, error } = await supabase
+      .from("user_commands")
+      .update(dbUpdates)
+      .eq("id", id)
+      .select("*")
+      .maybeSingle();
+    if (error) throw wrapError(error, "更新指令失败。");
+    if (!data) throw new NotFoundError("指令不存在。");
+    return fromDb(data);
   },
 
-  // DELETE /api/commands/:id -> { ok: true }
+  // DELETE -> { ok: true }
   async remove(id) {
-    const commands = await ensureSeeded();
-    const idx = commands.findIndex((c) => c.id === id);
-    if (idx === -1) {
-      throw new NotFoundError("指令不存在");
+    if (!id) {
+      throw new Error("缺少指令 id");
     }
-    commands.splice(idx, 1);
-    await writeAll(commands);
+    const supabase = getSupabaseClient();
+    const { error, count } = await supabase
+      .from("user_commands")
+      .delete({ count: "exact" })
+      .eq("id", id);
+    if (error) throw wrapError(error, "删除指令失败。");
+    if (!count || count === 0) throw new NotFoundError("指令不存在。");
     return { ok: true };
   },
+
+  // Fetch /commands.json (public seed, 142 entries after Personal removal)
+  // and batch-insert under the current user (RLS sets user_id via JWT).
+  // Returns { imported: number }.
+  async importSeedCommands() {
+    const supabase = getSupabaseClient();
+    const res = await fetch(SEED_URL);
+    if (!res.ok) {
+      throw new Error(`拉取种子指令失败 (${res.status})。`);
+    }
+    const json = await res.json();
+    const seed = Array.isArray(json) ? json : json.commands || [];
+    if (!seed.length) return { imported: 0 };
+
+    const BATCH = 50;
+    let inserted = 0;
+    for (let i = 0; i < seed.length; i += BATCH) {
+      const batch = seed.slice(i, i + BATCH).map((c, idx) => ({
+        text: c.text,
+        label: c.label,
+        category: c.category || "uncategorized",
+        sort_order: i + idx
+      }));
+      const { data, error } = await supabase
+        .from("user_commands")
+        .insert(batch)
+        .select("id");
+      if (error) throw wrapError(error, "导入种子指令失败。");
+      inserted += data?.length || 0;
+    }
+    return { imported: inserted };
+  }
 };
 
 export { NotFoundError };

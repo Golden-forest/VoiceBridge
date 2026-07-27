@@ -969,22 +969,6 @@
       "lastUsedAt": 1781840686726
     },
     {
-      "id": "3a381de3-fffc-4943-bd3b-2cc60e3d34b0",
-      "text": "huanglin37@mail3.sysu.edu.cn",
-      "label": "Mail37",
-      "category": "Personal",
-      "createdAt": 1782919432942,
-      "lastUsedAt": 1784480521306
-    },
-    {
-      "id": "e3891ea5-29b7-4c68-85a6-b80ba8394ad3",
-      "text": "Hlhlhl097",
-      "label": "WRPassword",
-      "category": "Personal",
-      "createdAt": 1782919488311,
-      "lastUsedAt": 1784480525071
-    },
-    {
       "id": "d1935091-d69f-4693-8c0d-330a01a7177f",
       "text": "如有必要可以启动开发服务器测试，但记住用完要关。",
       "label": "关服务器",

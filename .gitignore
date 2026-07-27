@@ -19,6 +19,7 @@ out/
 hosted-pwa/node_modules/
 hosted-pwa/dist/
 hosted-pwa/.wrangler/
+hosted-pwa/.openai/
 hosted-pwa/build/
 hosted-pwa/coverage/
 hosted-pwa/.vinext/
