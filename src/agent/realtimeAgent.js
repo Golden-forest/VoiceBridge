@@ -1,5 +1,11 @@
 import { createClient } from "@supabase/supabase-js";
-import { deviceChannel, presenceChannel, isInsertTextMessage, isKeyMessage } from "../shared/protocol.js";
+import {
+  PROTOCOL_VERSION,
+  deviceChannel,
+  presenceChannel,
+  isInsertTextMessage,
+  isKeyMessage
+} from "../shared/protocol.js";
 import { outputText } from "../server/input/outputText.js";
 import { activateCloudWindow, listCloudWindows } from "../server/input/windowManager.js";
 import {
@@ -127,7 +133,8 @@ export async function startRealtimeAgent({
   output = outputText,
   onStatus = console.log,
   reportWindowTitles = false,
-  windowRefreshMs = 2000,
+  windowRefreshMs = 5000,
+  appVersion,
   listWindows = listCloudWindows
 }) {
   const ackChannels = new Map();
@@ -138,6 +145,7 @@ export async function startRealtimeAgent({
     config: { private: true }
   });
   let presenceTimer = null;
+  let stopped = false;
   let includeWindowTitles = Boolean(reportWindowTitles);
   let lastWindowsJson = "";
 
@@ -150,9 +158,49 @@ export async function startRealtimeAgent({
       deviceId: device.id,
       name: device.name,
       platform: device.platform,
+      appVersion,
+      protocolVersion: PROTOCOL_VERSION,
       status: "online",
       windows
     });
+  };
+
+  const schedulePresenceRefresh = () => {
+    clearTimeout(presenceTimer);
+    if (stopped) return;
+    presenceTimer = setTimeout(async () => {
+      presenceTimer = null;
+      try {
+        await trackPresence();
+      } catch (error) {
+        onStatus(`presence:windows:${error.message}`);
+      } finally {
+        schedulePresenceRefresh();
+      }
+    }, windowRefreshMs);
+  };
+
+  const getAckChannel = async (targetDeviceId) => {
+    const existing = ackChannels.get(targetDeviceId);
+    if (existing) return await existing.ready;
+
+    const channel = supabase.channel(deviceChannel(userId, targetDeviceId), {
+      config: { private: true }
+    });
+    const entry = {
+      channel,
+      ready: subscribeRealtimeChannel(channel, `ack:${targetDeviceId}`, onStatus)
+        .then(() => channel)
+        .catch(async (error) => {
+          if (ackChannels.get(targetDeviceId) === entry) {
+            ackChannels.delete(targetDeviceId);
+          }
+          await channel.unsubscribe();
+          throw error;
+        })
+    };
+    ackChannels.set(targetDeviceId, entry);
+    return await entry.ready;
   };
 
   messageChannel.on("broadcast", { event: "command" }, async ({ payload }) => {
@@ -163,6 +211,11 @@ export async function startRealtimeAgent({
       myDeviceId: device.id,
       match: payload?.target_device_id === device.id
     });
+    const ackChannelPromise = (
+      isInsertTextMessage(payload, device.id) || isKeyMessage(payload, device.id)
+    )
+      ? getAckChannel(payload.source_device_id)
+      : null;
     const result = await handleDesktopMessage({ payload, myDeviceId: device.id, output });
     console.info("[VB realtime] handleDesktopMessage result", {
       handled: result?.handled,
@@ -171,14 +224,7 @@ export async function startRealtimeAgent({
     });
     if (result.ack) {
       const targetDeviceId = result.ack.target_device_id;
-      let ackChannel = ackChannels.get(targetDeviceId);
-      if (!ackChannel) {
-        ackChannel = supabase.channel(deviceChannel(userId, targetDeviceId), {
-          config: { private: true }
-        });
-        ackChannels.set(targetDeviceId, ackChannel);
-      }
-
+      const ackChannel = await (ackChannelPromise || getAckChannel(targetDeviceId));
       const sendStatus = await ackChannel.send({
         type: "broadcast",
         event: "ack",
@@ -195,9 +241,7 @@ export async function startRealtimeAgent({
     onStatus(`presence:${status}`);
     if (status === "SUBSCRIBED") {
       await trackPresence(true);
-      presenceTimer = setInterval(() => {
-        void trackPresence().catch((error) => onStatus(`presence:windows:${error.message}`));
-      }, windowRefreshMs);
+      schedulePresenceRefresh();
     }
   });
 
@@ -208,14 +252,36 @@ export async function startRealtimeAgent({
       await trackPresence(true);
     },
     async stop() {
-      clearInterval(presenceTimer);
+      stopped = true;
+      clearTimeout(presenceTimer);
       presenceTimer = null;
       await messageChannel.unsubscribe();
       await presence.unsubscribe();
       await Promise.all(
-        [...ackChannels.values()].map((channel) => channel.unsubscribe())
+        [...ackChannels.values()].map(({ channel }) => channel.unsubscribe())
       );
       ackChannels.clear();
     }
   };
+}
+
+function subscribeRealtimeChannel(channel, label, onStatus, timeoutMs = 10000) {
+  return new Promise((resolve, reject) => {
+    const timeout = setTimeout(() => reject(new Error(`${label}:TIMED_OUT`)), timeoutMs);
+    try {
+      channel.subscribe((status) => {
+        onStatus(`${label}:${status}`);
+        if (status === "SUBSCRIBED") {
+          clearTimeout(timeout);
+          resolve();
+        } else if (["CHANNEL_ERROR", "TIMED_OUT", "CLOSED"].includes(status)) {
+          clearTimeout(timeout);
+          reject(new Error(`${label}:${status}`));
+        }
+      });
+    } catch (error) {
+      clearTimeout(timeout);
+      reject(error);
+    }
+  });
 }

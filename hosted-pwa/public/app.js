@@ -3,6 +3,7 @@ import { createBillingSession } from "./billing.js";
 import { recordWavUntilStopped } from "./cloudRecorder.js";
 import { transcribeCloudAudio } from "./cloudTranscribe.js";
 import { commandStore } from "./commandStore.js";
+import { isProtocolCompatible } from "./shared/protocol.js";
 
 // === Element References ===
 const appConfig = window.__VB_CONFIG || {};
@@ -189,6 +190,7 @@ async function sendTextToDesktop(text, { localSuccessMessage = "已发送到电�
       showToast("请先打开桌面客户端。", true);
       return false;
     }
+    if (!selectedCloudDeviceIsCompatible()) return false;
     try {
       const sendPromise = cloudRealtime.sendText({
         targetDeviceId: selectedCloudDeviceId,
@@ -390,7 +392,8 @@ function renderCloudDeviceOptions(desktopDevices) {
     ? desktopDevices.map((device) => {
       const option = document.createElement("option");
       option.value = device.deviceId;
-      option.textContent = device.name || device.deviceId;
+      const name = device.name || device.deviceId;
+      option.textContent = isProtocolCompatible(device.protocolVersion) ? name : `${name}（需更新）`;
       return option;
     })
     : [createCloudPlaceholderOption()];
@@ -424,7 +427,8 @@ function renderDeviceSelectorList(desktopDevices) {
     btn.type = "button";
     btn.className = "window-list-item";
     btn.dataset.deviceId = device.deviceId;
-    btn.textContent = device.name || device.deviceId;
+    const name = device.name || device.deviceId;
+    btn.textContent = isProtocolCompatible(device.protocolVersion) ? name : `${name}（需更新）`;
     btn.addEventListener("click", () => {
       selectedCloudDeviceId = device.deviceId;
       cloudDeviceSelect.value = device.deviceId;
@@ -464,7 +468,7 @@ function resetCloudDeviceSelect() {
 }
 
 const PLAN_LIMITS = {
-  free: { monthlySeconds: 18000, maxAudioSeconds: 60, rateLimitPerMinute: 30 },
+  free: { monthlySeconds: 600, maxAudioSeconds: 60, rateLimitPerMinute: 10 },
   pro: { monthlySeconds: 18000, maxAudioSeconds: 60, rateLimitPerMinute: 30 },
 };
 
@@ -1271,6 +1275,7 @@ function sendKeyCommand(key, successMessage) {
       showToast("请先打开桌面客户端。", true);
       return;
     }
+    if (!selectedCloudDeviceIsCompatible()) return;
     showToast("已发送，等待桌面端确认...");
     cloudRealtime.sendKey({
       targetDeviceId: selectedCloudDeviceId,
@@ -1287,6 +1292,13 @@ function sendKeyCommand(key, successMessage) {
   } else {
     showToast("发送失败，请检查连接。", true);
   }
+}
+
+function selectedCloudDeviceIsCompatible() {
+  const device = cloudDesktopDevices.find(({ deviceId }) => deviceId === selectedCloudDeviceId);
+  if (device && isProtocolCompatible(device.protocolVersion)) return true;
+  showToast("电脑客户端版本过旧，请重新打开最新的 VoiceBridge Agent。", true);
+  return false;
 }
 
 pasteButton.addEventListener("click", () => {

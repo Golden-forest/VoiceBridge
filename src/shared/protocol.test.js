@@ -6,12 +6,19 @@ import {
   isInsertTextMessage,
   isAckMessage,
   isKeyMessage,
-  buildKeyMessage
+  buildKeyMessage,
+  isProtocolCompatible
 } from "./protocol.js";
 
 test("channel helpers create stable private channel names", () => {
   assert.equal(presenceChannel("user-1"), "user:user-1:presence");
   assert.equal(deviceChannel("user-1", "device-1"), "device:user-1:device-1");
+});
+
+test("protocol version rejects outdated desktop clients", () => {
+  assert.equal(isProtocolCompatible(2), true);
+  assert.equal(isProtocolCompatible(1), false);
+  assert.equal(isProtocolCompatible(undefined), false);
 });
 
 test("isInsertTextMessage validates message shape and target", () => {

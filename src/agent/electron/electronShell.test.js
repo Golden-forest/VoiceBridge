@@ -70,6 +70,6 @@ test('Electron packaging writes a bundled public Supabase config', () => {
   assert.match(writeConfigJs, /VOICEBRIDGE_DESKTOP_SUPABASE_ANON_KEY/);
   assert.match(writeConfigJs, /desktop-config\.json/);
   assert.match(writeConfigJs, /VOICEBRIDGE_WEB_APP_URL/);
-  assert.match(writeConfigJs, /voicebridge-cloud\.hl19970903\.chatgpt\.site/);
+  assert.match(writeConfigJs, /voicebridge-6kr\.pages\.dev/);
   assert.match(writeConfigJs, /process\.exit\(1\)/);
 });

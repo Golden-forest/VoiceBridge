@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { readFile } from "node:fs/promises";
+import { access, readFile } from "node:fs/promises";
 import test from "node:test";
 
 const distRoot = new URL("../dist/", import.meta.url);
@@ -20,4 +20,9 @@ test("hosted PWA builds with cloud config and mobile entrypoint", async () => {
   assert.match(config, /gqxxknusznbunkiznnal\.supabase\.co/);
   assert.match(worker, /env\.ASSETS\.fetch/);
   assert.match(pairing, /action:\s*"claim"/);
+});
+
+test("hosted build does not publish test files", async () => {
+  await assert.rejects(access(new URL("client/cloudRealtime.test.js", distRoot)));
+  await assert.rejects(access(new URL("client/shared/protocol.test.js", distRoot)));
 });

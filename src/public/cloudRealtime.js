@@ -1,4 +1,5 @@
 import {
+  PROTOCOL_VERSION,
   deviceChannel,
   presenceChannel,
   createRequestId,
@@ -67,6 +68,7 @@ export class CloudRealtime {
           name: "Phone",
           platform: "web",
           runtimePlatform: navigator.platform || "web",
+          protocolVersion: PROTOCOL_VERSION,
           status: "online"
         });
       }

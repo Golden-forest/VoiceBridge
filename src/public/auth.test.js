@@ -13,9 +13,9 @@ test("auth overlay is disabled for local mode fallback", () => {
   assert.match(authJs, /overlay\?\.classList\.add\("hidden"\)/);
 });
 
-test("cloud auth exposes logout and app starts from an existing session", () => {
-  assert.match(indexHtml, /id="authLogoutButton"/);
-  assert.match(authJs, /auth\.signOut\(\)/);
+test("cloud auth exposes account logout and app starts from an existing session", () => {
+  assert.match(appJs, /window\.VoiceBridgeAuth\?\.signOut\(\)/);
+  assert.match(authJs, /signOut:\s*async \(\) => supabase\?\.auth\.signOut\(\)/);
   assert.match(appJs, /void handleAuthState\(\{\s*detail:/);
 });
 

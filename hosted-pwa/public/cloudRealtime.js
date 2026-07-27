@@ -1,4 +1,12 @@
-import { deviceChannel, presenceChannel, createRequestId, isAckMessage, buildKeyMessage, ALLOWED_KEYS } from "./shared/protocol.js";
+import {
+  PROTOCOL_VERSION,
+  deviceChannel,
+  presenceChannel,
+  createRequestId,
+  isAckMessage,
+  buildKeyMessage,
+  ALLOWED_KEYS
+} from "./shared/protocol.js";
 
 export class CloudRealtime {
   constructor({ supabase, user, phoneDeviceId, onDevices, onAck, onStatus, ackTimeoutMs = 10000, subscribeTimeoutMs = 10000 }) {
@@ -60,6 +68,7 @@ export class CloudRealtime {
           name: "Phone",
           platform: "web",
           runtimePlatform: navigator.platform || "web",
+          protocolVersion: PROTOCOL_VERSION,
           status: "online"
         });
       }
@@ -101,7 +110,6 @@ export class CloudRealtime {
     return await ackPromise;
   }
 
-  // 发送按键指令并等待桌面端实际执行完成。
   async sendKey({ targetDeviceId, key, targetWindowId }) {
     if (!this.ackChannel) {
       throw new Error("云端尚未连接");
@@ -117,7 +125,6 @@ export class CloudRealtime {
     });
     const channel = await this.getTargetChannel(targetDeviceId);
     if (!channel) {
-      console.warn("[VB sendKey] no channel for", targetDeviceId);
       throw new Error(`未找到桌面端通道：${targetDeviceId}`);
     }
     const payload = {

@@ -213,6 +213,7 @@ async function goOnline({ supabase, userId, device }) {
     supabase,
     userId,
     device,
+    appVersion: app.getVersion(),
     reportWindowTitles: settings.reportWindowTitles,
     onStatus: sendAgentStatus
   });

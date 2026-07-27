@@ -141,6 +141,7 @@ test("startRealtimeAgent reuses ack channels and cleans them up", async () => {
   const channels = new Map();
   const createdTopics = [];
   const unsubscribedTopics = [];
+  const subscribedTopics = [];
   const statuses = [];
   let commandHandler;
 
@@ -158,6 +159,7 @@ test("startRealtimeAgent reuses ack channels and cleans them up", async () => {
             return this;
           },
           async subscribe(callback) {
+            subscribedTopics.push(topic);
             await callback?.("SUBSCRIBED");
             return "ok";
           },
@@ -198,6 +200,7 @@ test("startRealtimeAgent reuses ack channels and cleans them up", async () => {
   await commandHandler({ payload: { ...payload, request_id: "request-2" } });
 
   assert.equal(createdTopics.filter((topic) => topic === "device:user-1:phone-1").length, 1);
+  assert.equal(subscribedTopics.filter((topic) => topic === "device:user-1:phone-1").length, 1);
   assert.equal(channels.get("device:user-1:phone-1").sends.length, 2);
   assert.ok(statuses.includes("ack:phone-1:error"));
 
@@ -208,6 +211,52 @@ test("startRealtimeAgent reuses ack channels and cleans them up", async () => {
     "device:user-1:phone-1",
     "user:user-1:presence"
   ].sort());
+});
+
+test("startRealtimeAgent never overlaps window presence scans", async () => {
+  let activeScans = 0;
+  let maxActiveScans = 0;
+  let scanCount = 0;
+  const supabase = {
+    channel() {
+      return {
+        on() {
+          return this;
+        },
+        async subscribe(callback) {
+          await callback?.("SUBSCRIBED");
+          return "ok";
+        },
+        async track() {
+          return "ok";
+        },
+        async unsubscribe() {
+          return "ok";
+        }
+      };
+    }
+  };
+
+  const agent = await startRealtimeAgent({
+    supabase,
+    userId: "user-1",
+    device: { id: "desktop-1", name: "Desk", platform: "darwin" },
+    windowRefreshMs: 1,
+    listWindows: async () => {
+      scanCount++;
+      activeScans++;
+      maxActiveScans = Math.max(maxActiveScans, activeScans);
+      await new Promise((resolve) => setTimeout(resolve, 8));
+      activeScans--;
+      return [];
+    }
+  });
+
+  await new Promise((resolve) => setTimeout(resolve, 25));
+  await agent.stop();
+
+  assert.ok(scanCount >= 2);
+  assert.equal(maxActiveScans, 1);
 });
 
 test("loadOrCreateDevice rejects malformed device JSON", async () => {

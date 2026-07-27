@@ -4,6 +4,8 @@ export const MESSAGE_TYPES = Object.freeze({
   KEY: "key"
 });
 
+export const PROTOCOL_VERSION = 2;
+
 export function presenceChannel(userId) {
   return `user:${userId}:presence`;
 }
@@ -77,6 +79,10 @@ export function buildKeyMessage({ sourceDeviceId, targetDeviceId, key, targetWin
   };
   if (targetWindowId) message.target_window_id = targetWindowId;
   return message;
+}
+
+export function isProtocolCompatible(version) {
+  return Number(version) >= PROTOCOL_VERSION;
 }
 
 function isOptionalWindowId(windowId) {

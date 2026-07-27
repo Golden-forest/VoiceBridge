@@ -30,15 +30,25 @@ Deno.serve(async (req) => {
     const env = getSupabaseEnv();
     const authHeader = req.headers.get("Authorization") || "";
     const authClient = createClient(env.supabaseUrl, env.supabaseAnonKey, {
-      global: { headers: { Authorization: authHeader } }
+      global: { headers: { Authorization: authHeader } },
+      auth: {
+        autoRefreshToken: false,
+        persistSession: false,
+        detectSessionInUrl: false
+      }
     });
     serviceClient = createClient(env.supabaseUrl, env.supabaseServiceRoleKey);
 
-    const { data, error } = await authClient.auth.getUser();
-    if (error || !data.user) {
+    const accessToken = authHeader.match(/^Bearer\s+(.+)$/i)?.[1]?.trim();
+    if (!accessToken) {
       return errorResponse("unauthorized", "请先登录后再使用云端语音识别。", 401);
     }
-    userId = data.user.id;
+    const { data, error } = await authClient.auth.getClaims(accessToken);
+    const subject = data?.claims?.sub;
+    if (error || typeof subject !== "string" || !subject) {
+      return errorResponse("unauthorized", "请先登录后再使用云端语音识别。", 401);
+    }
+    userId = subject;
 
     const formData = await req.formData();
     const audio = formData.get("audio");
