@@ -11,6 +11,17 @@ npm-debug.log*
 .superpowers/
 src/public/commands.json
 
-# 独立子项目与构建产物（assets/ 保留：应用图标）
-hosted-pwa/
+# 构建产物（assets/ 保留：应用图标）
 out/
+
+# hosted-pwa 是 Cloudflare Pages 部署目标，源码纳入版本控制
+# 只忽略依赖和构建产物
+hosted-pwa/node_modules/
+hosted-pwa/dist/
+hosted-pwa/.wrangler/
+hosted-pwa/build/
+hosted-pwa/coverage/
+hosted-pwa/.vinext/
+hosted-pwa/.next/
+hosted-pwa/outputs/
+hosted-pwa/work/

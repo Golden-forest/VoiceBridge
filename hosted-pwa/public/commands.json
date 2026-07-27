@@ -1,0 +1,1156 @@
+{
+  "commands": [
+    {
+      "id": "b3c0e343-c884-47b2-bdf1-b2314ff114cc",
+      "text": "/compact",
+      "label": "/compact",
+      "category": "终端指令",
+      "createdAt": 1780076867692,
+      "lastUsedAt": 1783234069233
+    },
+    {
+      "id": "026554d8-3184-4d13-8236-1ce7d1f5471c",
+      "text": "/clear",
+      "label": "/clear",
+      "category": "终端指令",
+      "createdAt": 1780076867692,
+      "lastUsedAt": 1783946917373
+    },
+    {
+      "id": "cd5667d7-0b49-4f82-8657-4623c80d5842",
+      "text": "/git-commit",
+      "label": "/git-commit",
+      "category": "终端指令",
+      "createdAt": 1780076867692,
+      "lastUsedAt": 1784730439911
+    },
+    {
+      "id": "2017ebeb-ed6c-4344-882b-751f8f30391c",
+      "text": "/writing-plans",
+      "label": "/writing-plans",
+      "category": "终端指令",
+      "createdAt": 1780076867692,
+      "lastUsedAt": null
+    },
+    {
+      "id": "e6c646e4-12eb-4133-b42e-40b02c631df5",
+      "text": "/exit",
+      "label": "/exit",
+      "category": "终端指令",
+      "createdAt": 1780163936745,
+      "lastUsedAt": 1783946921156
+    },
+    {
+      "id": "15212807-5ad9-4225-8d1e-149dac8d0d00",
+      "text": "npm start",
+      "label": "npm start",
+      "category": "终端指令",
+      "createdAt": 1780076867692,
+      "lastUsedAt": null
+    },
+    {
+      "id": "dcf8e87a-9e9c-43e5-84ef-05e1b55d9af3",
+      "text": "copyclaw cli",
+      "label": "copyclaw cli",
+      "category": "终端指令",
+      "createdAt": 1780076867692,
+      "lastUsedAt": 1782916307083
+    },
+    {
+      "id": "f50cc5fb-86e6-4196-8665-7e13ad4d56cf",
+      "text": "copyclaw server",
+      "label": "copyclaw server",
+      "category": "终端指令",
+      "createdAt": 1780076867692,
+      "lastUsedAt": 1782916308192
+    },
+    {
+      "id": "e6d3c99f-1847-49dc-9db8-93f010fe419a",
+      "text": "exit",
+      "label": "exit",
+      "category": "终端指令",
+      "createdAt": 1780163945094,
+      "lastUsedAt": 1783946926292
+    },
+    {
+      "id": "2b85fbc5-cb2b-4cb6-9930-188d2256f664",
+      "text": "npx wrangler login",
+      "label": "npx wran…",
+      "category": "终端指令",
+      "createdAt": 1780547907026,
+      "lastUsedAt": null
+    },
+    {
+      "id": "cdb6b99a-6c95-4a22-a884-c5d2639fe17b",
+      "text": "我有没有说清楚我的需求？有什么问题可以问我。先确认你理解了，再查看相关代码，然后给出大致执行计划。等我确认后再执行。",
+      "label": "需求确认",
+      "category": "开发指令",
+      "createdAt": 1780076867692,
+      "lastUsedAt": 1784831028845
+    },
+    {
+      "id": "b72b64e4-c294-4280-b95d-ddb4f908274b",
+      "text": "以最终目标为导向讨论，从实现什么功能来往回推导方案。",
+      "label": "目标导向",
+      "category": "开发指令",
+      "createdAt": 1780076867692,
+      "lastUsedAt": 1782616461497
+    },
+    {
+      "id": "844c81db-c335-44e7-b5ef-81f22215baad",
+      "text": "我们来头脑风暴一下。先不要写代码",
+      "label": "头脑风暴",
+      "category": "开发指令",
+      "createdAt": 1780078043784,
+      "lastUsedAt": 1782702786697
+    },
+    {
+      "id": "694b62f9-b295-42cd-83a8-e478ebc79357",
+      "text": "把讨论的重点内容和执行计划记下来，方便压缩上下文后继续。",
+      "label": "计划文档",
+      "category": "开发指令",
+      "createdAt": 1780076867692,
+      "lastUsedAt": 1783705128389
+    },
+    {
+      "id": "18bcd597-43ab-4b3f-a9f2-f1bd2ca15fa5",
+      "text": "对比所有可行方案，给出推荐。我需要质量最好的治本的方案，我不嫌麻烦。",
+      "label": "最优方案",
+      "category": "开发指令",
+      "createdAt": 1780076867692,
+      "lastUsedAt": 1783523869556
+    },
+    {
+      "id": "8cf1d2ff-faf6-40c4-b5f3-b828802893c8",
+      "text": "能复制就复制，不要重新造轮子。先把有用的相关的内容或代码复制过来，然后再进行微调优化。",
+      "label": "能抄就抄",
+      "category": "开发指令",
+      "createdAt": 1780194119851,
+      "lastUsedAt": 1784741694971
+    },
+    {
+      "id": "4e0320b8-f168-4092-9df9-1fd895a2ccff",
+      "text": "联网搜索网上的现成的优质的方案，尤其是github里的。先学习优秀的方案再对比本系统中相关代码，找出可优化的地方并派subagent逐个进行优化。",
+      "label": "联网学习再优化",
+      "category": "开发指令",
+      "createdAt": 1780764570103,
+      "lastUsedAt": 1784741619311
+    },
+    {
+      "id": "f8317c8d-642e-4aa5-9c46-d0273309bafe",
+      "text": "不是有前端设计的skill吗？你让人家来设计啊？你来设计干啥？",
+      "label": "用前端设计skill",
+      "category": "开发指令",
+      "createdAt": 1780497618564,
+      "lastUsedAt": 1781025067701
+    },
+    {
+      "id": "6e9c0f6f-758d-4783-9f68-e5d074489fec",
+      "text": "可以派subagent执行。",
+      "label": "sub执行",
+      "category": "开发指令",
+      "createdAt": 1780076867692,
+      "lastUsedAt": 1783954325967
+    },
+    {
+      "id": "a1b2c3d4-minimal-copy-0001-0000-000000000006",
+      "text": "遵循最小化修改原则。",
+      "label": "最小化修改",
+      "category": "开发指令",
+      "createdAt": 1780120000000,
+      "lastUsedAt": 1784741805935
+    },
+    {
+      "id": "a1b2c3d4-code-review-0001-0000-000000000002",
+      "text": "对这段代码做深度Code Review：检查可读性、边界情况、安全隐患、性能问题、设计模式合理性，给出具体改进建议。",
+      "label": "代码审查",
+      "category": "开发指令",
+      "createdAt": 1780120000000,
+      "lastUsedAt": 1782667418175
+    },
+    {
+      "id": "a1b2c3d4-multi-review-0001-0000-000000000003",
+      "text": "从不同角度反复审查：代码质量、架构合理性、边界情况、安全性。发现问题逐项记录并优化。",
+      "label": "多轮审查",
+      "category": "开发指令",
+      "createdAt": 1780120000000,
+      "lastUsedAt": 1782616453356
+    },
+    {
+      "id": "19d495d5-38f9-49e7-bcae-eb260829a315",
+      "text": "可以按照你推荐的方案来执行，告诉我你准备分几步实现？每一步大致准备怎么做？不需要给出具体代码和具体步骤，用最简洁的话语来总结你的做法就可以，等我决策之后再执行。",
+      "label": "简单复述计划",
+      "category": "开发指令",
+      "createdAt": 1780076867692,
+      "lastUsedAt": null
+    },
+    {
+      "id": "d38f381b-b80d-4912-bebf-26135d2bbce5",
+      "text": "派sub agent 找出根因，定位问题代码位置，并查看相关联的代码文件的相关代码，多角度审查确定根因来源和位置。",
+      "label": "定位bug位置",
+      "category": "开发指令",
+      "createdAt": 1780275661475,
+      "lastUsedAt": 1784715164675
+    },
+    {
+      "id": "a1b2c3d4-deep-fix-0001-0000-000000000001",
+      "text": "分析这个bug：先复现问题，追踪调用链找到根因，提出3个修复方案并附置信度，等确认后再修复。",
+      "label": "深研修复",
+      "category": "开发指令",
+      "createdAt": 1780120000000,
+      "lastUsedAt": 1782534216884
+    },
+    {
+      "id": "ebbac9db-c6fd-4b6c-9dcd-b16ee86eeee3",
+      "text": "先用subagent完成低成本高收益的任务，如果有对应的计划文档就更新计划文档。未澄清的问题和困难任务处理完后再逐个讨论。",
+      "label": "快修慢议",
+      "category": "开发指令",
+      "createdAt": 1780076867692,
+      "lastUsedAt": 1784048721061
+    },
+    {
+      "id": "50c41c39-3359-4eb2-8d70-31e4b1ecedf4",
+      "text": "挑刺式复查：检查接口命名冲突、依赖前后不一致等问题。最小化修复，但有更好方案可以推翻重来。",
+      "label": "末轮复查",
+      "category": "开发指令",
+      "createdAt": 1780076867692,
+      "lastUsedAt": null
+    },
+    {
+      "id": "f7172e60-6fa1-4ae6-9447-3e759beae9cc",
+      "text": "先系统地查看并定位相关代码，告诉我代码之间的联系和实现情况，追踪调用链找到根本原因，我们先讨论。",
+      "label": "定位代码",
+      "category": "开发指令",
+      "createdAt": 1780076867692,
+      "lastUsedAt": 1782653034166
+    },
+    {
+      "id": "b8e6e488-3320-4bd7-a12a-14887c6a6e87",
+      "text": "使用subagent全面巡检当前系统，对每个子系统深入分析，找出重大bug和可优化的地方。拆分为多个子任务并行执行。",
+      "label": "系统巡检",
+      "category": "开发指令",
+      "createdAt": 1780076867692,
+      "lastUsedAt": 1784026571374
+    },
+    {
+      "id": "8f154860-3ef2-454e-ab6d-e0fc4d9b26e9",
+      "text": "使用subagent实测改动效果，确保优化有效且无新问题。小问题直接修复（最小化原则），需要决策的问题记录下来讨论。",
+      "label": "实测改动",
+      "category": "开发指令",
+      "createdAt": 1780076867692,
+      "lastUsedAt": 1781528791360
+    },
+    {
+      "id": "a1b2c3d4-test-coverage-0001-0000-000000000004",
+      "text": "列出当前代码中所有未被测试覆盖的业务行为，用\"should {行为}\"格式输出，按模块分组。",
+      "label": "测试覆盖",
+      "category": "开发指令",
+      "createdAt": 1780120000000,
+      "lastUsedAt": null
+    },
+    {
+      "id": "a1b2c3d4-perf-diag-0001-0000-000000000005",
+      "text": "分析当前代码的性能瓶颈，列出最影响性能的问题，给出优化方案和预期提升幅度。",
+      "label": "性能诊断",
+      "category": "开发指令",
+      "createdAt": 1780120000000,
+      "lastUsedAt": 1781507799052
+    },
+    {
+      "id": "326c8ca7-1654-474a-8814-21a872b6a963",
+      "text": "continue",
+      "label": "continue",
+      "category": "开发指令",
+      "createdAt": 1780188744160,
+      "lastUsedAt": 1782836803149
+    },
+    {
+      "id": "ccc24b83-1183-4d1d-b31a-047d6f1685b7",
+      "text": "在你陈述方案的时候，尽量简洁，不要讲废话。",
+      "label": "简洁陈述方案",
+      "category": "开发指令",
+      "createdAt": 1780418345990,
+      "lastUsedAt": null
+    },
+    {
+      "id": "a1b2c3d4-summarize-0001-0000-000000000007",
+      "text": "总结刚才讨论的所有关键点，保持简洁但不遗漏重要信息。",
+      "label": "总结要点",
+      "category": "开发指令",
+      "createdAt": 1780120000000,
+      "lastUsedAt": "2026-05-30T15:00:01.381Z"
+    },
+    {
+      "id": "d12f51b9-4b8b-4f6d-8539-f181b4d902c1",
+      "text": "修复前再三确认要修改的代码的位置，确保修改之后不会引入新的bug。",
+      "label": "修复前确认",
+      "category": "开发指令",
+      "createdAt": 1780800106816,
+      "lastUsedAt": 1781421425397
+    },
+    {
+      "id": "b04b0c92-95a6-41cf-86eb-0bda076e04f1",
+      "text": "注意，不是简单的形式上面的模仿，而是要神似。你可以先联网搜索可以审查的维度分别有哪些？然后派subagent进行全维度的审查。在保证原创性的基础上可以先模仿再超越",
+      "label": "模仿",
+      "category": "开发指令",
+      "createdAt": 1780852054927,
+      "lastUsedAt": 1784741672725
+    },
+    {
+      "id": "370830bf-6fa1-40c3-a48a-07bbae9a1915",
+      "text": "可以。",
+      "label": "可以",
+      "category": "开发指令",
+      "createdAt": 1780226019121,
+      "lastUsedAt": 1782533708533
+    },
+    {
+      "id": "8068d286-d124-47c6-bd43-8521dd729d27",
+      "text": "给我一份详细的使用说明，一步一步引导我配置。",
+      "label": "Readme",
+      "category": "开发指令",
+      "createdAt": 1780076867692,
+      "lastUsedAt": null
+    },
+    {
+      "id": "a1b2c3d4-rewrite-0001-0000-000000000008",
+      "text": "重写这段文字，去除重复和不必要的细节，保持原有逻辑和含义，直接切入要点。",
+      "label": "重写精简",
+      "category": "开发指令",
+      "createdAt": 1780120000000,
+      "lastUsedAt": null
+    },
+    {
+      "id": "b1c2d3e4-ui-design-0001-0000-000000000001",
+      "text": "生成一张高保真UI界面截图。信息层级清晰，留白充足，文字清晰可读无乱码。布局结构合理，组件间距一致，符合平台设计规范。风格统一，配色协调，光影自然。",
+      "label": "UI设计",
+      "category": "AI绘图",
+      "createdAt": 1780150000000,
+      "lastUsedAt": 1780402290680
+    },
+    {
+      "id": "b1c2d3e4-social-screenshot-0001-0000-000000000002",
+      "text": "生成一张高仿社交平台内容截图。包含完整的界面元素：状态栏、账号信息区、正文内容区、互动数据、底部操作栏。比例固定，文字准确可读，禁止乱码和占位文本，界面元素完整真实。",
+      "label": "社交截图",
+      "category": "AI绘图",
+      "createdAt": 1780150000000,
+      "lastUsedAt": 1780324209873
+    },
+    {
+      "id": "b1c2d3e4-infographic-0001-0000-000000000003",
+      "text": "生成一张信息层级清晰的中文信息图。包含标题区和多个内容模块，每个模块有图标、短标题和简要说明。模块间用箭头或颜色区分信息流向。文字短而精炼，整体结构化布局，可读性强，不要大段正文。",
+      "label": "信息图",
+      "category": "AI绘图",
+      "createdAt": 1780150000000,
+      "lastUsedAt": null
+    },
+    {
+      "id": "b1c2d3e4-arch-diagram-0001-0000-000000000004",
+      "text": "生成一张结构化技术架构或系统设计图。核心模块用编号面板排列，模块间用箭头和连线表示数据流或调用关系。每个模块包含图标、短标题和关键参数。工程白皮书式信息图风格，低饱和配色，浅色背景，严格结构化布局，不要乱码文字。",
+      "label": "架构图",
+      "category": "AI绘图",
+      "createdAt": 1780150000000,
+      "lastUsedAt": null
+    },
+    {
+      "id": "b1c2d3e4-product-photo-0001-0000-000000000005",
+      "text": "生成一张商业级产品展示图。产品居中，材质细节清晰可见，灯光立体感强（柔光+轮廓光）。背景干净不抢主体，整体构图专业，质感超写实。可直接用于电商或宣传用途。",
+      "label": "产品摄影",
+      "category": "AI绘图",
+      "createdAt": 1780150000000,
+      "lastUsedAt": null
+    },
+    {
+      "id": "b1c2d3e4-brand-design-0001-0000-000000000006",
+      "text": "生成一套完整的品牌视觉方案。包含Logo、主辅色系、字体方向，以及名片、App图标、网站首页、社媒模板等多个触点的应用效果。整体风格统一，纯白背景方便抠图，所有物料保持一致的品牌识别感。",
+      "label": "品牌设计",
+      "category": "AI绘图",
+      "createdAt": 1780150000000,
+      "lastUsedAt": 1780324201720
+    },
+    {
+      "id": "b1c2d3e4-poster-0001-0000-000000000007",
+      "text": "设计一张视觉冲击力强的海报。主视觉元素突出，标题文字巨大可读且拼写正确。版式构图有张力，色彩搭配有氛围感。只需要一张完整海报，不要展示板、多方案拼贴或过程稿。输出高分辨率，适合社媒传播。",
+      "label": "海报设计",
+      "category": "AI绘图",
+      "createdAt": 1780150000000,
+      "lastUsedAt": null
+    },
+    {
+      "id": "b1c2d3e4-typo-poster-0001-0000-000000000008",
+      "text": "生成一张高级概念字体海报。标题文字是唯一的主视觉，巨大、可读、有力量感。字体经过定制化设计，字重、间距、变形和负空间表达标题的气质。4-6色调色板，大胆留白，丝网印刷颗粒质感，博物馆级平面设计水准。不要通用字效、3D字体或杂乱拼贴。",
+      "label": "字体海报",
+      "category": "AI绘图",
+      "createdAt": 1780150000000,
+      "lastUsedAt": 1780637709827
+    },
+    {
+      "id": "b1c2d3e4-architecture-0001-0000-000000000009",
+      "text": "生成一张超写实建筑空间效果图。人眼视角，广角镜头，透视准确不变形。材质真实，光影层次丰富，室外冷光与室内暖光形成对比。UE5渲染风格，8K画质，光线追踪。空间功能定位清晰，动线合理。",
+      "label": "空间渲染",
+      "category": "AI绘图",
+      "createdAt": 1780150000000,
+      "lastUsedAt": null
+    },
+    {
+      "id": "b1c2d3e4-product-teardown-0001-0000-000000000010",
+      "text": "生成一张概念产品研发拆解板。中心展示最终产品hero render，周围分布：灵感来源分析、形态迭代过程、人体工学验证、内部结构分层拆解、材质方案和关键规格表。工业设计提案板风格，白底，技术图纸与产品摄影混合，细线标注清晰。不只是成品渲染，必须展示完整的研发分析过程。",
+      "label": "产品拆解",
+      "category": "AI绘图",
+      "createdAt": 1780150000000,
+      "lastUsedAt": null
+    },
+    {
+      "id": "cc-sep-write",
+      "text": "",
+      "label": "── 写作 ──",
+      "category": "CopyClaw",
+      "createdAt": 1780160000000,
+      "lastUsedAt": null
+    },
+    {
+      "id": "cc-writing-001",
+      "text": "WeMedia skill：帮我写篇公众号长文。",
+      "label": "公众号写作",
+      "category": "CopyClaw",
+      "createdAt": 1780160000000,
+      "lastUsedAt": 1781018399314
+    },
+    {
+      "id": "cc-writing-002",
+      "text": "writing-topic-ideation skill：帮我梳理写作选题和切入角度。",
+      "label": "选题方向",
+      "category": "CopyClaw",
+      "createdAt": 1780160000000,
+      "lastUsedAt": null
+    },
+    {
+      "id": "cc-writing-003",
+      "text": "writing-style-guard skill：统一文章的口吻、语气和表达边界。",
+      "label": "文风检查",
+      "category": "CopyClaw",
+      "createdAt": 1780160000000,
+      "lastUsedAt": "2026-05-30T14:43:07.498Z"
+    },
+    {
+      "id": "cc-writing-004",
+      "text": "writing-review skill：审查文章的结构、逻辑和清晰度。",
+      "label": "稿件审查",
+      "category": "CopyClaw",
+      "createdAt": 1780160000000,
+      "lastUsedAt": null
+    },
+    {
+      "id": "cc-sep-invest",
+      "text": "",
+      "label": "── 投资 ──",
+      "category": "CopyClaw",
+      "createdAt": 1780160000000,
+      "lastUsedAt": null
+    },
+    {
+      "id": "cc-invest-001",
+      "text": "buffett skill：用巴菲特投资框架分析这家公司。",
+      "label": "巴菲特分析",
+      "category": "CopyClaw",
+      "createdAt": 1780160000000,
+      "lastUsedAt": null
+    },
+    {
+      "id": "cc-invest-002",
+      "text": "stock_analysis skill：分析以下A股股票基本面和技术面：",
+      "label": "A股投研",
+      "category": "CopyClaw",
+      "createdAt": 1780160000000,
+      "lastUsedAt": 1781750420535
+    },
+    {
+      "id": "cc-sep-kb",
+      "text": "",
+      "label": "── 知识库 ──",
+      "category": "CopyClaw",
+      "createdAt": 1780160000000,
+      "lastUsedAt": null
+    },
+    {
+      "id": "cc-kb-001",
+      "text": "second-brain skill：管理知识库，摄入素材、查询知识、健康检查。",
+      "label": "知识库管理",
+      "category": "CopyClaw",
+      "createdAt": 1780160000000,
+      "lastUsedAt": null
+    },
+    {
+      "id": "cc-kb-002",
+      "text": "second-brain skill：设置新的Obsidian知识库。",
+      "label": "初始化知识库",
+      "category": "CopyClaw",
+      "createdAt": 1780160000000,
+      "lastUsedAt": null
+    },
+    {
+      "id": "cc-kb-003",
+      "text": "second-brain-ingest skill：将文档处理为结构化wiki页面。",
+      "label": "存入知识库",
+      "category": "CopyClaw",
+      "createdAt": 1780160000000,
+      "lastUsedAt": null
+    },
+    {
+      "id": "cc-kb-004",
+      "text": "second-brain-query skill：搜索知识库回答问题。",
+      "label": "查询知识库",
+      "category": "CopyClaw",
+      "createdAt": 1780160000000,
+      "lastUsedAt": "2026-05-30T17:24:08.858Z"
+    },
+    {
+      "id": "cc-kb-005",
+      "text": "second-brain-lint skill：检测知识库矛盾和孤立页面。",
+      "label": "知识库体检",
+      "category": "CopyClaw",
+      "createdAt": 1780160000000,
+      "lastUsedAt": null
+    },
+    {
+      "id": "cc-kb-006",
+      "text": "second-brain-write skill：润色内容并保存到知识库。",
+      "label": "写入知识库",
+      "category": "CopyClaw",
+      "createdAt": 1780160000000,
+      "lastUsedAt": null
+    },
+    {
+      "id": "cc-sep-search",
+      "text": "",
+      "label": "── 搜索 ──",
+      "category": "CopyClaw",
+      "createdAt": 1780160000000,
+      "lastUsedAt": null
+    },
+    {
+      "id": "cc-search-001",
+      "text": "tavily_search skill：联网搜索。",
+      "label": "联网搜索",
+      "category": "CopyClaw",
+      "createdAt": 1780160000000,
+      "lastUsedAt": null
+    },
+    {
+      "id": "cc-search-002",
+      "text": "yt2md skill：下载视频字幕并整理为Markdown笔记。",
+      "label": "视频笔记",
+      "category": "CopyClaw",
+      "createdAt": 1780160000000,
+      "lastUsedAt": "2026-05-30T14:44:35.265Z"
+    },
+    {
+      "id": "cc-sep-media",
+      "text": "",
+      "label": "── 媒体 ──",
+      "category": "CopyClaw",
+      "createdAt": 1780160000000,
+      "lastUsedAt": null
+    },
+    {
+      "id": "cc-media-001",
+      "text": "video2audio skill：下载B站视频音频（m4a）。",
+      "label": "视频下载",
+      "category": "CopyClaw",
+      "createdAt": 1780160000000,
+      "lastUsedAt": null
+    },
+    {
+      "id": "cc-media-002",
+      "text": "tts skill：文本转语音（GPT-SoVITS）。",
+      "label": "语音合成",
+      "category": "CopyClaw",
+      "createdAt": 1780160000000,
+      "lastUsedAt": null
+    },
+    {
+      "id": "cc-media-003",
+      "text": "screenshot_beautifier skill：美化截图，加渐变背景和圆角。",
+      "label": "截图美化",
+      "category": "CopyClaw",
+      "createdAt": 1780160000000,
+      "lastUsedAt": null
+    },
+    {
+      "id": "cc-media-004",
+      "text": "md_to_docx skill：Markdown转Word文档。",
+      "label": "MD转Word",
+      "category": "CopyClaw",
+      "createdAt": 1780160000000,
+      "lastUsedAt": null
+    },
+    {
+      "id": "cc-media-005",
+      "text": "academic_format skill：Markdown论文排版为中文核心期刊Word。",
+      "label": "学术排版",
+      "category": "CopyClaw",
+      "createdAt": 1780160000000,
+      "lastUsedAt": null
+    },
+    {
+      "id": "cc-media-006",
+      "text": "web_report skill：整理内容为固定版式网页汇报。",
+      "label": "网页汇报",
+      "category": "CopyClaw",
+      "createdAt": 1780160000000,
+      "lastUsedAt": 1782987861509
+    },
+    {
+      "id": "cc-sep-assist",
+      "text": "",
+      "label": "── 助手 ──",
+      "category": "CopyClaw",
+      "createdAt": 1780160000000,
+      "lastUsedAt": null
+    },
+    {
+      "id": "cc-assist-001",
+      "text": "morning_briefing skill：早安推送（黄历、天气、任务）。",
+      "label": "早安推送",
+      "category": "CopyClaw",
+      "createdAt": 1780160000000,
+      "lastUsedAt": null
+    },
+    {
+      "id": "cc-assist-002",
+      "text": "daily_diary skill：对话式日记。",
+      "label": "写日记",
+      "category": "CopyClaw",
+      "createdAt": 1780160000000,
+      "lastUsedAt": null
+    },
+    {
+      "id": "cc-assist-003",
+      "text": "boss skill：查看和管理任务。",
+      "label": "老板催工",
+      "category": "CopyClaw",
+      "createdAt": 1780160000000,
+      "lastUsedAt": null
+    },
+    {
+      "id": "cc-assist-004",
+      "text": "secretary skill：日程规划和提醒。",
+      "label": "小秘书",
+      "category": "CopyClaw",
+      "createdAt": 1780160000000,
+      "lastUsedAt": null
+    },
+    {
+      "id": "cc-assist-005",
+      "text": "proactive_assistant skill：管理定时任务和推送。",
+      "label": "主动助理",
+      "category": "CopyClaw",
+      "createdAt": 1780160000000,
+      "lastUsedAt": null
+    },
+    {
+      "id": "cc-assist-006",
+      "text": "dashboard_idea skill：添加或删除灵感。",
+      "label": "灵感库",
+      "category": "CopyClaw",
+      "createdAt": 1780160000000,
+      "lastUsedAt": null
+    },
+    {
+      "id": "cc-sep-academic",
+      "text": "",
+      "label": "── 学术 ──",
+      "category": "CopyClaw",
+      "createdAt": 1780160000000,
+      "lastUsedAt": null
+    },
+    {
+      "id": "cc-academic-001",
+      "text": "exam_analysis skill：分析考试成绩生成报告。",
+      "label": "考试分析",
+      "category": "CopyClaw",
+      "createdAt": 1780160000000,
+      "lastUsedAt": null
+    },
+    {
+      "id": "cc-academic-002",
+      "text": "proposal_writing skill：NSFC基金申请全流程。",
+      "label": "基金申请",
+      "category": "CopyClaw",
+      "createdAt": 1780160000000,
+      "lastUsedAt": null
+    },
+    {
+      "id": "cc-sep-life",
+      "text": "",
+      "label": "── 生活 ──",
+      "category": "CopyClaw",
+      "createdAt": 1780160000000,
+      "lastUsedAt": null
+    },
+    {
+      "id": "cc-life-001",
+      "text": "fortune_teller skill：道师兄看运势、择吉日、风水分析。",
+      "label": "风水命理",
+      "category": "CopyClaw",
+      "createdAt": 1780160000000,
+      "lastUsedAt": null
+    },
+    {
+      "id": "cc-sep-tool",
+      "text": "",
+      "label": "── 工具 ──",
+      "category": "CopyClaw",
+      "createdAt": 1780160000000,
+      "lastUsedAt": null
+    },
+    {
+      "id": "cc-tool-001",
+      "text": "chrome_cdp skill：通过CDP控制Chrome浏览器。",
+      "label": "浏览器控制",
+      "category": "CopyClaw",
+      "createdAt": 1780160000000,
+      "lastUsedAt": null
+    },
+    {
+      "id": "cc-tool-002",
+      "text": "darwin_skill skill：8维度评估优化skill。",
+      "label": "技能优化",
+      "category": "CopyClaw",
+      "createdAt": 1780160000000,
+      "lastUsedAt": null
+    },
+    {
+      "id": "cc-tool-003",
+      "text": "github-harvester skill：搜索分析GitHub仓库。",
+      "label": "GitHub搜索",
+      "category": "CopyClaw",
+      "createdAt": 1780160000000,
+      "lastUsedAt": 1782018833321
+    },
+    {
+      "id": "4e120a14-12b3-45d3-b412-503ab137d448",
+      "text": "新建任务：",
+      "label": "新建任务：",
+      "category": "CopyClaw",
+      "createdAt": 1780162998323,
+      "lastUsedAt": 1782983949359
+    },
+    {
+      "id": "aecc76f7-4e48-495c-b770-3aa3be5a5462",
+      "text": "帮我标记一下已完成的任务：",
+      "label": "标记任务完成",
+      "category": "CopyClaw",
+      "createdAt": 1780163137414,
+      "lastUsedAt": "2026-05-30T17:52:05.242Z"
+    },
+    {
+      "id": "ff8d0535-0a6e-4301-a2db-24d5fde78567",
+      "text": "CopyClaw",
+      "label": "CopyClaw",
+      "category": "CopyClaw",
+      "createdAt": 1780163320484,
+      "lastUsedAt": 1782973148402
+    },
+    {
+      "id": "fab86fcc-3f67-44ae-befb-92e3b2c85755",
+      "text": "boss check",
+      "label": "boss check",
+      "category": "CopyClaw",
+      "createdAt": 1780163503665,
+      "lastUsedAt": 1783770033842
+    },
+    {
+      "id": "904c2ac7-f653-4255-a1b4-ad89adac761d",
+      "text": "cd Projects/CopyClaw",
+      "label": "cdCopyClaw",
+      "category": "终端指令",
+      "createdAt": 1781419674073,
+      "lastUsedAt": 1781496891569
+    },
+    {
+      "id": "rs-sep-deep-research",
+      "text": "",
+      "label": "── deep-research ──",
+      "category": "科研",
+      "createdAt": 1781500000000,
+      "lastUsedAt": null
+    },
+    {
+      "id": "rs-dr-002",
+      "text": "deep-research --mode quick brief：",
+      "label": "快速概览",
+      "category": "科研",
+      "createdAt": 1781500000000,
+      "lastUsedAt": null
+    },
+    {
+      "id": "rs-dr-003",
+      "text": "deep-research --mode lit-review：",
+      "label": "文献综述",
+      "category": "科研",
+      "createdAt": 1781500000000,
+      "lastUsedAt": null
+    },
+    {
+      "id": "rs-dr-004",
+      "text": "deep-research --mode systematic-review：",
+      "label": "系统综述",
+      "category": "科研",
+      "createdAt": 1781500000000,
+      "lastUsedAt": null
+    },
+    {
+      "id": "rs-dr-005",
+      "text": "deep-research --mode fact-check：",
+      "label": "事实核查",
+      "category": "科研",
+      "createdAt": 1781500000000,
+      "lastUsedAt": null
+    },
+    {
+      "id": "rs-dr-006",
+      "text": "deep-research --mode socratic：",
+      "label": "苏格拉底对话",
+      "category": "科研",
+      "createdAt": 1781500000000,
+      "lastUsedAt": null
+    },
+    {
+      "id": "rs-sep-paper",
+      "text": "",
+      "label": "── academic-paper ──",
+      "category": "科研",
+      "createdAt": 1781500000000,
+      "lastUsedAt": null
+    },
+    {
+      "id": "rs-ap-001",
+      "text": "academic-paper --mode full：",
+      "label": "写论文",
+      "category": "科研",
+      "createdAt": 1781500000000,
+      "lastUsedAt": null
+    },
+    {
+      "id": "rs-ap-002",
+      "text": "academic-paper --mode plan：",
+      "label": "论文规划",
+      "category": "科研",
+      "createdAt": 1781500000000,
+      "lastUsedAt": null
+    },
+    {
+      "id": "rs-ap-003",
+      "text": "academic-paper --mode outline：",
+      "label": "论文大纲",
+      "category": "科研",
+      "createdAt": 1781500000000,
+      "lastUsedAt": null
+    },
+    {
+      "id": "rs-ap-004",
+      "text": "academic-paper --mode revision：",
+      "label": "论文修订",
+      "category": "科研",
+      "createdAt": 1781500000000,
+      "lastUsedAt": 1781494984567
+    },
+    {
+      "id": "rs-ap-005",
+      "text": "academic-paper --mode revision-coach：",
+      "label": "写作辅导",
+      "category": "科研",
+      "createdAt": 1781500000000,
+      "lastUsedAt": null
+    },
+    {
+      "id": "rs-ap-006",
+      "text": "academic-paper --mode abstract：",
+      "label": "写摘要",
+      "category": "科研",
+      "createdAt": 1781500000000,
+      "lastUsedAt": null
+    },
+    {
+      "id": "rs-ap-007",
+      "text": "academic-paper --mode citation-check：",
+      "label": "引用检查",
+      "category": "科研",
+      "createdAt": 1781500000000,
+      "lastUsedAt": null
+    },
+    {
+      "id": "rs-ap-008",
+      "text": "academic-paper --mode disclosure：",
+      "label": "AI披露声明",
+      "category": "科研",
+      "createdAt": 1781500000000,
+      "lastUsedAt": null
+    },
+    {
+      "id": "rs-sep-review",
+      "text": "",
+      "label": "── paper-reviewer ──",
+      "category": "科研",
+      "createdAt": 1781500000000,
+      "lastUsedAt": null
+    },
+    {
+      "id": "rs-pr-001",
+      "text": "academic-paper-reviewer：",
+      "label": "全面评审",
+      "category": "科研",
+      "createdAt": 1781500000000,
+      "lastUsedAt": null
+    },
+    {
+      "id": "rs-pr-002",
+      "text": "academic-paper-reviewer --mode quick：",
+      "label": "快速评估",
+      "category": "科研",
+      "createdAt": 1781500000000,
+      "lastUsedAt": 1781493368196
+    },
+    {
+      "id": "rs-pr-003",
+      "text": "academic-paper-reviewer --mode calibration：",
+      "label": "审稿校准",
+      "category": "科研",
+      "createdAt": 1781500000000,
+      "lastUsedAt": 1781494710457
+    },
+    {
+      "id": "rs-sep-other",
+      "text": "",
+      "label": "── 其他 ──",
+      "category": "科研",
+      "createdAt": 1781500000000,
+      "lastUsedAt": null
+    },
+    {
+      "id": "rs-other-001",
+      "text": "academic-pipeline：",
+      "label": "全流程科研",
+      "category": "科研",
+      "createdAt": 1781500000000,
+      "lastUsedAt": null
+    },
+    {
+      "id": "rs-other-002",
+      "text": "pyplot-skill：",
+      "label": "科研绘图",
+      "category": "科研",
+      "createdAt": 1781500000000,
+      "lastUsedAt": null
+    },
+    {
+      "id": "3175215a-4192-47fb-8e56-e507fe95757b",
+      "text": "在执行前告诉我当前有哪些skill可以用，准备用哪些skill来执行。",
+      "label": "准备用啥skill",
+      "category": "开发指令",
+      "createdAt": 1781512873920,
+      "lastUsedAt": 1781627030484
+    },
+    {
+      "id": "58db6e7c-938e-4041-abb0-172fd7bca7b5",
+      "text": "用大视角分析一下以下股票的基本面和技术面，我想长期持有：",
+      "label": "长线分析",
+      "category": "CopyClaw",
+      "createdAt": 1781755816301,
+      "lastUsedAt": null
+    },
+    {
+      "id": "700254ed-d9f3-47eb-9d2c-eb538cf5ed0b",
+      "text": "用agnes：",
+      "label": "用agnes：",
+      "category": "CopyClaw",
+      "createdAt": 1781782248429,
+      "lastUsedAt": 1781840686726
+    },
+    {
+      "id": "3a381de3-fffc-4943-bd3b-2cc60e3d34b0",
+      "text": "huanglin37@mail3.sysu.edu.cn",
+      "label": "Mail37",
+      "category": "Personal",
+      "createdAt": 1782919432942,
+      "lastUsedAt": 1784480521306
+    },
+    {
+      "id": "e3891ea5-29b7-4c68-85a6-b80ba8394ad3",
+      "text": "Hlhlhl097",
+      "label": "WRPassword",
+      "category": "Personal",
+      "createdAt": 1782919488311,
+      "lastUsedAt": 1784480525071
+    },
+    {
+      "id": "d1935091-d69f-4693-8c0d-330a01a7177f",
+      "text": "如有必要可以启动开发服务器测试，但记住用完要关。",
+      "label": "关服务器",
+      "category": "开发指令",
+      "createdAt": 1782960420987,
+      "lastUsedAt": 1783078669645
+    },
+    {
+      "id": "208a3ee2-0240-40cf-aad8-f91278196a45",
+      "text": "我建议在我们讨论的过程中，你一边记，我们一边讨论，不然很有可能前面我们讨论的东西你会忘记掉。",
+      "label": "边讨论边记",
+      "category": "开发指令",
+      "createdAt": 1783484835409,
+      "lastUsedAt": null
+    },
+    {
+      "id": "1bab796d-0db1-48c6-8033-e5d31d2c244c",
+      "text": "先把刚刚审查发现的问题。以及对应的解决方案写进计划文档里面去。写成agent执行的，不需要给出具体的代码。\n在执行之前先跑测试确认哪些是既有失败，避免把环境问题当成代码bug来修复。在写计划文档的时候标注一下各个部分有哪些依赖关系，哪些是可以并行处理的？哪一些是需要先完成的都写清楚",
+      "label": "AI看的计划文档",
+      "category": "开发指令",
+      "createdAt": 1784048756283,
+      "lastUsedAt": null
+    },
+    {
+      "id": "ps-category-sep",
+      "text": "",
+      "label": "── PS人像精修 ──",
+      "category": "PS",
+      "createdAt": 1787000000000,
+      "lastUsedAt": null
+    },
+    {
+      "id": "ps-001-17224829",
+      "text": "请以我上传的原始照片作为唯一编辑对象，对照片进行专业摄影级 PS 后期处理。\n\n这是照片编辑任务，不是重新生成任务。请尽量保留原图，只修改光线、色彩、质感、皮肤状态和局部瑕疵。\n\n【人物保持】\n完整保留人物的身份和个人辨识度，不要改变人物的脸型、眼睛、眉毛、鼻子、嘴巴、下巴、发型、发饰、表情、年龄感和五官比例。\n不要换脸，不要把人物重新绘制成另一个相似的人。\n保持人物原有姿势、手势、身体比例、服装、饰品和构图不变。\n\n【画面保持】\n保留原图中的文字、图案、建筑、道具和重要背景元素，不要随意增加、删除、改写或变形。\n如果背景存在杂乱区域，可以通过降低亮度、饱和度、清晰度或适度虚化来弱化，但不要改变原本场景。\n\n【后期处理】\n优化曝光、白平衡、肤色、明暗层次和色彩关系。\n自然淡化黑眼圈、肤色不均、痘印和临时性皮肤瑕疵，但必须保留真实皮肤纹理和毛孔，不要过度磨皮。\n适度提亮眼神光，加强发丝、服装、首饰和材质细节。\n通过自然光影塑造人物面部立体感，让人物更上镜，但不要通过改变五官来美化。\n整体画面应当干净、自然、通透、高级，具有专业摄影师精修后的质感。\n\n【禁止事项】\n禁止改变人物身份。\n禁止改变五官和脸型。\n禁止过度放大眼睛、缩小鼻子、改变嘴型。\n禁止修改手指数量和手势。\n禁止改变服装和饰品。\n禁止修改原图文字。\n禁止添加无关物体。\n禁止过度磨皮、塑料皮肤、假脸感、过度锐化、过度 HDR 和廉价网红滤镜。\n\n最终效果应当像专业摄影师在原始照片上完成的精细后期，而不是重新生成了一张图片。",
+      "label": "万能基础版",
+      "category": "PS",
+      "createdAt": 1787000000001,
+      "lastUsedAt": null
+    },
+    {
+      "id": "ps-002-a8b77c30",
+      "text": "请以我上传的原始照片作为唯一编辑对象，进行明媚、清透、自然的专业人像摄影后期。\n\n这是照片编辑任务，不是重新创作任务。严格保持人物身份、五官、脸型、表情、发型、姿势、手势、服装、饰品和背景结构不变。\n\n为画面增加柔和、明亮、自然的阳光感，让光线自然地照在人物面部和上半身，形成清晰但不刺眼的眼神光和柔和阴影。\n整体提高画面的明亮度、空气感和通透感，但不要出现大面积过曝。\n\n自然优化肤色，使皮肤看起来健康、细腻、有光泽，但保留真实纹理和毛孔。\n淡化黑眼圈、肤色不均和临时性皮肤瑕疵，不要过度磨皮。\n增强服装、首饰、发丝和背景纹理的细节质感。\n\n适度提升画面的色彩丰富度，使红色、蓝色、绿色、金色等颜色更加明快鲜活，但不要过度饱和，不要产生廉价滤镜感。\n保持背景原有图案、建筑和文字不变，仅通过明暗和色彩层次突出人物主体。\n\n最终呈现明媚、鲜活、温暖、自然、高级的旅行杂志或时尚人像摄影质感。",
+      "label": "明媚通透写真",
+      "category": "PS",
+      "createdAt": 1787000000002,
+      "lastUsedAt": null
+    },
+    {
+      "id": "ps-003-33fb5a86",
+      "text": "请将我上传的原始照片处理成高端时尚杂志封面级别的人像摄影质感。\n\n这是照片编辑任务，不是重新生成人物。必须完整保留人物的身份、五官、脸型、表情、发型、服装、饰品、姿势和原始构图。\n不要修改、替换或重新绘制背景中的文字、图案和重要元素。\n\n使用克制、高级的商业摄影调色，优化画面的曝光、白平衡、色彩关系和明暗层次。\n让人物成为画面的视觉焦点，同时保留原图本身的情绪和空间感。\n\n为人物增加一束柔和、真实、具有自然渐变衰减的方向性光线，光线可以从画面侧上方照到人物的脸部和上半身，形成高级的明暗塑形、自然眼神光和细腻轮廓。\n光影必须真实自然，不要像舞台灯或人工贴上去的光斑。\n\n对人物进行自然精修，淡化临时性皮肤瑕疵和肤色不均，保留真实皮肤纹理。\n适度增强眼睛、发丝、服装、刺绣、首饰和材质细节。\n背景中不重要的区域可以轻微降低亮度、饱和度和清晰度，但不要改变背景内容。\n\n整体风格应当干净、克制、精致、具有空间层次和高级编辑感，像高端时尚杂志的人物大片，而不是网红滤镜照片。",
+      "label": "时尚杂志封面感",
+      "category": "PS",
+      "createdAt": 1787000000003,
+      "lastUsedAt": null
+    },
+    {
+      "id": "ps-004-c115d992",
+      "text": "请以我上传的原始照片作为唯一编辑对象，对画面进行电影级人像后期处理。\n\n严格保持人物身份、五官、脸型、表情、发型、姿势、手势、服装、饰品和原始背景不变。\n不要重新生成人物，不要换脸，不要修改原图中的文字和图案。\n\n增强画面的明暗层次和空间感，适度压低不重要区域的亮度，让人物成为视觉中心。\n为人物增加自然、有方向性的侧光或侧上方光线，使面部形成细腻的明暗过渡、眼神光和轮廓感。\n光线要真实、克制、有渐变，不要出现明显人工光斑。\n\n调色采用电影摄影风格：\n高光可以略微偏暖，阴影可以略微偏冷，但人物肤色必须自然准确。\n控制高光不过曝，保留暗部细节，使画面具有丰富的层次感。\n可以加入非常轻微的胶片颗粒、柔和高光晕染和细腻质感，但不要影响清晰度。\n\n自然修饰皮肤、黑眼圈和肤色不均，保留真实皮肤纹理。\n增强发丝、服装和首饰的质感，不要过度锐化。\n\n最终效果应当像电影剧照，具有情绪、故事感、光影层次和高级质感，但仍然保持真实摄影效果。",
+      "label": "电影感人像",
+      "category": "PS",
+      "createdAt": 1787000000004,
+      "lastUsedAt": null
+    },
+    {
+      "id": "ps-005-6d791d8a",
+      "text": "请对我上传的原始照片进行自然、耐看、高级的人像精修。\n\n这是照片编辑任务，不是重新生成人物。\n必须保留人物原始身份和个人辨识度，不改变脸型、眼睛、鼻子、嘴巴、眉毛、下巴、发型、表情和五官比例。\n保持原有姿势、手势、服装、饰品和背景结构不变。\n\n优化人物面部曝光、肤色、眼神光和整体光影。\n淡化黑眼圈、肤色不均、痘印和临时性皮肤瑕疵，但保留毛孔和真实皮肤纹理。\n不要过度磨皮，不要产生塑料皮肤和假脸感。\n\n通过自然的面部明暗塑形，让脸部轮廓看起来更加清晰、利落、上镜，但不要移动五官，不要改变真实脸型。\n适度整理发丝边缘和衣服褶皱，加强服装、首饰和头发的细节。\n\n背景可以适度降低杂乱感，通过调整亮度、饱和度、清晰度和轻微景深突出人物，但不要删除重要环境元素，也不要制造虚假的重度背景虚化。\n\n整体调色自然、清透、柔和、有氛围，像专业摄影师精修后的生活方式写真。",
+      "label": "自然氛围感美女",
+      "category": "PS",
+      "createdAt": 1787000000005,
+      "lastUsedAt": null
+    },
+    {
+      "id": "ps-006-3d25b86c",
+      "text": "请对我上传的原始照片进行自然人像精修，并在严格保持人物身份和五官特征不变的前提下，让人物面部轮廓在视觉上更加利落。\n\n不要直接缩窄脸型，不要移动眼睛、鼻子、嘴巴和下巴，不要改变五官比例，不要把人物修成另一个人。\n\n主要通过以下方式优化：\n调整面部光影塑形；\n适度控制脸颊和下颌附近的阴影；\n优化发丝与脸部边缘的关系；\n轻微修正拍摄角度产生的透视膨胀；\n优化下颌线和颈部附近的明暗层次；\n适当降低面部边缘的高光。\n\n同时自然淡化黑眼圈、肤色不均和临时性皮肤瑕疵，保留真实皮肤纹理。\n保持人物表情、发型、姿势、服装、饰品和背景不变。\n\n最终效果应当是人物本人更加上镜、轮廓更加清晰，而不是明显液化、变脸或失去个人辨识度。",
+      "label": "自然瘦脸版",
+      "category": "PS",
+      "createdAt": 1787000000006,
+      "lastUsedAt": null
+    },
+    {
+      "id": "ps-007-d19dc338",
+      "text": "请将我上传的原始照片处理成自然、专业、可信赖的职业形象照。\n\n严格保持人物身份、五官、脸型、年龄感和个人辨识度不变。\n不要换脸，不要改变五官比例，不要让人物显得过度年轻或失真。\n\n优化面部曝光、肤色、白平衡和眼神光。\n自然淡化黑眼圈、痘印、肤色不均和临时性皮肤瑕疵，但保留真实皮肤纹理。\n轻微整理发丝和衣服褶皱，使人物看起来整洁、精神、专业。\n\n调整面部光影，使五官更加立体清晰，但不要过度磨皮，不要过度锐化。\n适度优化肩颈和衣服轮廓，保持真实身体比例。\n\n背景保持简洁、干净、均匀。\n如果原背景杂乱，可以弱化或替换为低饱和、简洁、自然的职业背景，但不要产生明显抠图边缘和虚假影棚感。\n\n整体风格自然、稳重、亲和、专业，适合简历、教师介绍、个人主页和商务资料使用。",
+      "label": "证件与职业形象照",
+      "category": "PS",
+      "createdAt": 1787000000007,
+      "lastUsedAt": null
+    },
+    {
+      "id": "ps-008-a4058c97",
+      "text": "请以我上传的原始照片作为唯一编辑对象，进行高级复古胶片风格后期。\n\n必须保持人物身份、五官、脸型、表情、发型、姿势、手势、服装、饰品和原始场景不变。\n不要重新生成照片，不要修改原图中的文字和重要背景元素。\n\n采用自然、克制的复古胶片色彩：\n略微降低数码感和过度锐利感；\n高光柔和不过曝；\n阴影保留细节；\n颜色略带温暖、怀旧和轻微褪色感；\n肤色保持自然健康。\n\n可以加入非常细腻的胶片颗粒、轻微高光晕染和柔和色彩偏移，但不要加入明显划痕、污渍或低质量老照片效果。\n降低过度鲜艳的颜色，使画面更耐看，但保留服装和环境的主要色彩关系。\n\n自然修饰皮肤和肤色不均，保留皮肤纹理。\n增强发丝、服装和材质细节，但不要过度锐化。\n\n最终效果应当像高质量胶片相机拍摄的人像照片，温暖、松弛、文艺、真实，而不是套用廉价复古滤镜。",
+      "label": "复古胶片感",
+      "category": "PS",
+      "createdAt": 1787000000008,
+      "lastUsedAt": null
+    },
+    {
+      "id": "ps-009-f0823c15",
+      "text": "请对我上传的原始照片进行自然、清透、柔和的日系人像摄影后期。\n\n严格保持人物身份、五官、脸型、表情、发型、姿势、服装、饰品和背景结构不变。\n不要换脸，不要改变人物五官和身体比例。\n\n整体画面提高明亮度和空气感，使高光柔和、阴影轻盈，但不要大面积过曝。\n使用干净、低对比、自然的色彩关系，肤色清透健康，避免过度偏白或失去血色。\n\n自然淡化黑眼圈、肤色不均和临时性皮肤瑕疵，保留真实皮肤纹理。\n适度提亮眼神光，让人物神态更加自然有精神。\n\n背景颜色可以略微降低饱和度和对比度，使人物更加突出，但保留原有环境内容。\n可以加入轻微的柔光和空气感，不要添加明显雾化和虚假光斑。\n\n最终效果应当自然、清新、安静、柔和，像高质量日系生活写真。",
+      "label": "日系清透感",
+      "category": "PS",
+      "createdAt": 1787000000009,
+      "lastUsedAt": null
+    },
+    {
+      "id": "ps-010-66ea7b77",
+      "text": "请将我上传的原始照片处理成高级港风复古人像摄影质感。\n\n严格保持人物身份、五官、脸型、表情、发型、姿势、服装、饰品和背景内容不变。\n不要换脸，不要重新生成人物，不要修改原图文字。\n\n使用具有港风电影感的色彩关系：\n暖色灯光、深红色、暗绿色、金色和略带冷调的阴影；\n增强明暗对比和画面层次；\n控制高光，保留暗部细节；\n人物肤色保持自然，不要偏黄或偏红过度。\n\n为人物增加柔和的侧光、轮廓光或环境反射光，使面部和发丝更有立体感。\n光线必须自然融入原场景，不要出现明显人工特效。\n\n自然精修皮肤，保留毛孔和真实质感。\n增强眼睛、嘴唇、头发、服装和首饰细节，但不要过度锐化。\n可以加入轻微胶片颗粒和高光晕染，增加复古电影气氛。\n\n最终效果应当浓郁、复古、有故事感，像经典港风电影剧照，但不俗艳、不廉价。",
+      "label": "港风复古人像",
+      "category": "PS",
+      "createdAt": 1787000000010,
+      "lastUsedAt": null
+    },
+    {
+      "id": "ps-011-f463a13f",
+      "text": "请对我上传的原始照片进行高级夜景人像摄影后期。\n\n保持人物身份、五官、脸型、表情、发型、姿势、手势、服装和原始背景不变。\n不要重新生成人物，不要改变背景建筑、灯光和文字。\n\n降低夜景照片中的噪点和杂乱色偏，恢复人物面部自然肤色。\n适度提亮人物脸部和眼神光，但保持夜晚氛围，不要把画面修成白天。\n控制灯光高光不过曝，保留霓虹灯和环境光的层次。\n\n为人物增加符合现场逻辑的柔和补光或轮廓光，让面部更加清晰立体，但光线不能过强，也不能出现明显闪光灯感。\n适度增强背景灯光的层次和氛围，弱化杂乱区域。\n\n自然淡化黑眼圈和临时性皮肤瑕疵，保留真实皮肤纹理。\n增强发丝、服装和饰品的细节。\n\n最终效果应当干净、通透、有城市夜景氛围和高级电影感。",
+      "label": "夜景氛围感",
+      "category": "PS",
+      "createdAt": 1787000000011,
+      "lastUsedAt": null
+    },
+    {
+      "id": "ps-012-ac90968b",
+      "text": "请对我上传的原始照片进行自然、高级的夕阳逆光人像后期。\n\n严格保持人物身份、五官、脸型、表情、姿势、服装、饰品和原始环境不变。\n不要重新生成人物，不要随意改变天空、建筑和背景结构。\n\n增强夕阳的温暖氛围，使光线从人物侧后方或后方自然照射，形成柔和的发丝光、轮廓光和金色高光。\n同时为人物面部增加非常轻微、自然的环境补光，避免脸部过暗，但不要破坏逆光效果。\n\n控制太阳和天空区域不过曝，恢复高光细节。\n阴影保持柔和、有层次，不要出现严重 HDR 感。\n肤色自然健康，不要过度偏橙。\n\n自然修饰皮肤和肤色不均，保留真实纹理。\n增强头发、衣服、饰品和环境细节。\n\n最终效果应当温暖、浪漫、自然、有空气感，像专业旅行杂志的夕阳人像摄影。",
+      "label": "逆光夕阳感",
+      "category": "PS",
+      "createdAt": 1787000000012,
+      "lastUsedAt": null
+    },
+    {
+      "id": "ps-013-ec6010d4",
+      "text": "请以我上传的原始照片作为唯一编辑对象，重点优化杂乱背景，并突出人物主体。\n\n严格保持人物身份、五官、脸型、表情、发型、姿势、手势、服装、饰品和身体比例不变。\n不要换脸，不要改变人物外貌。\n\n保留与人物和场景叙事有关的重要背景元素。\n删除或弱化画面边缘、人物身后和视觉中心附近明显干扰主体的路人、垃圾、杂物、标牌残缺、凌乱线条和不协调物体。\n背景修复必须自然，纹理、透视、光线和空间结构要连续，不要留下涂抹痕迹。\n\n可以适度降低背景亮度、饱和度和清晰度，使人物更加突出，但不要制造不真实的重度虚化。\n保持原场景的真实感和空间感。\n\n同时优化人物面部光影、肤色和眼神光，自然淡化临时性皮肤瑕疵，保留真实皮肤纹理。\n\n最终效果应当像摄影师在拍摄现场就完成了干净构图，而不是明显删除过背景元素。",
+      "label": "背景杂乱清理版",
+      "category": "PS",
+      "createdAt": 1787000000013,
+      "lastUsedAt": null
+    },
+    {
+      "id": "ps-014-65ebfcaa",
+      "text": "请严格保持我上传照片中的人物、五官、脸型、表情、发型、姿势、手势、服装、饰品、背景、文字和构图完全不变。\n\n本次只进行光线、曝光、色彩和质感调整，不要重新绘制人物，不要修改任何五官和身体比例。\n\n优化整体曝光、白平衡和明暗层次。\n为人物增加一束柔和、自然、真实的方向性光线，使光线照在人物脸部和上半身，形成自然眼神光、面部立体感和柔和阴影。\n光线应当具有自然的渐变和衰减，并与原场景的光线方向一致。\n\n适度压低无关区域的亮度，让人物成为视觉焦点。\n保持原图的环境气氛、背景内容、文字和颜色关系。\n可以轻微增强服装、发丝和材质细节，但不要改变人物皮肤和五官。\n\n最终效果应当只是原照片获得了更专业、更高级的摄影光影，而不是生成了一张新照片。",
+      "label": "只修光影不改人物",
+      "category": "PS",
+      "createdAt": 1787000000014,
+      "lastUsedAt": null
+    },
+    {
+      "id": "ps-015-167a7b78",
+      "text": "请严格保持我上传照片中的人物五官、脸型、表情、发型、姿势、服装、背景、文字和构图完全不变。\n\n本次只进行自然人像皮肤精修，不要改变任何五官比例，不要瘦脸，不要放大眼睛，不要缩小鼻子，不要改变嘴型。\n\n自然淡化痘痘、痘印、黑眼圈、肤色不均、局部泛红、油光和临时性皮肤瑕疵。\n保留人物真实皮肤纹理、毛孔、面部细节和原有年龄感。\n不要过度磨皮，不要产生塑料皮肤、蜡像感和假脸感。\n\n适度优化眼神光、嘴唇质感和面部明暗，使人物看起来更加精神自然。\n不要改变发型、饰品、服装、背景和任何其他内容。\n\n最终效果应当像专业修图师进行的自然皮肤精修，人物仍然完全是本人。",
+      "label": "只修皮肤不动其他",
+      "category": "PS",
+      "createdAt": 1787000000015,
+      "lastUsedAt": null
+    },
+    {
+      "id": "ps-016-b9f235b8",
+      "text": "请对我上传的原始照片进行专业人像 PS 后期。\n\n这是照片编辑任务，不是重新生成任务。严格保持人物身份、五官、脸型、表情、发型、姿势、手势、服装、饰品、背景、文字和构图不变。\n\n自然优化曝光、肤色、眼神光、明暗层次和画面色彩。\n淡化黑眼圈、肤色不均和临时性皮肤瑕疵，但保留真实皮肤纹理和毛孔。\n增强发丝、服装、首饰和材质细节。\n通过真实自然的光影塑造人物立体感，突出人物主体。\n\n禁止换脸、改变五官、过度瘦脸、过度磨皮、修改手指、改变文字、添加无关物体和使用廉价网红滤镜。\n\n整体效果自然、真实、通透、高级，像专业摄影师完成的商业人像后期。",
+      "label": "快速简短版",
+      "category": "PS",
+      "createdAt": 1787000000016,
+      "lastUsedAt": null
+    },
+    {
+      "id": "ps-7ac3bba4b34d",
+      "text": "请以我上传的原始照片作为唯一编辑对象，对照片进行专业时尚杂志封面风格的 PS 后期处理。\n\n这是照片编辑任务，不是重新生成任务。请严格保留原图中的人物身份、五官特征、脸型、眼睛、鼻子、嘴巴、眉毛、发型、发饰、表情和年龄感，不要换脸，不要改变五官比例，不要改变人物姿势、服装、饰品和原始构图。\n\n同时，必须完整保留原图中的所有文字、书法、图案和背景元素，不要改字，不要删字，不要重新书写，也不要改变它们的内容、位置和形态。\n\n在保留原图整体氛围和感觉的基础上，将照片处理成高端时尚杂志封面质感。整体调色要高级、克制、干净、有层次，优化曝光、白平衡、明暗关系和色彩质感，让画面更有大片感。\n\n为人物面部增加一束自然、柔和、真实的方向性光线，让光从画面侧上方照到人物脸部，形成高级的光影效果、自然的眼神光和细腻的面部立体感。光线要有自然渐变和衰减，像真实摄影棚或自然环境中的打光，不要做成生硬的特效光斑。\n\n对人物进行自然精修：轻微优化肤色、淡化临时性皮肤瑕疵、黑眼圈和肤色不均，但必须保留真实皮肤纹理和面部细节，不能过度磨皮。适度增强发丝、服装、饰品和材质细节。\n\n可以适当压低背景中不重要区域的亮度和存在感，以更好地突出人物主体，但不要改变背景内容，不要破坏原图氛围。\n\n禁止事项：\n禁止改变人物身份和五官；\n禁止瘦脸、大眼、换脸、重绘人物；\n禁止修改文字内容；\n禁止改变服装和饰品；\n禁止添加无关元素；\n禁止过度磨皮、塑料皮肤、廉价滤镜、过度 HDR。\n\n最终效果应当像专业摄影师对原始照片做出的高级时尚杂志封面级精修，而不是重新生成了一张新图片。",
+      "label": "人造太阳",
+      "category": "PS",
+      "createdAt": 1787000000017,
+      "lastUsedAt": 1784835067918
+    }
+  ]
+}

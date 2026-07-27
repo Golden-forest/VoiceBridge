@@ -1,0 +1,279 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1, user-scalable=no" />
+    <meta name="theme-color" content="#e8793a">
+    <link rel="manifest" href="/manifest.json">
+    <link rel="apple-touch-icon" sizes="180x180" href="/icons/apple-touch-icon.png">
+    <link rel="icon" type="image/png" href="/icons/icon-192.png">
+    <title>VoiceBridge</title>
+    <link rel="stylesheet" href="/style.css" />
+  </head>
+  <body>
+    <main class="shell">
+      <div class="panel">
+        <!-- 顶栏 -->
+        <header class="app-header">
+          <span class="brand-mark" aria-hidden="true">
+            <img src="/icons/icon-192.png" alt="" />
+          </span>
+          <h1 class="brand">VoiceBridge</h1>
+          <div id="billingActions" class="billing-actions hidden" aria-label="账户">
+            <span id="planBadge" class="plan-badge hidden">Free</span>
+            <button id="accountDrawerBtn" class="billing-button" type="button" aria-label="账户设置">
+              <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+            </button>
+            <button id="authLogoutButton" class="billing-button hidden" type="button">退出</button>
+          </div>
+          <button id="pageRefreshButton" class="refresh-button" type="button" title="刷新">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M21 2v6h-6" />
+              <path d="M3 12a9 9 0 0 1 15-6.7L21 8" />
+              <path d="M3 22v-6h6" />
+              <path d="M21 12a9 9 0 0 1-15 6.7L3 16" />
+            </svg>
+          </button>
+        </header>
+
+        <!-- 目标窗口 -->
+        <section class="device-pill" aria-label="目标窗口">
+          <span class="device-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24">
+              <rect x="3" y="5" width="13" height="10" rx="2" />
+              <rect x="8" y="9" width="13" height="10" rx="2" />
+            </svg>
+          </span>
+          <button id="statusDot" class="status-dot connecting" type="button" title="正在连接" aria-label="连接状态"></button>
+          <select id="cloudDeviceSelect" class="cloud-device-select hidden" aria-label="目标桌面设备">
+            <option value="">等待桌面端上线</option>
+          </select>
+          <div class="window-selector">
+            <button id="windowBtn" class="window-btn" type="button" aria-haspopup="listbox" aria-expanded="false">
+              <span id="windowBtnLabel">光标位置</span>
+              <span class="window-btn-arrow">&#x25BE;</span>
+            </button>
+            <div id="windowDropdown" class="window-dropdown hidden" role="listbox">
+              <div id="windowList" class="window-list">
+                <p class="window-list-loading">加载中…</p>
+              </div>
+              <button id="windowRefreshBtn" class="window-refresh-btn" type="button">刷新</button>
+            </div>
+          </div>
+          <button id="cmdSearchToggle" class="icon-btn device-search-btn" type="button" title="搜索">
+            <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><circle cx="11" cy="11" r="8" fill="none" stroke="currentColor" stroke-width="2"/><line x1="21" y1="21" x2="16.65" y2="16.65" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+          </button>
+          <span id="statusBadge" class="status-badge connecting">连接中</span>
+          <label class="toggle-switch device-toggle">
+            <input id="autoPaste" type="checkbox" checked />
+            <span class="toggle-track toggle-track-sm"><span class="toggle-thumb toggle-thumb-sm"></span></span>
+            <span class="toggle-label toggle-label-sm">自动粘贴</span>
+          </label>
+        </section>
+        <!-- 文本输入 -->
+        <section class="input-card" id="inputCard">
+          <input id="editLabelInput" class="edit-label-input hidden" type="text" placeholder="按钮显示名称…" maxlength="100" aria-label="编辑指令名称" />
+          <textarea id="textInput" class="text-input" placeholder="输入文字，或语音识别…" enterkeyhint="send" rows="5" maxlength="2000" aria-label="文字输入"></textarea>
+          <div class="input-card-footer">
+            <div class="footer-actions">
+              <button id="savePhraseBtn" class="save-btn save-btn-sm hidden" type="button">
+                <svg viewBox="0 0 24 24" width="14" height="14"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                收藏
+              </button>
+              <button id="editDeleteBtn" class="edit-action-btn edit-delete-btn hidden" type="button">删除</button>
+              <button id="editSaveBtn" class="edit-action-btn edit-save-btn hidden" type="button">保存</button>
+              <button id="editCancelBtn" class="edit-action-btn edit-cancel-btn hidden" type="button">取消</button>
+            </div>
+            <span id="charCount" class="char-count">0/2000</span>
+          </div>
+        </section>
+
+        <!-- 主操作 -->
+        <section class="primary-actions">
+          <button id="pasteButton" class="side-action-btn" type="button">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2" />
+              <rect x="8" y="2" width="8" height="4" rx="1" ry="1" />
+            </svg>
+            <span>粘贴</span>
+          </button>
+          <button id="recordButton" class="record-button" type="button">
+            <span class="record-icon record-icon-mic">
+              <svg viewBox="0 0 24 24"><rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 10a7 7 0 0014 0"/><line x1="12" y1="19" x2="12" y2="22"/></svg>
+            </span>
+            <span class="record-label">录音</span>
+          </button>
+          <button id="enterButton" class="side-action-btn" type="button">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <polyline points="9 10 4 15 9 20" />
+              <path d="M20 4v7a4 4 0 0 1-4 4H4" />
+            </svg>
+            <span>回车</span>
+          </button>
+        </section>
+
+        <!-- 工具键 -->
+        <section class="utility-keys">
+          <button id="escButton" class="util-key-btn" type="button">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
+              <path d="M7 11V7a5 5 0 0 1 9.9-1" />
+            </svg>
+            <span>Esc</span>
+          </button>
+          <button id="deleteButton" class="util-key-btn" type="button">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <polyline points="3 6 5 6 21 6" />
+              <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+            </svg>
+            <span>删除</span>
+          </button>
+          <button id="undoButton" class="util-key-btn" type="button">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M3 7v6h6" />
+              <path d="M21 17a9 9 0 0 0-9-9 9 9 0 0 0-6 2.3L3 13" />
+            </svg>
+            <span>撤销</span>
+          </button>
+        </section>
+
+        <!-- 兜底上传 -->
+        <button id="fallbackButton" class="fallback-button hidden" type="button">录音或选择音频上传</button>
+        <input id="fallbackFile" class="hidden" type="file" accept="audio/*" capture />
+
+        <!-- 指令库面板 -->
+        <div class="library-panel" role="region" aria-label="指令库">
+          <div class="library-tabs">
+            <div class="tab-scroll" id="tabScroll" role="tablist"></div>
+          </div>
+          <div id="cmdSearchBar" class="cmd-search-bar hidden">
+            <input id="cmdSearchInput" class="cmd-search-input" type="text" placeholder="搜索指令…" aria-label="搜索指令" />
+          </div>
+          <div id="commandLibrary" class="command-library" role="tabpanel"></div>
+        </div>
+
+      </div>
+    </main>
+
+    <!-- Toast -->
+    <div id="toast" class="toast" role="status" aria-live="polite"></div>
+
+    <div id="authOverlay" class="auth-overlay hidden">
+      <div class="auth-scene" aria-hidden="true">
+        <span class="auth-wave auth-wave-one"></span>
+        <span class="auth-wave auth-wave-two"></span>
+        <span class="auth-wave auth-wave-three"></span>
+      </div>
+      <div class="auth-surface">
+        <div class="auth-brand">
+          <img src="/icons/icon-192.png" alt="" class="auth-logo" width="64" height="64" />
+          <div>
+            <p class="auth-eyebrow">VOICE TO ANY TEXT FIELD</p>
+            <h2 class="auth-title">VoiceBridge</h2>
+          </div>
+        </div>
+        <p id="authModeLabel" class="auth-subtitle">登录后，手机录音会自动出现在电脑光标处</p>
+        <form id="authForm" class="auth-card">
+          <div class="auth-field">
+            <label class="auth-label" for="authEmail">邮箱</label>
+            <input id="authEmail" class="auth-input" type="email" autocomplete="email" placeholder="name@example.com" required />
+          </div>
+          <div class="auth-field">
+            <div class="auth-label-row">
+              <label class="auth-label" for="authPassword">密码</label>
+              <button id="authForgotBtn" class="auth-link-btn" type="button">忘记密码？</button>
+            </div>
+            <input id="authPassword" class="auth-input" type="password" autocomplete="current-password" minlength="6" placeholder="至少 6 位" required />
+          </div>
+          <button id="authSubmitBtn" class="auth-submit-btn" type="submit">登录</button>
+          <button id="authSwitchBtn" class="auth-switch-btn" type="button">没有账号？创建账号</button>
+          <div class="auth-divider" aria-hidden="true"><span>或者</span></div>
+          <button id="authGithubBtn" class="auth-oauth-btn" type="button">
+            <span class="auth-github-mark" aria-hidden="true">GH</span>
+            使用 GitHub 注册或登录
+          </button>
+          <p id="authMessage" class="auth-message" role="status" aria-live="polite"></p>
+          <button id="authResendBtn" class="auth-switch-btn hidden" type="button">重新发送验证邮件</button>
+        </form>
+        <div id="authResetForm" class="auth-card hidden">
+          <div class="auth-reset-copy">
+            <h3>重置密码</h3>
+            <p class="auth-reset-info">输入注册邮箱，我们会把重置链接发送给你。</p>
+          </div>
+          <div class="auth-field">
+            <label class="auth-label" for="authResetEmail">邮箱</label>
+            <input id="authResetEmail" class="auth-input" type="email" autocomplete="email" placeholder="name@example.com" />
+          </div>
+          <button id="authResetBtn" class="auth-submit-btn" type="button">发送重置链接</button>
+          <button id="authResetBackBtn" class="auth-switch-btn" type="button">返回登录</button>
+        </div>
+        <p class="auth-footnote">手机和电脑无需连接同一个网络</p>
+      </div>
+    </div>
+
+    <div id="pairingOverlay" class="pairing-overlay hidden">
+      <section class="pairing-card" role="dialog" aria-modal="true" aria-labelledby="pairingTitle">
+        <div class="pairing-icon-wrap">
+          <img src="/icons/icon-192.png" alt="" width="64" height="64" />
+          <span class="pairing-status-dot" aria-hidden="true"></span>
+        </div>
+        <p class="pairing-eyebrow">安全连接请求</p>
+        <h2 id="pairingTitle">绑定这台电脑</h2>
+        <p id="pairingDeviceName" class="pairing-device-name"></p>
+        <p class="pairing-description">允许后，手机转写结果会加密发送到这台电脑，并自动粘贴到当前光标处。</p>
+        <div class="pairing-actions">
+          <button id="pairingConfirmBtn" class="auth-submit-btn" type="button">允许并绑定</button>
+          <button id="pairingCancelBtn" class="auth-switch-btn" type="button">暂不绑定</button>
+        </div>
+        <p id="pairingMessage" class="auth-message" role="status" aria-live="polite"></p>
+      </section>
+    </div>
+
+    <script type="importmap">
+{
+  "imports": {
+    "@supabase/supabase-js": "https://esm.sh/@supabase/supabase-js@2"
+  }
+}
+    </script>
+    <script src="/config.js"></script>
+    <script src="/auth.js" type="module"></script>
+    <script src="/pairing.js" type="module"></script>
+    <script src="/app.js" type="module"></script>
+
+    <!-- 账户设置抽屉 -->
+    <div id="accountDrawer" class="account-drawer hidden" role="presentation">
+      <div class="account-drawer-overlay" aria-hidden="true"></div>
+      <div class="account-drawer-sheet" role="dialog" aria-modal="true" aria-labelledby="accountDrawerTitle">
+        <div class="account-drawer-handle"></div>
+        <div class="account-drawer-header">
+          <h2 class="account-drawer-title">账户设置</h2>
+          <button id="accountDrawerClose" class="account-drawer-close" type="button" aria-label="关闭">✕</button>
+        </div>
+        <div id="accountDrawerBody" class="account-drawer-body">
+          <!-- JS 动态渲染 -->
+        </div>
+      </div>
+    </div>
+
+    <!-- 新增指令弹窗 -->
+    <div id="addCommandDialog" class="add-cmd-dialog hidden">
+      <div class="add-cmd-overlay"></div>
+      <div class="add-cmd-sheet">
+        <div class="add-cmd-handle"></div>
+        <fieldset class="add-cmd-fieldset">
+          <legend>新增指令</legend>
+          <label for="addCommandInput" class="add-cmd-label">指令内容</label>
+          <textarea id="addCommandInput" class="add-cmd-textarea" rows="3" placeholder="输入指令内容…"></textarea>
+          <label for="addCommandCategory" class="add-cmd-label">分类</label>
+          <select id="addCommandCategory" class="add-cmd-select"></select>
+          <input id="addCommandNewCategory" class="add-cmd-new-cat hidden" type="text" placeholder="输入新分类名称…" />
+          <div class="add-cmd-actions">
+            <button id="addCmdCancelBtn" class="add-cmd-cancel" type="button">取消</button>
+            <button id="addCmdConfirmBtn" class="add-cmd-confirm" type="button">保存</button>
+          </div>
+        </fieldset>
+      </div>
+    </div>
+  </body>
+</html>
