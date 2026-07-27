@@ -1,6 +1,7 @@
 import { WebSocket, WebSocketServer } from "ws";
 import { pressEnter, pressUndo, pressCtrlC, pressEscape, pressDelete, pressArrow, pasteClipboard } from "./input/paste.js";
 import { outputText } from "./input/outputText.js";
+import { MESSAGE_TYPES } from "../shared/protocol.js";
 
 const MAX_BUFFER_SIZE = 64 * 1024;
 
@@ -22,32 +23,23 @@ export function createWebSocketHub(server) {
       try {
         const payload = JSON.parse(data);
         switch (payload.type) {
-          case "enter":
-            await pressEnter();
-            break;
-          case "undo":
-            await pressUndo();
-            break;
-          case "ctrl-c":
-            await pressCtrlC();
-            break;
-          case "escape":
-            await pressEscape();
-            if (payload.twice) await pressEscape();
-            break;
-          case "delete":
-            await pressDelete();
-            break;
-          case "arrow": {
-            const allowed = new Set(["up", "down", "left", "right"]);
-            if (payload.direction && allowed.has(payload.direction)) {
-              await pressArrow(payload.direction);
+          case MESSAGE_TYPES.KEY: {
+            switch (payload.key) {
+              case "enter": await pressEnter(); break;
+              case "undo": await pressUndo(); break;
+              case "ctrl-c": await pressCtrlC(); break;
+              case "escape": await pressEscape(); break;
+              case "delete": await pressDelete(); break;
+              case "paste": await pasteClipboard(); break;
+              case "arrow-up": await pressArrow("up"); break;
+              case "arrow-down": await pressArrow("down"); break;
+              case "arrow-left": await pressArrow("left"); break;
+              case "arrow-right": await pressArrow("right"); break;
+              default:
+                console.warn("Unknown key message:", payload.key);
             }
             break;
           }
-          case "paste":
-            await pasteClipboard();
-            break;
           case "phrase":
             if (typeof payload.text === "string" && payload.text.length <= 10000) {
               const result = await outputText(payload.text, {

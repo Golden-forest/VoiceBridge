@@ -37,7 +37,7 @@ export function getEnterCommand(platform = process.platform) {
   if (platform === "darwin") {
     return {
       command: "osascript",
-      args: ["-e", 'tell application "System Events" to keystroke return']
+      args: ["-e", 'tell application "System Events" to key code 36']
     };
   }
 

@@ -35,6 +35,7 @@ const lanCommandStore = {
 const activeCommandStore = isCloudMode ? commandStore : lanCommandStore;
 let cloudRealtime = null;
 let selectedCloudDeviceId = "";
+let cloudDesktopDevices = [];
 let activeCloudUserId = "";
 let activeCloudPhoneDeviceId = "";
 
@@ -192,7 +193,8 @@ async function sendTextToDesktop(text, { localSuccessMessage = "已发送到电�
       const sendPromise = cloudRealtime.sendText({
         targetDeviceId: selectedCloudDeviceId,
         text,
-        autoPaste: autoPasteEl.checked
+        autoPaste: autoPasteEl.checked,
+        targetWindowId: windowSelector.targetWindow?.windowId
       });
       showToast("已发送，等待桌面端确认...");
       await sendPromise;
@@ -275,6 +277,7 @@ async function handleAuthState(event) {
       renderCloudDeviceOptions(desktopDevices);
     },
     onAck: (ack) => {
+      if (ack.key) return;
       showToast(ack.status === "success" ? "已发送到桌面端。" : `桌面端执行失败：${ack.detail}`);
     },
     onStatus: () => setConnectionStatus("connected", "云端已连接")
@@ -381,6 +384,7 @@ document.addEventListener("click", (event) => {
 });
 
 function renderCloudDeviceOptions(desktopDevices) {
+  cloudDesktopDevices = desktopDevices;
   const previousDeviceId = selectedCloudDeviceId;
   const options = desktopDevices.length
     ? desktopDevices.map((device) => {
@@ -447,6 +451,7 @@ async function stopCloudRealtime() {
 
 function resetCloudDeviceSelect() {
   selectedCloudDeviceId = "";
+  cloudDesktopDevices = [];
   cloudDeviceSelect.replaceChildren(createCloudPlaceholderOption());
   if (deviceSelectorList) {
     deviceSelectorList.replaceChildren();
@@ -555,7 +560,10 @@ class WindowSelector {
     this._updateButton();
   }
 
-  get targetWindow() { return this.selectedWindow; }
+  get targetWindow() {
+    if (isCloudMode && this.selectedWindow?.deviceId !== selectedCloudDeviceId) return null;
+    return this.selectedWindow;
+  }
 
   _loadSelection() { try { return JSON.parse(localStorage.getItem(WindowSelector.STORAGE_KEY)); } catch { return null; } }
   _saveSelection() {
@@ -594,6 +602,13 @@ class WindowSelector {
   }
 
   async _fetchWindows() {
+    if (isCloudMode) {
+      const windows = cloudDesktopDevices
+        .find((device) => device.deviceId === selectedCloudDeviceId)
+        ?.windows || [];
+      this._renderCloudWindows(windows);
+      return;
+    }
     const now = Date.now();
     if (this._windowCache && now - this._windowCacheTime < 5000) {
       this._renderWindows(this._windowCache);
@@ -679,6 +694,57 @@ class WindowSelector {
       });
       this.el.list.appendChild(groupEl);
     });
+  }
+
+  _renderCloudWindows(windows) {
+    this.el.list.replaceChildren();
+    const cursorBtn = this._createCloudWindowButton(null, "光标位置");
+    this.el.list.appendChild(cursorBtn);
+    for (const win of windows) {
+      this.el.list.appendChild(this._createCloudWindowButton(
+        win,
+        win.title || win.app || "窗口"
+      ));
+    }
+    if (!windows.length) {
+      const empty = document.createElement("p");
+      empty.className = "window-list-empty";
+      empty.textContent = "桌面端未上报窗口";
+      this.el.list.appendChild(empty);
+    }
+  }
+
+  _createCloudWindowButton(win, label) {
+    const btn = document.createElement("button");
+    btn.className = "window-item";
+    btn.type = "button";
+    const isSelected = win
+      ? this.selectedWindow?.windowId === win.windowId
+      : !this.selectedWindow;
+    if (isSelected) btn.classList.add("selected");
+    btn.setAttribute("aria-selected", String(isSelected));
+    const check = document.createElement("span");
+    check.className = "window-item-check";
+    check.textContent = isSelected ? "✓" : "";
+    const title = document.createElement("span");
+    title.className = "window-item-title";
+    title.textContent = label;
+    btn.append(check, title);
+    btn.addEventListener("click", (event) => {
+      event.stopPropagation();
+      this.selectedWindow = win
+        ? {
+            windowId: win.windowId,
+            appName: win.app,
+            title: win.title || null,
+            deviceId: selectedCloudDeviceId
+          }
+        : null;
+      this._saveSelection();
+      this._updateButton();
+      this._close();
+    });
+    return btn;
   }
 }
 
@@ -1205,13 +1271,18 @@ function sendKeyCommand(key, successMessage) {
       showToast("请先打开桌面客户端。", true);
       return;
     }
-    cloudRealtime.sendKey({ targetDeviceId: selectedCloudDeviceId, key })
+    showToast("已发送，等待桌面端确认...");
+    cloudRealtime.sendKey({
+      targetDeviceId: selectedCloudDeviceId,
+      key,
+      targetWindowId: windowSelector.targetWindow?.windowId
+    })
       .then(() => showToast(successMessage))
       .catch((error) => showToast(error.message || "发送失败，请稍后重试。", true));
     return;
   }
   if (ws && ws.readyState === WebSocket.OPEN) {
-    ws.send(JSON.stringify({ type: key }));
+    ws.send(JSON.stringify({ type: "key", key }));
     showToast(successMessage);
   } else {
     showToast("发送失败，请检查连接。", true);

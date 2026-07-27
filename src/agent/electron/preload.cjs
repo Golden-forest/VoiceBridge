@@ -6,6 +6,7 @@ contextBridge.exposeInMainWorld('voicebridge', {
   initialize: () => ipcRenderer.invoke('voicebridge:initialize'),
   refreshPairing: () => ipcRenderer.invoke('voicebridge:refresh-pairing'),
   unpair: () => ipcRenderer.invoke('voicebridge:unpair'),
+  updateSettings: (settings) => ipcRenderer.invoke('voicebridge:update-settings', settings),
   onAgentStatus: (callback) => {
     const listener = (_event, status) => callback(status);
     ipcRenderer.on('voicebridge:agent-status', listener);

@@ -25,7 +25,8 @@ export function isInsertTextMessage(payload, myDeviceId) {
     payload.target_device_id === myDeviceId &&
     typeof payload.text === "string" &&
     payload.text.length > 0 &&
-    payload.text.length <= 10000
+    payload.text.length <= 10000 &&
+    isOptionalWindowId(payload.target_window_id)
   );
 }
 
@@ -40,7 +41,18 @@ export function isAckMessage(payload, myDeviceId) {
   );
 }
 
-export const ALLOWED_KEYS = Object.freeze(["paste", "enter", "escape", "undo", "delete"]);
+export const ALLOWED_KEYS = Object.freeze([
+  "paste",
+  "enter",
+  "escape",
+  "undo",
+  "delete",
+  "ctrl-c",
+  "arrow-up",
+  "arrow-down",
+  "arrow-left",
+  "arrow-right"
+]);
 
 export function isKeyMessage(payload, myDeviceId) {
   return Boolean(
@@ -50,16 +62,24 @@ export function isKeyMessage(payload, myDeviceId) {
     typeof payload.source_device_id === "string" &&
     payload.target_device_id === myDeviceId &&
     typeof payload.key === "string" &&
-    ALLOWED_KEYS.includes(payload.key)
+    ALLOWED_KEYS.includes(payload.key) &&
+    isOptionalWindowId(payload.target_window_id)
   );
 }
 
-export function buildKeyMessage({ sourceDeviceId, targetDeviceId, key }) {
-  return {
+export function buildKeyMessage({ sourceDeviceId, targetDeviceId, key, targetWindowId }) {
+  const message = {
     type: MESSAGE_TYPES.KEY,
     request_id: createRequestId(),
     source_device_id: sourceDeviceId,
     target_device_id: targetDeviceId,
     key
   };
+  if (targetWindowId) message.target_window_id = targetWindowId;
+  return message;
+}
+
+function isOptionalWindowId(windowId) {
+  return windowId === undefined
+    || (typeof windowId === "string" && windowId.length > 0 && windowId.length <= 512);
 }

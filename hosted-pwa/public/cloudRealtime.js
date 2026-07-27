@@ -66,7 +66,7 @@ export class CloudRealtime {
     }, generation);
   }
 
-  async sendText({ targetDeviceId, text, autoPaste }) {
+  async sendText({ targetDeviceId, text, autoPaste, targetWindowId }) {
     if (!this.ackChannel) {
       throw new Error("云端尚未连接");
     }
@@ -85,7 +85,8 @@ export class CloudRealtime {
           target_device_id: targetDeviceId,
           text,
           auto_paste: autoPaste,
-          created_at: new Date().toISOString()
+          created_at: new Date().toISOString(),
+          ...(targetWindowId ? { target_window_id: targetWindowId } : {})
         }
       });
     } catch (error) {
@@ -100,8 +101,8 @@ export class CloudRealtime {
     return await ackPromise;
   }
 
-  // 发送按键指令（paste/enter/escape/undo/delete），不监听 ack。
-  async sendKey({ targetDeviceId, key }) {
+  // 发送按键指令并等待桌面端实际执行完成。
+  async sendKey({ targetDeviceId, key, targetWindowId }) {
     if (!this.ackChannel) {
       throw new Error("云端尚未连接");
     }
@@ -111,7 +112,8 @@ export class CloudRealtime {
     const message = buildKeyMessage({
       sourceDeviceId: this.phoneDeviceId,
       targetDeviceId,
-      key
+      key,
+      targetWindowId
     });
     const channel = await this.getTargetChannel(targetDeviceId);
     if (!channel) {
@@ -122,16 +124,23 @@ export class CloudRealtime {
       ...message,
       created_at: new Date().toISOString()
     };
-    console.info("[VB sendKey]", { key, targetDeviceId, sourceDeviceId: this.phoneDeviceId, payload });
-    const sendStatus = await channel.send({
-      type: "broadcast",
-      event: "command",
-      payload
-    });
-    console.info("[VB sendKey] sendStatus=", sendStatus);
+    const ackPromise = this.addPendingRequest(message.request_id, targetDeviceId);
+    let sendStatus;
+    try {
+      sendStatus = await channel.send({
+        type: "broadcast",
+        event: "command",
+        payload
+      });
+    } catch (error) {
+      this.clearPendingRequest(message.request_id);
+      throw error;
+    }
     if (sendStatus !== "ok") {
+      this.clearPendingRequest(message.request_id);
       throw new Error(`发送到桌面端失败：${sendStatus}`);
     }
+    return await ackPromise;
   }
 
   async getTargetChannel(targetDeviceId) {

@@ -1,5 +1,5 @@
 import { app, BrowserWindow, ipcMain } from 'electron';
-import { readFileSync } from 'node:fs';
+import { readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import QRCode from 'qrcode';
@@ -17,6 +17,23 @@ let desktopClient = null;
 let activeAgent = null;
 let pairingPollTimer = null;
 let initializing = null;
+
+function loadDesktopSettings() {
+  try {
+    const parsed = JSON.parse(readFileSync(join(app.getPath('userData'), 'settings.json'), 'utf8'));
+    return { reportWindowTitles: Boolean(parsed.reportWindowTitles) };
+  } catch {
+    return { reportWindowTitles: false };
+  }
+}
+
+function saveDesktopSettings(settings) {
+  writeFileSync(
+    join(app.getPath('userData'), 'settings.json'),
+    JSON.stringify({ reportWindowTitles: Boolean(settings.reportWindowTitles) }, null, 2),
+    'utf8'
+  );
+}
 
 function getDesktopPublicConfig() {
   return {
@@ -191,16 +208,19 @@ function schedulePairingPoll(context) {
 
 async function goOnline({ supabase, userId, device }) {
   await stopRealtimeOnly();
+  const settings = loadDesktopSettings();
   const runtime = await startRealtimeAgent({
     supabase,
     userId,
     device,
+    reportWindowTitles: settings.reportWindowTitles,
     onStatus: sendAgentStatus
   });
   activeAgent = { supabase, runtime, device, userId };
   return sendDesktopState({
     mode: 'online',
-    deviceName: device.name
+    deviceName: device.name,
+    reportWindowTitles: settings.reportWindowTitles
   });
 }
 
@@ -259,6 +279,15 @@ ipcMain.handle('voicebridge:public-config', () => {
 ipcMain.handle('voicebridge:initialize', () => initializeDesktop());
 ipcMain.handle('voicebridge:refresh-pairing', () => initializeDesktopInternal());
 ipcMain.handle('voicebridge:unpair', () => unpairDesktop());
+ipcMain.handle('voicebridge:update-settings', async (_event, updates) => {
+  const settings = {
+    ...loadDesktopSettings(),
+    reportWindowTitles: Boolean(updates?.reportWindowTitles)
+  };
+  saveDesktopSettings(settings);
+  await activeAgent?.runtime?.setReportWindowTitles(settings.reportWindowTitles);
+  return settings;
+});
 
 app.whenReady().then(() => {
   createWindow();

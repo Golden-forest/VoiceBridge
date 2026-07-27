@@ -1,23 +1,50 @@
 import { createClient } from "@supabase/supabase-js";
 import { deviceChannel, presenceChannel, isInsertTextMessage, isKeyMessage } from "../shared/protocol.js";
 import { outputText } from "../server/input/outputText.js";
-import { pasteClipboard, pressEnter, pressEscape, pressUndo, pressDelete } from "../server/input/paste.js";
+import { activateCloudWindow, listCloudWindows } from "../server/input/windowManager.js";
+import {
+  pasteClipboard,
+  pressEnter,
+  pressEscape,
+  pressUndo,
+  pressDelete,
+  pressCtrlC,
+  pressArrow
+} from "../server/input/paste.js";
+
+const DEFAULT_KEY_HANDLERS = Object.freeze({
+  paste: pasteClipboard,
+  enter: pressEnter,
+  escape: pressEscape,
+  undo: pressUndo,
+  delete: pressDelete,
+  "ctrl-c": pressCtrlC,
+  "arrow-up": () => pressArrow("up"),
+  "arrow-down": () => pressArrow("down"),
+  "arrow-left": () => pressArrow("left"),
+  "arrow-right": () => pressArrow("right")
+});
 
 export async function handleDesktopMessage({
   payload,
   myDeviceId,
-  output = outputText
+  output = outputText,
+  keyHandlers = DEFAULT_KEY_HANDLERS,
+  activateWindow = activateCloudWindow
 }) {
+  const activateTargetWindow = async () => {
+    if (!payload.target_window_id) return;
+    const result = await activateWindow(payload.target_window_id);
+    if (result?.success === false) {
+      throw new Error(result.error || "无法激活目标窗口");
+    }
+  };
+
   if (isKeyMessage(payload, myDeviceId)) {
     const { key, request_id, source_device_id } = payload;
     try {
-      switch (key) {
-        case "paste": await pasteClipboard(); break;
-        case "enter": await pressEnter(); break;
-        case "escape": await pressEscape(); break;
-        case "undo": await pressUndo(); break;
-        case "delete": await pressDelete(); break;
-      }
+      await activateTargetWindow();
+      await keyHandlers[key]();
       return {
         handled: true,
         ack: {
@@ -26,6 +53,7 @@ export async function handleDesktopMessage({
           source_device_id: myDeviceId,
           target_device_id: source_device_id,
           status: "success",
+          key,
           detail: `key:${key}`
         }
       };
@@ -38,6 +66,7 @@ export async function handleDesktopMessage({
           source_device_id: myDeviceId,
           target_device_id: source_device_id,
           status: "failed",
+          key,
           detail: error instanceof Error ? error.message : String(error)
         }
       };
@@ -49,6 +78,7 @@ export async function handleDesktopMessage({
   }
 
   try {
+    await activateTargetWindow();
     const outputResult = await output(payload.text, {
       autoPaste: Boolean(payload.auto_paste)
     });
@@ -95,7 +125,10 @@ export async function startRealtimeAgent({
   userId,
   device,
   output = outputText,
-  onStatus = console.log
+  onStatus = console.log,
+  reportWindowTitles = false,
+  windowRefreshMs = 2000,
+  listWindows = listCloudWindows
 }) {
   const ackChannels = new Map();
   const messageChannel = supabase.channel(deviceChannel(userId, device.id), {
@@ -104,6 +137,23 @@ export async function startRealtimeAgent({
   const presence = supabase.channel(presenceChannel(userId), {
     config: { private: true }
   });
+  let presenceTimer = null;
+  let includeWindowTitles = Boolean(reportWindowTitles);
+  let lastWindowsJson = "";
+
+  const trackPresence = async (force = false) => {
+    const windows = await listWindows({ includeTitles: includeWindowTitles });
+    const windowsJson = JSON.stringify(windows);
+    if (!force && windowsJson === lastWindowsJson) return;
+    lastWindowsJson = windowsJson;
+    await presence.track({
+      deviceId: device.id,
+      name: device.name,
+      platform: device.platform,
+      status: "online",
+      windows
+    });
+  };
 
   messageChannel.on("broadcast", { event: "command" }, async ({ payload }) => {
     console.info("[VB realtime] command received", {
@@ -144,17 +194,22 @@ export async function startRealtimeAgent({
   await presence.subscribe(async (status) => {
     onStatus(`presence:${status}`);
     if (status === "SUBSCRIBED") {
-      await presence.track({
-        deviceId: device.id,
-        name: device.name,
-        platform: device.platform,
-        status: "online"
-      });
+      await trackPresence(true);
+      presenceTimer = setInterval(() => {
+        void trackPresence().catch((error) => onStatus(`presence:windows:${error.message}`));
+      }, windowRefreshMs);
     }
   });
 
   return {
+    async setReportWindowTitles(enabled) {
+      includeWindowTitles = Boolean(enabled);
+      lastWindowsJson = "";
+      await trackPresence(true);
+    },
     async stop() {
+      clearInterval(presenceTimer);
+      presenceTimer = null;
       await messageChannel.unsubscribe();
       await presence.unsubscribe();
       await Promise.all(

@@ -68,6 +68,75 @@ test("handleDesktopMessage reports auto paste failures in ack detail", async () 
   assert.equal(result.ack.detail, "paste denied");
 });
 
+test("handleDesktopMessage executes key commands before returning success ack", async () => {
+  const calls = [];
+  const result = await handleDesktopMessage({
+    payload: {
+      type: "key",
+      request_id: "request-key-1",
+      source_device_id: "phone-1",
+      target_device_id: "desktop-1",
+      key: "enter"
+    },
+    myDeviceId: "desktop-1",
+    keyHandlers: {
+      enter: async () => calls.push("enter")
+    }
+  });
+
+  assert.deepEqual(calls, ["enter"]);
+  assert.equal(result.handled, true);
+  assert.equal(result.ack.status, "success");
+  assert.equal(result.ack.key, "enter");
+  assert.equal(result.ack.detail, "key:enter");
+});
+
+test("handleDesktopMessage activates a selected cloud window before text output", async () => {
+  const calls = [];
+  await handleDesktopMessage({
+    payload: {
+      type: "insert_text",
+      request_id: "request-window-1",
+      source_device_id: "phone-1",
+      target_device_id: "desktop-1",
+      target_window_id: "opaque-window",
+      text: "hello"
+    },
+    myDeviceId: "desktop-1",
+    activateWindow: async (windowId) => calls.push(`activate:${windowId}`),
+    output: async () => {
+      calls.push("output");
+      return { copied: true, pasted: true, pasteError: null };
+    }
+  });
+
+  assert.deepEqual(calls, ["activate:opaque-window", "output"]);
+});
+
+test("handleDesktopMessage does not type when the selected window cannot be activated", async () => {
+  let outputCalled = false;
+  const result = await handleDesktopMessage({
+    payload: {
+      type: "insert_text",
+      request_id: "request-window-2",
+      source_device_id: "phone-1",
+      target_device_id: "desktop-1",
+      target_window_id: "stale-window",
+      text: "hello"
+    },
+    myDeviceId: "desktop-1",
+    activateWindow: async () => ({ success: false, error: "window closed" }),
+    output: async () => {
+      outputCalled = true;
+      return { copied: true, pasted: true, pasteError: null };
+    }
+  });
+
+  assert.equal(outputCalled, false);
+  assert.equal(result.ack.status, "failed");
+  assert.equal(result.ack.detail, "window closed");
+});
+
 test("startRealtimeAgent reuses ack channels and cleans them up", async () => {
   const channels = new Map();
   const createdTopics = [];
@@ -113,6 +182,7 @@ test("startRealtimeAgent reuses ack channels and cleans them up", async () => {
     supabase,
     userId: "user-1",
     device: { id: "desktop-1", name: "Desk", platform: "darwin" },
+    listWindows: async () => [],
     output: async () => ({ copied: true, pasted: true, pasteError: null }),
     onStatus: (status) => statuses.push(status)
   });

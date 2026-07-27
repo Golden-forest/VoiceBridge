@@ -158,6 +158,23 @@
         width: 100%;
         margin-top: 2px;
       }
+      .privacy-setting {
+        display: flex;
+        width: 100%;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        border-top: 1px solid #eee9ef;
+        padding-top: 12px;
+        color: #4a3f4e;
+        font-size: 12px;
+        text-align: left;
+      }
+      .privacy-setting input {
+        width: 18px;
+        height: 18px;
+        accent-color: #211b25;
+      }
       .footer {
         display: flex;
         justify-content: space-between;
@@ -205,6 +222,10 @@
         <h2>电脑端已上线</h2>
         <p class="device-name" id="onlineDeviceName"></p>
         <p class="hint">现在可以在手机端录音。转写完成后会自动发送并粘贴到这台电脑。</p>
+        <label class="privacy-setting">
+          <span>向手机显示完整窗口标题</span>
+          <input id="reportWindowTitles" type="checkbox">
+        </label>
         <button id="unpairButton" class="secondary" type="button">解除绑定</button>
       </section>
 
@@ -223,6 +244,7 @@
       const onlineDeviceName = document.querySelector('#onlineDeviceName');
       const refreshButton = document.querySelector('#refreshButton');
       const unpairButton = document.querySelector('#unpairButton');
+      const reportWindowTitles = document.querySelector('#reportWindowTitles');
       const phoneUrl = document.querySelector('#phoneUrl');
       const messageEl = document.querySelector('#message');
 
@@ -248,6 +270,7 @@
           setStatus('已上线');
           onlineDeviceName.textContent = state.deviceName || '';
           setMessage('绑定成功，保持此应用运行即可。');
+          reportWindowTitles.checked = Boolean(state.reportWindowTitles);
         }
       }
 
@@ -285,6 +308,23 @@
           setMessage(error.message || '解除绑定失败。', true);
         } finally {
           unpairButton.disabled = false;
+        }
+      });
+
+      reportWindowTitles.addEventListener('change', async () => {
+        reportWindowTitles.disabled = true;
+        try {
+          await window.voicebridge.updateSettings({
+            reportWindowTitles: reportWindowTitles.checked
+          });
+          setMessage(reportWindowTitles.checked
+            ? '窗口标题会通过加密连接显示在你的手机上。'
+            : '仅向手机显示应用名称。');
+        } catch (error) {
+          reportWindowTitles.checked = !reportWindowTitles.checked;
+          setMessage(error.message || '保存隐私设置失败。', true);
+        } finally {
+          reportWindowTitles.disabled = false;
         }
       });
 

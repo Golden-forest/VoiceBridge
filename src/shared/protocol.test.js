@@ -4,7 +4,9 @@ import {
   deviceChannel,
   presenceChannel,
   isInsertTextMessage,
-  isAckMessage
+  isAckMessage,
+  isKeyMessage,
+  buildKeyMessage
 } from "./protocol.js";
 
 test("channel helpers create stable private channel names", () => {
@@ -39,4 +41,17 @@ test("isAckMessage validates ack for source device", () => {
     status: "success",
     detail: "pasted"
   }, "phone-1"), true);
+});
+
+test("key messages share one validated shape across cloud and LAN", () => {
+  const message = buildKeyMessage({
+    sourceDeviceId: "phone-1",
+    targetDeviceId: "desktop-1",
+    key: "enter"
+  });
+
+  assert.equal(isKeyMessage(message, "desktop-1"), true);
+  assert.equal(isKeyMessage({ ...message, key: "launch-calculator" }, "desktop-1"), false);
+  assert.equal(isKeyMessage({ ...message, target_window_id: "window-1" }, "desktop-1"), true);
+  assert.equal(isKeyMessage({ ...message, target_window_id: "" }, "desktop-1"), false);
 });
