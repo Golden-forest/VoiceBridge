@@ -71,6 +71,7 @@ VOICEBRIDGE_DESKTOP_SUPABASE_ANON_KEY=
 
 TENCENT_SECRET_ID=
 TENCENT_SECRET_KEY=
+TENCENT_APP_ID=
 TENCENT_ASR_REGION=ap-shanghai
 TENCENT_ASR_ENG_SERVICE_TYPE=16k_zh
 
@@ -80,6 +81,8 @@ STRIPE_PRO_MONTHLY_PRICE_ID=
 STRIPE_SUCCESS_URL=http://localhost:3000/?billing=success
 STRIPE_CANCEL_URL=http://localhost:3000/?billing=cancel
 ```
+
+`TENCENT_APP_ID` 仅供云端 Edge Function 的极速版识别使用；未配置或极速版不可用时会自动回退到一句话识别。
 
 启动桌面 Agent：
 

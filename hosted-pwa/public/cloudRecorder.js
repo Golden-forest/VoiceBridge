@@ -11,7 +11,11 @@ export async function recordWavUntilStopped({ onStopReady }) {
   try {
     stream = await navigator.mediaDevices.getUserMedia({ audio: true });
     const AudioContextCtor = window.AudioContext || window.webkitAudioContext;
-    audioContext = new AudioContextCtor();
+    try {
+      audioContext = new AudioContextCtor({ sampleRate: 16000 });
+    } catch {
+      audioContext = new AudioContextCtor();
+    }
     source = audioContext.createMediaStreamSource(stream);
     processor = audioContext.createScriptProcessor(4096, 1, 1);
 

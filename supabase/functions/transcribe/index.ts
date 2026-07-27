@@ -2,13 +2,14 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 import { corsHeaders, jsonResponse } from "../_shared/cors.ts";
 import { ERROR_CODE_QUOTA_EXCEEDED, USAGE_PROVIDER_TENCENT_CLOUD } from "../_shared/contracts.ts";
-import { getPlanLimit, isPaidStatus } from "../_shared/plan_limits.ts";
 import { transcribeTencentWav } from "../_shared/tencent_asr.ts";
 import { parsePcmWavDurationMs } from "../_shared/wav.ts";
 
 const PROVIDER = USAGE_PROVIDER_TENCENT_CLOUD;
 const MAX_AUDIO_BYTES = 3 * 1024 * 1024;
 type SupabaseClientLike = ReturnType<typeof createClient<any, "public", any>>;
+const PLAN_CACHE_TTL_MS = 60_000;
+const planCache = new Map<string, { plan: "free" | "pro"; expiresAt: number }>();
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
@@ -65,26 +66,28 @@ Deno.serve(async (req) => {
     }
     durationMs = resolvedDurationMs;
 
-    const durationSeconds = Math.ceil(resolvedDurationMs / 1000);
-    const subscription = await getSubscription(serviceClient, userId);
-    const plan = isPaidStatus(subscription?.status) ? subscription?.plan : "free";
-    const limits = getPlanLimit(plan);
-
-    if (durationSeconds > limits.maxAudioSeconds) {
-      await recordUsage(serviceClient, { userId, requestId, durationMs, audioSizeBytes, status: "rejected", errorCode: "audio_too_long" });
-      return errorResponse("audio_too_long", `单次录音最长支持 ${limits.maxAudioSeconds} 秒。`, 413);
-    }
-
-    const reservationError = await reserveTranscribeUsage(serviceClient, {
+    const cachedPlan = getCachedPlan(userId);
+    const reservation = await reserveAndGetPlan(serviceClient, {
       userId,
       requestId,
       durationMs,
       audioSizeBytes,
-      monthlySeconds: limits.monthlySeconds,
-      rateLimitPerMinute: limits.rateLimitPerMinute
+      cachedPlan
     });
+    planCache.set(userId, {
+      plan: reservation.plan,
+      expiresAt: Date.now() + PLAN_CACHE_TTL_MS
+    });
+    const reservationError = reservation.errorCode;
     if (reservationError) {
       await recordUsage(serviceClient, { userId, requestId, durationMs, audioSizeBytes, status: "rejected", errorCode: reservationError });
+      if (reservationError === "audio_too_long") {
+        return errorResponse(
+          reservationError,
+          `单次录音最长支持 ${reservation.maxAudioSeconds} 秒。`,
+          413
+        );
+      }
       const message = reservationError === ERROR_CODE_QUOTA_EXCEEDED
         ? "本月云端语音识别额度已用完。"
         : reservationError === "rate_limited"
@@ -101,6 +104,7 @@ Deno.serve(async (req) => {
       config: {
         secretId: tencentEnv.secretId,
         secretKey: tencentEnv.secretKey,
+        appId: tencentEnv.appId,
         region: tencentEnv.region,
         engServiceType: tencentEnv.engServiceType
       }
@@ -144,6 +148,7 @@ function getTencentEnv() {
   return {
     secretId: requireEnv("TENCENT_SECRET_ID"),
     secretKey: requireEnv("TENCENT_SECRET_KEY"),
+    appId: Deno.env.get("TENCENT_APP_ID") || undefined,
     region: Deno.env.get("TENCENT_ASR_REGION") || "ap-shanghai",
     engServiceType: Deno.env.get("TENCENT_ASR_ENG_SERVICE_TYPE") || "16k_zh"
   };
@@ -155,53 +160,51 @@ function requireEnv(name: string) {
   return value;
 }
 
-async function getSubscription(serviceClient: SupabaseClientLike, userId: string) {
-  const { data, error } = await serviceClient
-    .from("subscriptions")
-    .select("plan,status,current_period_end,updated_at")
-    .eq("user_id", userId)
-    .order("updated_at", { ascending: false })
-    .limit(1)
-    .maybeSingle();
-  if (error) {
-    console.error("Failed to fetch subscription:", error);
-  }
-  return data;
-}
-
-async function reserveTranscribeUsage(
+async function reserveAndGetPlan(
   serviceClient: SupabaseClientLike,
   {
     userId,
     requestId,
     durationMs,
     audioSizeBytes,
-    monthlySeconds,
-    rateLimitPerMinute
+    cachedPlan
   }: {
     userId: string;
     requestId: string;
     durationMs: number;
     audioSizeBytes: number;
-    monthlySeconds: number;
-    rateLimitPerMinute: number;
+    cachedPlan: "free" | "pro" | null;
   }
 ) {
-  const { data, error } = await serviceClient.rpc("reserve_transcribe_usage", {
+  const { data, error } = await serviceClient.rpc("reserve_and_get_plan", {
     p_user_id: userId,
     p_request_id: requestId,
     p_provider: PROVIDER,
     p_mode: "cloud",
     p_audio_duration_ms: Math.round(durationMs),
     p_audio_size_bytes: audioSizeBytes,
-    p_monthly_seconds: monthlySeconds,
-    p_rate_limit_per_minute: rateLimitPerMinute
+    p_cached_plan: cachedPlan
   });
   if (error) {
     console.error("Failed to reserve usage:", error);
     throw new Error("Usage reservation failed");
   }
-  return typeof data === "string" && data ? data : null;
+  const plan: "free" | "pro" = data?.plan === "pro" ? "pro" : "free";
+  return {
+    plan,
+    maxAudioSeconds: Number(data?.max_audio_seconds) || 60,
+    errorCode: typeof data?.error_code === "string" ? data.error_code : null
+  };
+}
+
+function getCachedPlan(userId: string): "free" | "pro" | null {
+  const cached = planCache.get(userId);
+  if (!cached) return null;
+  if (cached.expiresAt <= Date.now()) {
+    planCache.delete(userId);
+    return null;
+  }
+  return cached.plan;
 }
 
 async function updateReservedUsage(

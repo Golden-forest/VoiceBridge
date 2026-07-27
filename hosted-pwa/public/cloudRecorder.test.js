@@ -88,6 +88,29 @@ test("recordWavUntilStopped closes audio context when upload callback rejects", 
   }
 });
 
+test("recordWavUntilStopped requests a native 16 kHz AudioContext", async () => {
+  const originalNavigator = globalThis.navigator;
+  const originalWindow = globalThis.window;
+  const track = createTrack();
+  const stream = { getTracks: () => [track] };
+  const context = createAudioContext();
+  let requestedOptions;
+
+  setBrowserGlobals({
+    stream,
+    context,
+    onConstruct: (options) => { requestedOptions = options; }
+  });
+
+  try {
+    const recorder = await recordWavUntilStopped({ onStopReady: async () => {} });
+    await recorder.stop();
+    assert.deepEqual(requestedOptions, { sampleRate: 16000 });
+  } finally {
+    restoreBrowserGlobals(originalNavigator, originalWindow);
+  }
+});
+
 function createTrack() {
   return {
     stopCount: 0,
@@ -128,7 +151,7 @@ function createNode() {
   };
 }
 
-function setBrowserGlobals({ stream, context }) {
+function setBrowserGlobals({ stream, context, onConstruct = () => {} }) {
   Object.defineProperty(globalThis, "navigator", {
     configurable: true,
     value: {
@@ -140,7 +163,8 @@ function setBrowserGlobals({ stream, context }) {
     }
   });
   globalThis.window = {
-    AudioContext: function AudioContext() {
+    AudioContext: function AudioContext(options) {
+      onConstruct(options);
       return context;
     }
   };
