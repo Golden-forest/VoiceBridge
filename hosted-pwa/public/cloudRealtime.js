@@ -114,14 +114,21 @@ export class CloudRealtime {
       key
     });
     const channel = await this.getTargetChannel(targetDeviceId);
+    if (!channel) {
+      console.warn("[VB sendKey] no channel for", targetDeviceId);
+      throw new Error(`未找到桌面端通道：${targetDeviceId}`);
+    }
+    const payload = {
+      ...message,
+      created_at: new Date().toISOString()
+    };
+    console.info("[VB sendKey]", { key, targetDeviceId, sourceDeviceId: this.phoneDeviceId, payload });
     const sendStatus = await channel.send({
       type: "broadcast",
       event: "command",
-      payload: {
-        ...message,
-        created_at: new Date().toISOString()
-      }
+      payload
     });
+    console.info("[VB sendKey] sendStatus=", sendStatus);
     if (sendStatus !== "ok") {
       throw new Error(`发送到桌面端失败：${sendStatus}`);
     }

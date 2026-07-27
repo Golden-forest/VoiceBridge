@@ -106,7 +106,19 @@ export async function startRealtimeAgent({
   });
 
   messageChannel.on("broadcast", { event: "command" }, async ({ payload }) => {
+    console.info("[VB realtime] command received", {
+      type: payload?.type,
+      key: payload?.key,
+      target: payload?.target_device_id,
+      myDeviceId: device.id,
+      match: payload?.target_device_id === device.id
+    });
     const result = await handleDesktopMessage({ payload, myDeviceId: device.id, output });
+    console.info("[VB realtime] handleDesktopMessage result", {
+      handled: result?.handled,
+      ackStatus: result?.ack?.status,
+      ackDetail: result?.ack?.detail
+    });
     if (result.ack) {
       const targetDeviceId = result.ack.target_device_id;
       let ackChannel = ackChannels.get(targetDeviceId);
