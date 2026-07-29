@@ -4,6 +4,7 @@ import { recordWavUntilStopped } from "./cloudRecorder.js";
 import { transcribeCloudAudio } from "./cloudTranscribe.js";
 import { commandStore } from "./commandStore.js";
 import { isProtocolCompatible } from "./shared/protocol.js";
+import { t, getAvailableLocales, setLocale, getCurrentLocale, getIntlLocale } from "./i18n/i18n.js";
 
 // === Element References ===
 const appConfig = window.__VB_CONFIG || {};
@@ -46,7 +47,7 @@ async function requestLanCommands(path, init = {}) {
     headers: { "Content-Type": "application/json", ...(init.headers || {}) }
   });
   const payload = await response.json().catch(() => ({}));
-  if (!response.ok) throw new Error(payload.error || "指令操作失败。");
+  if (!response.ok) throw new Error(payload.error || t('commandStore.operationFailed'));
   if (Array.isArray(payload)) {
     return payload.map((command) => ({
       ...command,
@@ -98,11 +99,11 @@ function showCopyToast(message, copyText) {
   const btn = document.createElement("button");
   btn.className = "toast-copy-btn";
   btn.type = "button";
-  btn.textContent = "复制到手机";
+  btn.textContent = t('common.copyToPhone');
   btn.addEventListener("click", () => {
     copyToPhoneClipboard(copyText);
     btn.disabled = true;
-    btn.textContent = "已复制";
+    btn.textContent = t('common.copied');
     clearTimeout(toastTimer);
     toastTimer = setTimeout(() => toastEl.classList.remove("show"), 1500);
   });
@@ -116,13 +117,13 @@ function setConnectionStatus(state, message) {
   statusDot.className = "status-dot " + state;
   statusDot.title = message;
   if (!statusBadge) return;
-  const labels = {
-    connected: "已连接",
-    error: "未连接",
-    connecting: "连接中"
+  const labelKeys = {
+    connected: "device.statusConnected",
+    error: "device.statusDisconnected",
+    connecting: "device.statusConnecting"
   };
   statusBadge.className = "status-badge " + state;
-  statusBadge.textContent = labels[state] || "连接中";
+  statusBadge.textContent = t(labelKeys[state] || "device.statusConnecting");
 }
 
 statusDot.addEventListener("click", () => {
@@ -136,7 +137,7 @@ pageRefreshButton?.addEventListener("click", () => {
 // === Text Input ===
 function updateTextInputState() {
   const text = textInput.value.trim();
-  if (charCount) charCount.textContent = `${textInput.value.length}/2000`;
+  if (charCount) charCount.textContent = t('input.charCount', textInput.value.length, 2000);
   const saveBtn = document.querySelector("#savePhraseBtn");
 
   // In edit mode, hide save button — handled by edit UI
@@ -149,7 +150,7 @@ function updateTextInputState() {
   if (text) {
     saveBtn.classList.remove("hidden");
     saveBtn.classList.remove("saved");
-    saveBtn.innerHTML = starSvg + " 收藏";
+    saveBtn.innerHTML = starSvg + " " + t('input.savePhrase');
   } else {
     saveBtn.classList.add("hidden");
   }
@@ -162,7 +163,7 @@ async function sendTextInput() {
   const text = textInput.value.trim();
   if (!text) return;
   if (text.length > 2000) {
-    showToast("文本过长，最多支持 2000 个字符", true);
+    showToast(t('input.textTooLong'), true);
     return;
   }
   if (text === lastAutoPastedText) {
@@ -171,7 +172,7 @@ async function sendTextInput() {
     lastAutoPastedText = "";
     clearTimeout(lastAutoPasteTimer);
     lastAutoPasteTimer = null;
-    showToast("该文本已通过语音自动发送。");
+    showToast(t('input.autoSentNotice'));
     return;
   }
   lastAutoPastedText = "";
@@ -184,10 +185,10 @@ async function sendTextInput() {
   }
 }
 
-async function sendTextToDesktop(text, { localSuccessMessage = "已发送到电脑。" } = {}) {
+async function sendTextToDesktop(text, { localSuccessMessage = t('status.sentToDesktop') } = {}) {
   if ((window.__VB_CONFIG || {}).voicebridgeMode === "cloud") {
     if (!cloudRealtime || !selectedCloudDeviceId) {
-      showToast("请先打开桌面客户端。", true);
+      showToast(t('status.desktopNotOpen'), true);
       return false;
     }
     if (!selectedCloudDeviceIsCompatible()) return false;
@@ -198,11 +199,11 @@ async function sendTextToDesktop(text, { localSuccessMessage = "已发送到电�
         autoPaste: autoPasteEl.checked,
         targetWindowId: windowSelector.targetWindow?.windowId
       });
-      showToast("已发送，等待桌面端确认...");
+      showToast(t('status.sending'));
       await sendPromise;
       return true;
     } catch (error) {
-      showToast(error.message || "发送失败，请稍后重试。", true);
+      showToast(error.message || t('connection.sendFailed'), true);
       return false;
     }
   }
@@ -221,7 +222,7 @@ async function sendTextToDesktop(text, { localSuccessMessage = "已发送到电�
     showToast(localSuccessMessage);
     return true;
   } else {
-    showToast("发送失败，请检查连接。", true);
+    showToast(t('status.sendFailedConnection'), true);
     return false;
   }
 }
@@ -232,7 +233,7 @@ async function handleAuthState(event) {
   if (!isCloudMode) return;
   if (!session || !user || !window.VoiceBridgeAuth?.supabase) {
     if (activeCloudUserId) {
-      showToast("会话已过期，请重新登录");
+      showToast(t('status.sessionExpired'));
       activeCloudUserId = "";
     }
     await stopCloudRealtime();
@@ -280,9 +281,9 @@ async function handleAuthState(event) {
     },
     onAck: (ack) => {
       if (ack.key) return;
-      showToast(ack.status === "success" ? "已发送到桌面端。" : `桌面端执行失败：${ack.detail}`);
+      showToast(ack.status === "success" ? t('status.sentToDesktopAck') : t('status.desktopExecFailed', ack.detail));
     },
-    onStatus: () => setConnectionStatus("connected", "云端已连接")
+    onStatus: () => setConnectionStatus("connected", t('connection.cloudConnected'))
   });
   cloudRealtime = realtime;
   // 更新 plan badge
@@ -290,9 +291,18 @@ async function handleAuthState(event) {
   if (sb && planBadge) {
     sb.from("subscriptions").select("plan,status").eq("user_id", user.id).maybeSingle()
       .then(({ data: sub }) => {
-        const plan = sub?.plan === "pro" && isPaidStatus(sub.status) ? "pro" : "free";
-        planBadge.textContent = plan === "pro" ? "Pro" : "Free";
-        planBadge.classList.toggle("pro", plan === "pro");
+        const plan = sub?.plan === "admin"
+          ? "admin"
+          : (sub?.plan === "pro" && isPaidStatus(sub.status) ? "pro" : "free");
+        if (plan === "admin") {
+          planBadge.textContent = t('planBadge.admin');
+          planBadge.classList.remove("pro");
+          planBadge.classList.add("admin");
+        } else {
+          planBadge.textContent = plan === "pro" ? t('planBadge.pro') : t('planBadge.free');
+          planBadge.classList.remove("admin");
+          planBadge.classList.toggle("pro", plan === "pro");
+        }
       })
       .catch(() => {});
   }
@@ -302,8 +312,8 @@ async function handleAuthState(event) {
     if (cloudRealtime !== realtime || activeCloudUserId !== user.id || activeCloudPhoneDeviceId !== phoneDeviceId) {
       return;
     }
-    showToast(error.message || "云端连接失败，请稍后重试。", true);
-    setConnectionStatus("error", "云端连接失败");
+    showToast(error.message || t('connection.cloudConnectFailedToast'), true);
+    setConnectionStatus("error", t('connection.cloudConnectFailed'));
     await stopCloudRealtime();
     resetCloudDeviceSelect();
   }
@@ -367,7 +377,7 @@ function syncDeviceSelectorLabel() {
   if (!deviceSelectorLabel || !cloudDeviceSelect) return;
   const value = cloudDeviceSelect.value;
   if (!value) {
-    deviceSelectorLabel.textContent = "设备";
+    deviceSelectorLabel.textContent = t('device.device');
     return;
   }
   const opt = Array.from(cloudDeviceSelect.options).find((o) => o.value === value);
@@ -393,7 +403,7 @@ function renderCloudDeviceOptions(desktopDevices) {
       const option = document.createElement("option");
       option.value = device.deviceId;
       const name = device.name || device.deviceId;
-      option.textContent = isProtocolCompatible(device.protocolVersion) ? name : `${name}（需更新）`;
+      option.textContent = isProtocolCompatible(device.protocolVersion) ? name : t('libraryExtra.needUpdate', name);
       return option;
     })
     : [createCloudPlaceholderOption()];
@@ -418,7 +428,7 @@ function renderDeviceSelectorList(desktopDevices) {
   if (!desktopDevices.length) {
     const p = document.createElement("p");
     p.className = "window-list-loading";
-    p.textContent = "等待桌面端上线";
+    p.textContent = t('device.waitingDesktop');
     deviceSelectorList.appendChild(p);
     return;
   }
@@ -428,7 +438,7 @@ function renderDeviceSelectorList(desktopDevices) {
     btn.className = "window-list-item";
     btn.dataset.deviceId = device.deviceId;
     const name = device.name || device.deviceId;
-    btn.textContent = isProtocolCompatible(device.protocolVersion) ? name : `${name}（需更新）`;
+    btn.textContent = isProtocolCompatible(device.protocolVersion) ? name : t('libraryExtra.needUpdate', name);
     btn.addEventListener("click", () => {
       selectedCloudDeviceId = device.deviceId;
       cloudDeviceSelect.value = device.deviceId;
@@ -442,7 +452,7 @@ function renderDeviceSelectorList(desktopDevices) {
 function createCloudPlaceholderOption() {
   const option = document.createElement("option");
   option.value = "";
-  option.textContent = "等待桌面端上线";
+  option.textContent = t('device.waitingDesktop');
   return option;
 }
 
@@ -461,7 +471,7 @@ function resetCloudDeviceSelect() {
     deviceSelectorList.replaceChildren();
     const p = document.createElement("p");
     p.className = "window-list-loading";
-    p.textContent = "等待桌面端上线";
+    p.textContent = t('device.waitingDesktop');
     deviceSelectorList.appendChild(p);
   }
   syncDeviceSelectorLabel?.();
@@ -470,6 +480,7 @@ function resetCloudDeviceSelect() {
 const PLAN_LIMITS = {
   free: { monthlySeconds: 600, maxAudioSeconds: 60, rateLimitPerMinute: 10 },
   pro: { monthlySeconds: 18000, maxAudioSeconds: 60, rateLimitPerMinute: 30 },
+  admin: { monthlySeconds: 1_000_000, maxAudioSeconds: 3600, rateLimitPerMinute: 10_000 },
 };
 
 function isPaidStatus(status) {
@@ -478,13 +489,13 @@ function isPaidStatus(status) {
 
 function formatRelativeTime(diffMs) {
   const minutes = Math.floor(diffMs / 60_000);
-  if (minutes < 1) return "刚刚";
-  if (minutes < 60) return `${minutes}分钟前`;
+  if (minutes < 1) return t('time.justNow');
+  if (minutes < 60) return t('time.minutesAgo', minutes);
   const hours = Math.floor(minutes / 60);
-  if (hours < 24) return `${hours}小时前`;
+  if (hours < 24) return t('time.hoursAgo', hours);
   const days = Math.floor(hours / 24);
-  if (days < 30) return `${days}天前`;
-  return `${Math.floor(days / 30)}个月前`;
+  if (days < 30) return t('time.daysAgo', days);
+  return t('time.monthsAgo', Math.floor(days / 30));
 }
 
 function updateBillingControls(hasSession) {
@@ -504,7 +515,7 @@ async function openBillingSession(functionName, button) {
     });
     location.href = payload.url;
   } catch (error) {
-    showToast(error.message || "订阅请求失败，请稍后重试。", true);
+    showToast(error.message || t('billing.subscriptionRequestFailed'), true);
     button.disabled = false;
   }
 }
@@ -516,10 +527,10 @@ updateBillingControls(Boolean(window.VoiceBridgeAuth?.session));
   const params = new URLSearchParams(location.search);
   const billing = params.get("billing");
   if (billing === "success") {
-    showToast("订阅成功，欢迎使用 Pro 方案");
+    showToast(t('billing.subscribeSuccess'));
     history.replaceState(null, "", location.pathname);
   } else if (billing === "cancel") {
-    showToast("订阅已取消");
+    showToast(t('billing.subscribeCanceled'));
     history.replaceState(null, "", location.pathname);
   }
 })();
@@ -600,7 +611,7 @@ class WindowSelector {
       this.el.btnLabel.textContent = this.selectedWindow.appName;
       this.el.btn.classList.add("active");
     } else {
-      this.el.btnLabel.textContent = "光标位置";
+      this.el.btnLabel.textContent = t('device.cursorPosition');
       this.el.btn.classList.remove("active");
     }
   }
@@ -618,24 +629,24 @@ class WindowSelector {
       this._renderWindows(this._windowCache);
       return;
     }
-    this.el.list.innerHTML = '<p class="window-list-loading">加载中…</p>';
+    this.el.list.innerHTML = `<p class="window-list-loading">${t('common.loading')}</p>`;
     try {
       const res = await fetch("/api/windows");
       if (!res.ok) {
         console.error("API error:", res.status, await res.text().catch(() => ""));
-        this.el.list.innerHTML = '<p class="window-list-empty">获取窗口失败</p>';
+        this.el.list.innerHTML = `<p class="window-list-empty">${t('windowSelector.fetchFailed')}</p>`;
         return;
       }
       const data = await res.json();
       if (!data.ok || !data.windows || data.windows.length === 0) {
-        this.el.list.innerHTML = '<p class="window-list-empty">没有找到可输入的窗口</p>';
+        this.el.list.innerHTML = `<p class="window-list-empty">${t('windowSelector.noWindows')}</p>`;
         return;
       }
       this._renderWindows(data.windows);
       this._windowCache = data.windows;
       this._windowCacheTime = Date.now();
     } catch {
-      this.el.list.innerHTML = '<p class="window-list-empty">获取窗口失败</p>';
+      this.el.list.innerHTML = `<p class="window-list-empty">${t('windowSelector.fetchFailed')}</p>`;
     }
   }
 
@@ -654,7 +665,7 @@ class WindowSelector {
     cursorBtn.appendChild(cursorCheck);
     const cursorTitle = document.createElement("span");
     cursorTitle.className = "window-item-title";
-    cursorTitle.textContent = "光标位置";
+    cursorTitle.textContent = t('device.cursorPosition');
     cursorBtn.appendChild(cursorTitle);
     cursorBtn.addEventListener("click", (e) => {
       e.stopPropagation();
@@ -702,18 +713,18 @@ class WindowSelector {
 
   _renderCloudWindows(windows) {
     this.el.list.replaceChildren();
-    const cursorBtn = this._createCloudWindowButton(null, "光标位置");
+    const cursorBtn = this._createCloudWindowButton(null, t('windowSelector.cursorPosition'));
     this.el.list.appendChild(cursorBtn);
     for (const win of windows) {
       this.el.list.appendChild(this._createCloudWindowButton(
         win,
-        win.title || win.app || "窗口"
+        win.title || win.app || t('windowSelector.defaultWindowName')
       ));
     }
     if (!windows.length) {
       const empty = document.createElement("p");
       empty.className = "window-list-empty";
-      empty.textContent = "桌面端未上报窗口";
+      empty.textContent = t('windowSelector.noWindowsReported');
       this.el.list.appendChild(empty);
     }
   }
@@ -760,7 +771,7 @@ class CommandLibrary {
     this.commands = [];
     this.filter = "";
     this.editingId = null;
-    this.activeCategory = "最近";
+    this.activeCategory = t('libraryExtra.recent');
     this._longPressTimer = null;
     this._longPressTriggered = false;
     this._longPressStartX = 0;
@@ -788,7 +799,7 @@ class CommandLibrary {
       const cmd = this.commands.find(c => c.id === id);
       if (!cmd) return;
       if (cmd.locked) {
-        showToast("升级 Pro 后可使用这条指令。", true);
+        showToast(t('library.lockedTip'), true);
         return;
       }
       sendQuickCommand(cmd.text, cmd.label);
@@ -824,7 +835,7 @@ class CommandLibrary {
     try {
       this.commands = await activeCommandStore.list();
       // If "最近" is active but no commands have been used, fall back to first category
-      if (this.activeCategory === "最近" && !this.commands.some(c => c.lastUsedAt)) {
+      if (this.activeCategory === t('libraryExtra.recent') && !this.commands.some(c => c.lastUsedAt)) {
         const cats = this._getCategories();
         if (cats.length > 0) this.activeCategory = cats[0][0];
       }
@@ -837,14 +848,14 @@ class CommandLibrary {
       this.render();
       await this._migrateLocalStoragePhrases();
     } catch {
-      this.container.innerHTML = '<p style="padding:12px;color:var(--text-muted);text-align:center;">加载指令失败</p>';
+      this.container.innerHTML = `<p style="padding:12px;color:var(--text-muted);text-align:center;">${t('library.loadFailed')}</p>`;
     }
   }
 
   _getCategories() {
     const map = {};
     this.commands.forEach(cmd => {
-      const cat = cmd.category || "未分类";
+      const cat = cmd.category || t('libraryExtra.uncategorized');
       if (!map[cat]) map[cat] = [];
       map[cat].push(cmd);
     });
@@ -868,13 +879,13 @@ class CommandLibrary {
     const recentCount = this.commands.filter(c => c.lastUsedAt && !/^[──\-]{2,}/.test(c.label)).length;
     if (recentCount > 0) {
       const recentBtn = document.createElement("button");
-      recentBtn.className = "tab-item" + (this.activeCategory === "最近" ? " active" : "");
+      recentBtn.className = "tab-item" + (this.activeCategory === t('libraryExtra.recent') ? " active" : "");
       recentBtn.type = "button";
       recentBtn.setAttribute("role", "tab");
-      recentBtn.setAttribute("aria-selected", String(this.activeCategory === "最近"));
-      recentBtn.dataset.category = "最近";
+      recentBtn.setAttribute("aria-selected", String(this.activeCategory === t('libraryExtra.recent')));
+      recentBtn.dataset.category = t('libraryExtra.recent');
       const recentNameSpan = document.createElement("span");
-      recentNameSpan.textContent = "最近";
+      recentNameSpan.textContent = t('libraryExtra.recent');
       recentBtn.appendChild(recentNameSpan);
       const recentCountSpan = document.createElement("span");
       recentCountSpan.className = "tab-count";
@@ -911,7 +922,7 @@ class CommandLibrary {
     this.container.innerHTML = "";
 
     if (this.commands.length === 0) {
-      this.container.innerHTML = '<p style="padding:12px;color:var(--text-muted);text-align:center;">指令库为空</p>';
+      this.container.innerHTML = `<p style="padding:12px;color:var(--text-muted);text-align:center;">${t('library.empty')}</p>`;
       return;
     }
 
@@ -919,7 +930,7 @@ class CommandLibrary {
     let cmdsToShow;
     if (q) {
       cmdsToShow = this.commands.filter(c => (c.label || "").toLowerCase().includes(q) || (c.text || "").toLowerCase().includes(q));
-    } else if (this.activeCategory === "最近") {
+    } else if (this.activeCategory === t('libraryExtra.recent')) {
       // Show recently used commands across all categories, deduplicated, sorted by lastUsedAt desc, max 16
       const seen = new Set();
       cmdsToShow = this.commands
@@ -927,16 +938,16 @@ class CommandLibrary {
         .sort((a, b) => new Date(b.lastUsedAt || 0) - new Date(a.lastUsedAt || 0))
         .slice(0, 16);
     } else {
-      cmdsToShow = this.commands.filter(c => (c.category || "未分类") === this.activeCategory);
+      cmdsToShow = this.commands.filter(c => (c.category || t('libraryExtra.uncategorized')) === this.activeCategory);
     }
 
     // Sort by lastUsedAt only for "最近" and search
-    if (q || this.activeCategory === "最近") {
+    if (q || this.activeCategory === t('libraryExtra.recent')) {
       cmdsToShow.sort((a, b) => new Date(b.lastUsedAt || 0) - new Date(a.lastUsedAt || 0));
     }
 
     if (cmdsToShow.length === 0) {
-      this.container.innerHTML = '<p style="padding:12px;color:var(--text-muted);text-align:center;">没有匹配的指令</p>';
+      this.container.innerHTML = `<p style="padding:12px;color:var(--text-muted);text-align:center;">${t('library.noMatch')}</p>`;
       return;
     }
 
@@ -968,7 +979,7 @@ class CommandLibrary {
       if (cmd.locked) {
         btn.classList.add("is-locked");
         btn.setAttribute("aria-disabled", "true");
-        btn.title = "升级 Pro 后可用";
+        btn.title = t('library.lockedTooltip');
       }
       if (cmd.text.startsWith("/") || /^(npm|node|copyclaw|npx)\b/.test(cmd.text)) {
         btn.classList.add("slash");
@@ -993,7 +1004,7 @@ class CommandLibrary {
     const cmd = this.commands.find(c => c.id === id);
     if (!cmd) return;
     if (cmd.source !== "user" || cmd.locked) {
-      showToast(cmd.locked ? "升级 Pro 后可编辑这条指令。" : "系统预置指令不可编辑。", true);
+      showToast(cmd.locked ? t('libraryExtra.lockedEdit') : t('libraryExtra.presetNonEditable'), true);
       return;
     }
     this.editingId = id;
@@ -1005,7 +1016,7 @@ class CommandLibrary {
     editLabel.classList.remove("hidden");
     textInput.value = cmd.text;
     textInput.rows = 5;
-    textInput.placeholder = "编辑指令内容…";
+    textInput.placeholder = t('libraryExtra.editPlaceholder');
     inputCard.classList.add("editing");
 
     // Store originals for change detection
@@ -1039,7 +1050,7 @@ class CommandLibrary {
       const newText = textInput.value.trim();
       if (newLabel && newText) {
         this._updateCommand(this.editingId, { label: newLabel, text: newText });
-        showToast("已保存指令。");
+        showToast(t('library.saved'));
       }
     }
 
@@ -1050,7 +1061,7 @@ class CommandLibrary {
     editLabel.classList.add("hidden");
     textInput.value = "";
     textInput.rows = 3;
-    textInput.placeholder = "输入文字，或语音识别…";
+    textInput.placeholder = t('input.placeholder');
     inputCard.classList.remove("editing");
 
     // Hide edit buttons
@@ -1084,10 +1095,10 @@ class CommandLibrary {
     try {
       await activeCommandStore.remove(id);
       this.commands = this.commands.filter(c => c.id !== id);
-      showToast("已删除指令。");
+      showToast(t('library.deleted'));
       this._exitEditMode(false);
     } catch {
-      showToast("删除失败。", true);
+      showToast(t('library.deleteFailed'), true);
       this._exitEditMode(false);
     }
   }
@@ -1121,21 +1132,21 @@ class CommandLibrary {
       const created = await activeCommandStore.create({
         text,
         label: text.length > 8 ? text.slice(0, 8) + "\u2026" : text,
-        category: category || "通用"
+        category: category || t('library.categoryGeneral')
       });
       this.commands.unshift(created);
       // Switch to the category of the newly added command
-      this.activeCategory = created.category || "未分类";
+      this.activeCategory = created.category || t('libraryExtra.uncategorized');
       this.renderTabs();
       this.render();
-      showToast("已添加指令。");
+      showToast(t('libraryExtra.addedSuccess'));
     } catch {
-      showToast("添加失败。", true);
+      showToast(t('libraryExtra.addFailed'), true);
     }
   }
 
   getUniqueCategories() {
-    return new Set(this.commands.map(c => c.category || "未分类"));
+    return new Set(this.commands.map(c => c.category || t('libraryExtra.uncategorized')));
   }
 
   openAddDialog(preText) {
@@ -1157,7 +1168,7 @@ class CommandLibrary {
     // Add "新分类..." option
     const newOpt = document.createElement("option");
     newOpt.value = "__new__";
-    newOpt.textContent = "新分类…";
+    newOpt.textContent = t('common.newCategory');
     select.appendChild(newOpt);
     select.value = select.options[0].value;
     newCatInput.classList.add("hidden");
@@ -1178,7 +1189,7 @@ class CommandLibrary {
     const text = input.value.trim();
     if (!text) return;
     const category = select.value === "__new__"
-      ? (newCatInput.value.trim() || "通用")
+      ? (newCatInput.value.trim() || t('library.categoryGeneral'))
       : select.value;
     await this.addCommand(text, category);
     this.closeAddDialog();
@@ -1198,7 +1209,7 @@ class CommandLibrary {
           await activeCommandStore.create({
             text: phrase.text,
             label: phrase.text.length > 8 ? phrase.text.slice(0, 8) + "\u2026" : phrase.text,
-            category: "通用",
+            category: t('library.categoryGeneral'),
           });
         }
       }
@@ -1272,58 +1283,58 @@ const deleteButton = document.querySelector("#deleteButton");
 function sendKeyCommand(key, successMessage) {
   if (isCloudMode) {
     if (!cloudRealtime || !selectedCloudDeviceId) {
-      showToast("请先打开桌面客户端。", true);
+      showToast(t('status.desktopNotOpen'), true);
       return;
     }
     if (!selectedCloudDeviceIsCompatible()) return;
-    showToast("已发送，等待桌面端确认...");
+    showToast(t('status.sending'));
     cloudRealtime.sendKey({
       targetDeviceId: selectedCloudDeviceId,
       key,
       targetWindowId: windowSelector.targetWindow?.windowId
     })
       .then(() => showToast(successMessage))
-      .catch((error) => showToast(error.message || "发送失败，请稍后重试。", true));
+      .catch((error) => showToast(error.message || t('status.sendFailed'), true));
     return;
   }
   if (ws && ws.readyState === WebSocket.OPEN) {
     ws.send(JSON.stringify({ type: "key", key }));
     showToast(successMessage);
   } else {
-    showToast("发送失败，请检查连接。", true);
+    showToast(t('status.sendFailedConnection'), true);
   }
 }
 
 function selectedCloudDeviceIsCompatible() {
   const device = cloudDesktopDevices.find(({ deviceId }) => deviceId === selectedCloudDeviceId);
   if (device && isProtocolCompatible(device.protocolVersion)) return true;
-  showToast("电脑客户端版本过旧，请重新打开最新的 VoiceBridge Agent。", true);
+  showToast(t('status.protocolTooOld'), true);
   return false;
 }
 
 pasteButton.addEventListener("click", () => {
-  sendKeyCommand("paste", "已粘贴。");
+  sendKeyCommand("paste", t('record.pasteKeySuccess'));
 });
 
 undoButton.addEventListener("click", () => {
-  sendKeyCommand("undo", "已撤销。");
+  sendKeyCommand("undo", t('record.undoKeySuccess'));
 });
 
 escButton.addEventListener("click", () => {
-  sendKeyCommand("escape", "已按 Esc。");
+  sendKeyCommand("escape", t('record.escKeySuccess'));
 });
 
 deleteButton.addEventListener("click", () => {
-  sendKeyCommand("delete", "已按删除。");
+  sendKeyCommand("delete", t('record.deleteKeySuccess'));
 });
 
 async function sendQuickCommand(text, label) {
-  await sendTextToDesktop(text, { localSuccessMessage: "已发送快捷指令。" });
+  await sendTextToDesktop(text, { localSuccessMessage: t('record.quickCmdSent') });
 }
 
 // === Action Buttons ===
 enterButton.addEventListener("click", () => {
-  sendKeyCommand("enter", "已按回车。");
+  sendKeyCommand("enter", t('record.enterKeySuccess'));
 });
 
 // === Save / Add Command Button ===
@@ -1410,7 +1421,7 @@ function setActionButtonsDisabled(disabled) {
 }
 
 if (!navigator.mediaDevices?.getUserMedia || (isCloudMode ? !BrowserAudioContext : !window.MediaRecorder)) {
-  showToast("当前浏览器无法直接录音，可改用音频上传兜底。", true);
+  showToast(t('record.recordUnsupported'), true);
   recordButton.disabled = true;
   fallbackButton.classList.remove("hidden");
 }
@@ -1432,13 +1443,13 @@ async function toggleRecording() {
 function setRecordIdle() {
   iconEl.className = "record-icon record-icon-mic";
   iconEl.innerHTML = micSvg;
-  labelEl.textContent = "录音";
+  labelEl.textContent = t('record.recordLabel');
 }
 
 function setRecordActive() {
   iconEl.className = "record-icon record-icon-stop";
   iconEl.innerHTML = stopSvg;
-  labelEl.textContent = "停止";
+  labelEl.textContent = t('record.stopLabel');
 }
 
 function setRecordProcessing() {
@@ -1455,16 +1466,16 @@ function beginRecordingState() {
   recordButton.classList.add("recording");
   setRecordActive();
   setActionButtonsDisabled(true);
-  setConnectionStatus(statusDot.className.includes("connected") ? "connected" : "connecting", "正在录音…");
+  setConnectionStatus(statusDot.className.includes("connected") ? "connected" : "connecting", t('record.recording'));
 
   maxRecordTimer = setTimeout(() => {
     if (isRecording) {
       void stopRecording().catch((error) => {
         console.error("Failed to stop recording:", error);
-        showToast(error.message || "录音停止失败，请重试。", true);
+        showToast(error.message || t('record.recordingFailed'), true);
         finishUpload();
       });
-      showToast("已到 55 秒上限，正在上传音频...");
+      showToast(t('record.reachedLimit'));
     }
   }, 55_000);
 
@@ -1499,7 +1510,7 @@ async function startRecording() {
     recorder.start();
     beginRecordingState();
   } catch (error) {
-    showToast(`无法访问麦克风：${error.message}`, true);
+    showToast(t('record.micDenied', error.message), true);
   }
 }
 
@@ -1513,12 +1524,12 @@ async function stopRecording() {
   recordButton.classList.remove("recording");
   recordButton.disabled = true;
   setRecordProcessing();
-  showToast("正在上传音频...");
+  showToast(t('record.uploading'));
   if (isCloudMode && typeof recorder.stop === "function") {
     try {
       await recorder.stop();
     } catch (error) {
-      showToast(error.message || "录音处理失败，请重试。", true);
+      showToast(error.message || t('record.stopFailed'), true);
       finishUpload();
     }
     return;
@@ -1527,9 +1538,10 @@ async function stopRecording() {
 }
 
 async function uploadAudio(blob, extension) {
+  let timeout = null;
   try {
-    if (!blob.size) { showToast("没有录到声音，请再试一次。", true); finishUpload(); return; }
-    showToast("正在识别...");
+    if (!blob.size) { showToast(t('record.noVoice'), true); finishUpload(); return; }
+    showToast(t('record.recognizing'));
     if (isCloudMode) {
       const payload = await transcribeCloudAudio({
         audio: blob,
@@ -1537,7 +1549,7 @@ async function uploadAudio(blob, extension) {
         durationMs: currentRecordingDurationMs
       });
       const text = (payload.text || "").trim();
-      if (!text) throw new Error("识别完成，但没有返回可用文字。");
+      if (!text) throw new Error(t('record.noTranscriptText'));
       textInput.value = text;
       updateTextInputState();
       const accepted = await sendTextToDesktop(text);
@@ -1556,27 +1568,28 @@ async function uploadAudio(blob, extension) {
       formData.append("targetWindowTitle", windowSelector.targetWindow.windowTitle);
     }
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 30_000);
+    timeout = setTimeout(() => controller.abort(), 30_000);
     const response = await fetch("/api/upload", { method: "POST", body: formData, signal: controller.signal });
     clearTimeout(timeout);
+    timeout = null;
     const payload = await response.json();
-    if (!response.ok || !payload.ok) throw new Error(payload.error || "上传失败");
+    if (!response.ok || !payload.ok) throw new Error(payload.error || t('record.uploadFailed'));
     const output = payload.output || {};
     if (output.buffered) {
-      showToast("已加入输入缓冲。");
+      showToast(t('record.appendedToBuffer'));
     } else if (output.command) {
-      showToast(output.keyError ? "语音命令执行失败。" : "已执行语音命令。", Boolean(output.keyError));
+      showToast(output.keyError ? t('record.voiceCommandFailed') : t('record.voiceCommandExecuted'), Boolean(output.keyError));
     } else if (output.pasted) {
-      showToast("已复制并自动粘贴。");
+      showToast(t('record.copiedAndPasted'));
     } else if (output.copied) {
-      showCopyToast("已复制到电脑剪切板。", payload.text || "");
+      showCopyToast(t('record.copiedToClipboard'), payload.text || "");
     } else {
-      showToast("识别成功，但写入剪切板失败。", true);
+      showToast(t('record.clipboardFailed'), true);
     }
   } catch (error) {
-    clearTimeout(timeout);
+    if (timeout) clearTimeout(timeout);
     if (error.name === "AbortError") {
-      showToast("上传超时，请检查网络连接", true);
+      showToast(t('record.uploadTimeout'), true);
       return;
     }
     showToast(error.message, true);
@@ -1616,7 +1629,7 @@ function connectWebSocket() {
       document.removeEventListener("visibilitychange", wsVisibilityHandler);
       wsVisibilityHandler = null;
     }
-    setConnectionStatus("connected", "已连接电脑端");
+    setConnectionStatus("connected", t('connection.wsConnected'));
   });
   ws.addEventListener("message", (event) => {
     try {
@@ -1632,16 +1645,16 @@ function connectWebSocket() {
       }
       if (payload.type === "output") {
         if (payload.buffered) {
-          showToast("已加入输入缓冲。");
+          showToast(t('record.appendedToBuffer'));
         } else if (payload.command) {
-          showToast(payload.keyError ? "语音命令执行失败。" : "已执行语音命令。", Boolean(payload.keyError));
+          showToast(payload.keyError ? t('record.voiceCommandFailed') : t('record.voiceCommandExecuted'), Boolean(payload.keyError));
         } else if (!payload.copied) {
-          showToast("识别成功，但写入剪切板失败。", true);
+          showToast(t('record.clipboardFailed'), true);
         } else if (!payload.pasted) {
           if (payload.pasteError) {
-            showToast("已复制，自动粘贴失败。", true);
+            showToast(t('record.pasteAutoFailed'), true);
           } else if (payload.text) {
-            showCopyToast("已复制到剪切板。", payload.text);
+            showCopyToast(t('record.copiedToClipboardShort'), payload.text);
           }
         }
       }
@@ -1651,7 +1664,7 @@ function connectWebSocket() {
   });
   ws.addEventListener("close", (event) => {
     if (event.code === 1000) return; // Normal closure, no reconnect
-    setConnectionStatus("error", "连接已断开，正在重连...");
+    setConnectionStatus("error", t('connection.reconnecting'));
     clearTimeout(wsRetryTimer);
     wsRetryTimer = setTimeout(connectWebSocket, wsRetryDelay);
     wsRetryDelay = Math.min(wsRetryDelay * 2, 60000);
@@ -1726,10 +1739,11 @@ class AccountDrawer {
   async _render() {
     const body = this.el.body;
     if (!body) return;
-    body.innerHTML = "<p style='text-align:center;color:var(--text-muted)'>加载中…</p>";
+    body.innerHTML = `<p style='text-align:center;color:var(--text-muted)'>${t('common.loading')}</p>`;
     try {
       const data = await this._fetchData();
       body.replaceChildren(
+        this._renderLanguage(),
         this._renderPlan(data),
         this._renderPricing(data),
         this._renderUsage(data),
@@ -1740,15 +1754,42 @@ class AccountDrawer {
     } catch (error) {
       const errP = document.createElement("p");
       errP.style.cssText = "text-align:center;color:var(--danger)";
-      errP.textContent = error.message || "加载失败";
+      errP.textContent = error.message || t('account.loadFailed');
       body.replaceChildren(errP);
     }
+  }
+
+  _renderLanguage() {
+    const section = document.createElement("div");
+    section.className = "account-section";
+
+    const title = document.createElement("p");
+    title.className = "account-section-title";
+    title.textContent = t('account.languageTitle');
+    section.appendChild(title);
+
+    const row = document.createElement("div");
+    row.className = "account-row";
+    const select = document.createElement("select");
+    select.className = "profile-edit-input";
+    select.style.marginTop = "0";
+    for (const { code, label } of getAvailableLocales()) {
+      const opt = document.createElement("option");
+      opt.value = code;
+      opt.textContent = label;
+      if (code === getCurrentLocale()) opt.selected = true;
+      select.appendChild(opt);
+    }
+    select.addEventListener("change", () => setLocale(select.value));
+    row.appendChild(select);
+    section.appendChild(row);
+    return section;
   }
 
   async _fetchData() {
     const supabase = window.VoiceBridgeAuth?.supabase;
     const user = window.VoiceBridgeAuth?.user;
-    if (!supabase || !user) throw new Error("请先登录");
+    if (!supabase || !user) throw new Error(t('account.pleaseLogin'));
 
     const [subRes, usageRes, devicesRes] = await Promise.all([
       supabase.from("subscriptions").select("*").eq("user_id", user.id).maybeSingle(),
@@ -1756,15 +1797,19 @@ class AccountDrawer {
       supabase.from("devices").select("*").eq("user_id", user.id).order("last_seen_at", { ascending: false }),
     ]);
 
-    if (subRes.error) throw new Error("获取订阅信息失败");
-    if (usageRes.error) throw new Error("获取用量信息失败");
-    if (devicesRes.error) throw new Error("获取设备信息失败");
+    if (subRes.error) throw new Error(t('account.getSubFailed'));
+    if (usageRes.error) throw new Error(t('account.getUsageFailed'));
+    if (devicesRes.error) throw new Error(t('account.getDevicesFailed'));
 
     const subscription = subRes.data || null;
     const usageEvents = usageRes.data || [];
     const devices = devicesRes.data || [];
 
-    const plan = subscription && isPaidStatus(subscription.status) ? "pro" : "free";
+    const plan = subscription && (subscription.plan === "admin")
+      ? "admin"
+      : (subscription && isPaidStatus(subscription.status) && subscription.plan === "pro")
+        ? "pro"
+        : "free";
     const usedSeconds = usageEvents
       .filter((event) => event.status === "success")
       .reduce((sum, event) => sum + Math.ceil((event.audio_duration_ms || 0) / 1000), 0);
@@ -1781,34 +1826,51 @@ class AccountDrawer {
 
     const title = document.createElement("p");
     title.className = "account-section-title";
-    title.textContent = "当前方案";
+    title.textContent = t('account.currentPlan');
     section.appendChild(title);
 
     const badge = document.createElement("span");
-    badge.className = `plan-badge ${data.plan === "pro" ? "pro" : ""}`;
-    badge.textContent = data.plan === "pro" ? "Pro" : "Free";
+    if (data.plan === "admin") {
+      badge.className = "plan-badge admin";
+      badge.textContent = t('account.adminLabel');
+    } else {
+      badge.className = `plan-badge ${data.plan === "pro" ? "pro" : ""}`;
+      badge.textContent = data.plan === "pro" ? t('account.planPro') : t('account.planFree');
+    }
     section.appendChild(badge);
 
-    const limits = PLAN_LIMITS[data.plan];
-    const pct = Math.min(100, Math.round((data.usedSeconds / limits.monthlySeconds) * 100));
+    const limits = PLAN_LIMITS[data.plan] || PLAN_LIMITS.free;
 
     const stats = document.createElement("div");
     stats.className = "usage-stats";
-    stats.innerHTML = `
-      <div class="usage-stat-row">
-        <span class="usage-stat-label">已用 / 月额度</span>
-        <span class="usage-stat-value">${data.usedSeconds.toLocaleString()} / ${limits.monthlySeconds.toLocaleString()} 秒 (${pct}%)</span>
-      </div>
-    `;
+    if (data.plan === "admin") {
+      stats.innerHTML = `
+        <div class="usage-stat-row">
+          <span class="usage-stat-label">${t('account.usedMonthlyQuota')}</span>
+          <span class="usage-stat-value">${t('account.unlimitedSeconds', data.usedSeconds)}</span>
+        </div>
+      `;
+    } else {
+      const pct = Math.min(100, Math.round((data.usedSeconds / limits.monthlySeconds) * 100));
+      stats.innerHTML = `
+        <div class="usage-stat-row">
+          <span class="usage-stat-label">${t('account.usedMonthlyQuota')}</span>
+          <span class="usage-stat-value">${t('account.usedSecondsOfLimit', data.usedSeconds, limits.monthlySeconds, pct)}</span>
+        </div>
+      `;
+    }
     section.appendChild(stats);
 
-    const track = document.createElement("div");
-    track.className = "usage-bar-track";
-    const fill = document.createElement("div");
-    fill.className = `usage-bar-fill ${pct >= 90 ? "critical" : pct >= 70 ? "warning" : ""}`;
-    fill.style.width = pct + "%";
-    track.appendChild(fill);
-    section.appendChild(track);
+    if (data.plan !== "admin") {
+      const pct = Math.min(100, Math.round((data.usedSeconds / limits.monthlySeconds) * 100));
+      const track = document.createElement("div");
+      track.className = "usage-bar-track";
+      const fill = document.createElement("div");
+      fill.className = `usage-bar-fill ${pct >= 90 ? "critical" : pct >= 70 ? "warning" : ""}`;
+      fill.style.width = pct + "%";
+      track.appendChild(fill);
+      section.appendChild(track);
+    }
 
     return section;
   }
@@ -1818,13 +1880,13 @@ class AccountDrawer {
 
     const title = document.createElement("p");
     title.className = "account-section-title";
-    title.textContent = "方案对比";
+    title.textContent = t('account.pricingTitle');
     section.appendChild(title);
 
     const grid = document.createElement("div");
     grid.className = "pricing-grid";
 
-    for (const [key, label] of [["free", "Free"], ["pro", "Pro"]]) {
+    for (const [key, label] of [["free", t('account.planFree')], ["pro", t('account.planPro')]]) {
       const card = document.createElement("div");
       card.className = `pricing-card ${data.plan === key ? "active" : ""}`;
 
@@ -1834,26 +1896,26 @@ class AccountDrawer {
       card.appendChild(name);
 
       const limits = PLAN_LIMITS[key];
-      for (const [lKey, lLabel] of [["monthlySeconds", "月额度"], ["maxAudioSeconds", "单次最长"], ["rateLimitPerMinute", "速率(次/分)"]]) {
+      for (const [lKey, lLabel] of [["monthlySeconds", t('account.monthlyQuota')], ["maxAudioSeconds", t('account.maxPerAudio')], ["rateLimitPerMinute", t('account.rateLimitPerMin')]]) {
         const item = document.createElement("p");
         item.className = "pricing-card-item";
-        item.textContent = `${lLabel}: ${limits[lKey]}秒`;
+        item.textContent = `${lLabel}: ${t('account.secondsUnit', limits[lKey])}`;
         card.appendChild(item);
       }
 
-      if (key === "pro" && data.plan !== "pro") {
+      if (key === "pro" && data.plan !== "pro" && data.plan !== "admin") {
         const btn = document.createElement("button");
         btn.className = "pricing-card-btn";
         btn.type = "button";
-        btn.textContent = "升级 Pro";
+        btn.textContent = t('account.upgradeToPro');
         btn.addEventListener("click", () => {
           void openBillingSession("billing-create-checkout-session", btn);
         });
         card.appendChild(btn);
-      } else if (key === "pro" && data.plan === "pro") {
+      } else if (key === "pro" && (data.plan === "pro" || data.plan === "admin")) {
         const badge = document.createElement("span");
         badge.className = "pricing-card-badge";
-        badge.textContent = "当前方案";
+        badge.textContent = t('account.currentPlanBadge');
         card.appendChild(badge);
       }
 
@@ -1869,16 +1931,16 @@ class AccountDrawer {
 
     const title = document.createElement("p");
     title.className = "account-section-title";
-    title.textContent = "用量明细";
+    title.textContent = t('account.usageTitle');
     section.appendChild(title);
 
     const successRate = data.totalCount > 0 ? Math.round((data.successCount / data.totalCount) * 100) : 0;
 
     const rows = [
-      ["总转写时长", `${data.usedSeconds.toLocaleString()} 秒`],
-      ["转写次数", `${data.successCount} 次`],
-      ["成功率", `${successRate}%`],
-      ["拒绝次数", `${data.rejectedCount} 次`],
+      [t('account.totalDuration'), t('account.secondsValue', data.usedSeconds)],
+      [t('account.totalTranscriptions'), t('account.timesValue', data.successCount)],
+      [t('account.successRate'), `${successRate}%`],
+      [t('account.rejectedCount'), t('account.timesValue', data.rejectedCount)],
     ];
 
     for (const [label, value] of rows) {
@@ -1896,32 +1958,39 @@ class AccountDrawer {
 
     const title = document.createElement("p");
     title.className = "account-section-title";
-    title.textContent = "订阅管理";
+    title.textContent = t('account.subscriptionTitle');
     section.appendChild(title);
 
     const sub = data.subscription;
     if (!sub) {
       const hint = document.createElement("p");
       hint.style.cssText = "margin:0;font-size:13px;color:var(--text-muted)";
-      hint.textContent = "暂无订阅";
+      hint.textContent = t('account.noSubscription');
       section.appendChild(hint);
       return section;
     }
 
-    const statusMap = { active: "有效", trialing: "试用中", past_due: "逾期", canceled: "已取消", unpaid: "未支付" };
+    const statusMap = {
+      active: t('account.statusActive'),
+      trialing: t('account.statusTrialing'),
+      past_due: t('account.statusPastDue'),
+      canceled: t('account.statusCanceled'),
+      unpaid: t('account.statusUnpaid'),
+    };
     const rows = [
-      ["状态", statusMap[sub.status] || sub.status],
+      [t('account.statusLabel'), statusMap[sub.status] || sub.status],
     ];
 
     if (sub.current_period_start && sub.current_period_end) {
-      const fmt = (d) => new Date(d).toLocaleDateString("zh-CN", { month: "numeric", day: "numeric" });
-      rows.push(["当前周期", `${fmt(sub.current_period_start)} - ${fmt(sub.current_period_end)}`]);
+      const fmt = (d) => new Date(d).toLocaleDateString(getIntlLocale(), { month: "numeric", day: "numeric" });
+      rows.push([t('account.currentPeriod'), t('account.periodRange', fmt(sub.current_period_start), fmt(sub.current_period_end))]);
     }
 
     if (sub.cancel_at_period_end) {
       const warn = document.createElement("p");
       warn.style.cssText = "margin:6px 0 0;font-size:13px;color:#d97706";
-      warn.textContent = `将于 ${new Date(sub.current_period_end).toLocaleDateString("zh-CN")} 到期`;
+      const expireDate = new Date(sub.current_period_end).toLocaleDateString(getIntlLocale());
+      warn.textContent = t('account.willExpireOn', expireDate);
       section.appendChild(warn);
     }
 
@@ -1935,7 +2004,7 @@ class AccountDrawer {
     const portalBtn = document.createElement("button");
     portalBtn.className = "account-action-btn";
     portalBtn.type = "button";
-    portalBtn.textContent = "管理订阅";
+    portalBtn.textContent = t('account.manageSubscription');
     portalBtn.addEventListener("click", () => {
       void openBillingSession("billing-create-portal-session", portalBtn);
     });
@@ -1949,7 +2018,7 @@ class AccountDrawer {
 
     const title = document.createElement("p");
     title.className = "account-section-title";
-    title.textContent = "个人资料";
+    title.textContent = t('account.profileTitle');
     section.appendChild(title);
 
     // 邮箱行（脱敏）
@@ -1959,13 +2028,13 @@ class AccountDrawer {
       : email;
     const emailRow = document.createElement("div");
     emailRow.className = "account-row";
-    emailRow.innerHTML = `<span class="account-row-label">邮箱</span><span class="account-row-value">${masked}</span>`;
+    emailRow.innerHTML = `<span class="account-row-label">${t('account.emailLabel')}</span><span class="account-row-value">${masked}</span>`;
     section.appendChild(emailRow);
 
     const emailEditBtn = document.createElement("button");
     emailEditBtn.className = "account-action-btn";
     emailEditBtn.type = "button";
-    emailEditBtn.textContent = "修改邮箱";
+    emailEditBtn.textContent = t('account.editEmail');
     section.appendChild(emailEditBtn);
 
     const providers = Array.isArray(data.user?.app_metadata?.providers)
@@ -1976,13 +2045,13 @@ class AccountDrawer {
     // 密码行
     const pwdRow = document.createElement("div");
     pwdRow.className = "account-row";
-    pwdRow.innerHTML = `<span class="account-row-label">桌面登录密码</span><span class="account-row-value">${usesGithubWithoutEmailPassword ? "未设置" : "已设置"}</span>`;
+    pwdRow.innerHTML = `<span class="account-row-label">${t('account.desktopPassword')}</span><span class="account-row-value">${usesGithubWithoutEmailPassword ? t('account.passwordUnset') : t('account.passwordSet')}</span>`;
     section.appendChild(pwdRow);
 
     const pwdEditBtn = document.createElement("button");
     pwdEditBtn.className = "account-action-btn";
     pwdEditBtn.type = "button";
-    pwdEditBtn.textContent = usesGithubWithoutEmailPassword ? "设置桌面登录密码" : "修改密码";
+    pwdEditBtn.textContent = usesGithubWithoutEmailPassword ? t('account.setPassword') : t('account.changePassword');
     section.appendChild(pwdEditBtn);
 
     // 邮箱编辑交互
@@ -1993,17 +2062,17 @@ class AccountDrawer {
       const input = document.createElement("input");
       input.className = "profile-edit-input";
       input.type = "email";
-      input.placeholder = "新邮箱";
+      input.placeholder = t('account.newEmailPlaceholder');
       const actions = document.createElement("div");
       actions.className = "profile-edit-actions";
       const cancel = document.createElement("button");
       cancel.className = "account-action-btn";
       cancel.type = "button";
-      cancel.textContent = "取消";
+      cancel.textContent = t('common.cancel');
       const confirm = document.createElement("button");
       confirm.className = "account-action-btn primary";
       confirm.type = "button";
-      confirm.textContent = "确认";
+      confirm.textContent = t('common.confirm');
       cancel.addEventListener("click", () => {
         group.remove();
         emailEditBtn.classList.remove("hidden");
@@ -2015,11 +2084,11 @@ class AccountDrawer {
         try {
           const { error } = await window.VoiceBridgeAuth?.supabase.auth.updateUser({ email: newEmail });
           if (error) throw error;
-          showToast("验证邮件已发送到新邮箱");
+          showToast(t('account.emailUpdateSent'));
           group.remove();
           emailEditBtn.classList.remove("hidden");
         } catch (err) {
-          showToast(err.message || "修改失败", true);
+          showToast(err.message || t('account.modifyFailed'), true);
         } finally {
           confirm.disabled = false;
         }
@@ -2040,23 +2109,23 @@ class AccountDrawer {
       const newInput = document.createElement("input");
       newInput.className = "profile-edit-input";
       newInput.type = "password";
-      newInput.placeholder = "新密码（至少6位）";
+      newInput.placeholder = t('account.newPasswordPlaceholder');
       newInput.autocomplete = "new-password";
       const confirmInput = document.createElement("input");
       confirmInput.className = "profile-edit-input";
       confirmInput.type = "password";
-      confirmInput.placeholder = "再次输入新密码";
+      confirmInput.placeholder = t('account.confirmPasswordPlaceholder');
       confirmInput.autocomplete = "new-password";
       const actions = document.createElement("div");
       actions.className = "profile-edit-actions";
       const cancel = document.createElement("button");
       cancel.className = "account-action-btn";
       cancel.type = "button";
-      cancel.textContent = "取消";
+      cancel.textContent = t('common.cancel');
       const confirm = document.createElement("button");
       confirm.className = "account-action-btn primary";
       confirm.type = "button";
-      confirm.textContent = "确认";
+      confirm.textContent = t('common.confirm');
       cancel.addEventListener("click", () => {
         group.remove();
         pwdEditBtn.classList.remove("hidden");
@@ -2064,24 +2133,24 @@ class AccountDrawer {
       confirm.addEventListener("click", async () => {
         const newPwd = newInput.value;
         if (!newPwd || newPwd.length < 6) {
-          showToast("新密码至少需要6位", true);
+          showToast(t('account.passwordTooShort'), true);
           return;
         }
         if (newPwd !== confirmInput.value) {
-          showToast("两次输入的密码不一致", true);
+          showToast(t('account.passwordMismatch'), true);
           return;
         }
         confirm.disabled = true;
         try {
           const { error } = await window.VoiceBridgeAuth?.supabase.auth.updateUser({ password: newPwd });
           if (error) throw error;
-          showToast("桌面登录密码已设置，可在电脑端使用");
-          pwdRow.querySelector(".account-row-value").textContent = "已设置";
-          pwdEditBtn.textContent = "修改密码";
+          showToast(t('account.passwordSetSuccess'));
+          pwdRow.querySelector(".account-row-value").textContent = t('account.passwordSet');
+          pwdEditBtn.textContent = t('account.changePassword');
           group.remove();
           pwdEditBtn.classList.remove("hidden");
         } catch (err) {
-          showToast(err.message || "修改失败", true);
+          showToast(err.message || t('account.modifyFailed'), true);
         } finally {
           confirm.disabled = false;
         }
@@ -2099,7 +2168,7 @@ class AccountDrawer {
     const logoutBtn = document.createElement("button");
     logoutBtn.className = "account-action-btn danger";
     logoutBtn.type = "button";
-    logoutBtn.textContent = "退出登录";
+    logoutBtn.textContent = t('account.logout');
     logoutBtn.addEventListener("click", async () => {
       this.close();
       await window.VoiceBridgeAuth?.signOut();
@@ -2114,13 +2183,13 @@ class AccountDrawer {
 
     const title = document.createElement("p");
     title.className = "account-section-title";
-    title.textContent = "已连接设备";
+    title.textContent = t('account.devicesTitle');
     section.appendChild(title);
 
     if (!data.devices.length) {
       const hint = document.createElement("p");
       hint.style.cssText = "margin:0;font-size:13px;color:var(--text-muted)";
-      hint.textContent = "暂无已注册设备";
+      hint.textContent = t('account.noDevices');
       section.appendChild(hint);
       return section;
     }
@@ -2141,22 +2210,22 @@ class AccountDrawer {
       info.className = "device-info";
       const name = document.createElement("p");
       name.className = "device-name";
-      name.textContent = device.device_name || device.platform || "未知设备";
+      name.textContent = device.device_name || device.platform || t('account.unknownDevice');
       info.appendChild(name);
       const seen = document.createElement("p");
       seen.className = "device-last-seen";
-      seen.textContent = lastSeen ? formatRelativeTime(now - lastSeen.getTime()) : "未知";
+      seen.textContent = lastSeen ? formatRelativeTime(now - lastSeen.getTime()) : t('account.unknown');
       info.appendChild(seen);
       item.appendChild(info);
 
       const removeBtn = document.createElement("button");
       removeBtn.className = "device-remove-btn";
       removeBtn.type = "button";
-      removeBtn.textContent = "移除";
+      removeBtn.textContent = t('common.remove');
       removeBtn.addEventListener("click", async () => {
-        if (removeBtn.textContent === "移除") {
-          removeBtn.textContent = "确认？";
-          setTimeout(() => { removeBtn.textContent = "移除"; }, 3000);
+        if (removeBtn.textContent === t('common.remove')) {
+          removeBtn.textContent = t('common.confirmQuestion');
+          setTimeout(() => { removeBtn.textContent = t('common.remove'); }, 3000);
           return;
         }
         removeBtn.disabled = true;
@@ -2166,10 +2235,10 @@ class AccountDrawer {
           if (error) throw error;
           item.remove();
           if (!section.querySelector(".device-item")) {
-            section.innerHTML = "<p style='margin:0;font-size:13px;color:var(--text-muted)'>暂无已注册设备</p>";
+            section.innerHTML = `<p style='margin:0;font-size:13px;color:var(--text-muted)'>${t('account.noDevices')}</p>`;
           }
         } catch (err) {
-          showToast(err.message || "移除失败", true);
+          showToast(err.message || t('account.removeFailed'), true);
           removeBtn.disabled = false;
         }
       });

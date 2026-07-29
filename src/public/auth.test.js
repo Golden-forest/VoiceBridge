@@ -21,7 +21,7 @@ test("cloud auth exposes account logout and app starts from an existing session"
 
 test("cloud auth supports GitHub registration and login", () => {
   assert.match(indexHtml, /id="authGithubBtn"/);
-  assert.match(indexHtml, /使用 GitHub 注册或登录/);
+  assert.match(indexHtml, /data-i18n="auth\.githubButton"/);
   assert.match(authJs, /signInWithOAuth\(\{/);
   assert.match(authJs, /provider:\s*"github"/);
   assert.match(authJs, /options:\s*\{\s*redirectTo\s*\}/);
@@ -29,7 +29,7 @@ test("cloud auth supports GitHub registration and login", () => {
 
 test("GitHub users can set a desktop password from account settings", () => {
   assert.match(appJs, /usesGithubWithoutEmailPassword/);
-  assert.match(appJs, /设置桌面登录密码/);
+  assert.match(appJs, /account\.setPassword/);
   assert.match(appJs, /auth\.updateUser\(\{ password: newPwd \}\)/);
 });
 

@@ -1,7 +1,10 @@
+import { t } from "./i18n/i18n.js";
+
 const config = window.__VB_CONFIG || {};
 const params = new URLSearchParams(window.location.search);
 const pairingToken = params.get("pairing_token") || "";
-const deviceName = params.get("device") || "VoiceBridge 电脑";
+const urlDeviceName = params.get("device") || "";
+const deviceName = urlDeviceName || t('pairing.defaultDeviceName');
 const overlay = document.querySelector("#pairingOverlay");
 const deviceNameEl = document.querySelector("#pairingDeviceName");
 const confirmBtn = document.querySelector("#pairingConfirmBtn");
@@ -38,11 +41,11 @@ confirmBtn?.addEventListener("click", async () => {
   if (!supabase || !pairingToken || !config.supabaseUrl || !config.supabaseAnonKey) return;
   confirmBtn.disabled = true;
   cancelBtn.disabled = true;
-  setMessage("正在安全绑定…");
+  setMessage(t('pairing.binding'));
   try {
     const { data } = await supabase.auth.getSession();
     const accessToken = data.session?.access_token;
-    if (!accessToken) throw new Error("登录状态已失效，请重新登录。");
+    if (!accessToken) throw new Error(t('pairing.sessionExpired'));
     const response = await fetch(`${config.supabaseUrl}/functions/v1/device-pairing`, {
       method: "POST",
       headers: {
@@ -54,14 +57,14 @@ confirmBtn?.addEventListener("click", async () => {
     });
     const payload = await response.json().catch(() => null);
     if (!response.ok || !payload?.ok) {
-      throw new Error(payload?.message || "绑定失败，请刷新电脑二维码后重试。");
+      throw new Error(payload?.message || t('pairing.bindFailedRefresh'));
     }
-    setMessage(`已绑定 ${payload.device?.name || deviceName}，电脑将自动上线。`);
+    setMessage(t('pairing.bound', payload.device?.name || deviceName));
     clearPairingQuery();
-    confirmBtn.textContent = "绑定成功";
+    confirmBtn.textContent = t('pairing.success');
     setTimeout(() => overlay?.classList.add("hidden"), 1600);
   } catch (error) {
-    setMessage(error instanceof Error ? error.message : "绑定失败，请稍后重试。", true);
+    setMessage(error instanceof Error ? error.message : t('pairing.failed'), true);
     confirmBtn.disabled = false;
     cancelBtn.disabled = false;
   }

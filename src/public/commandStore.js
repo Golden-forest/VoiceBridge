@@ -6,6 +6,8 @@
 // (same pattern as cloudTranscribe.js / cloudRealtime.js).
 // RLS guarantees user_id = auth.uid() — no user identity is hardcoded here.
 
+import { t } from "./i18n/i18n.js";
+
 // Fields the client is allowed to send to update();
 // matches ALLOWED_UPDATE_FIELDS in the previous Edge Function version.
 const ALLOWED_UPDATE_FIELDS = ["text", "label", "category", "lastUsedAt"];
@@ -21,7 +23,7 @@ class NotFoundError extends Error {
 function getSupabaseClient() {
   const supabase = globalThis.window?.VoiceBridgeAuth?.supabase;
   if (!supabase) {
-    throw new Error("请先登录后再使用指令库。");
+    throw new Error(t('commandStore.loginRequired'));
   }
   return supabase;
 }
@@ -90,8 +92,8 @@ export const commandStore = {
         .limit(1)
         .maybeSingle()
     ]);
-    if (usersResult.error) throw wrapError(usersResult.error, "获取个人指令失败。");
-    if (presetsResult.error) throw wrapError(presetsResult.error, "获取预置指令失败。");
+    if (usersResult.error) throw wrapError(usersResult.error, t('commandStore.fetchPersonalFailed'));
+    if (presetsResult.error) throw wrapError(presetsResult.error, t('commandStore.fetchPresetFailed'));
     const plan = resolvePlan(subscriptionResult.data);
     return [
       ...(usersResult.data || []).map((row) => fromDb(row, { source: "user", plan })),
@@ -102,7 +104,7 @@ export const commandStore = {
   // POST insert -> created Command
   async create({ text, label, category }) {
     if (!text || !label || !category) {
-      throw new Error("缺少 text, label 或 category 字段");
+      throw new Error(t('commandStore.missingFields'));
     }
     const supabase = getSupabaseClient();
     const { data, error } = await supabase
@@ -114,14 +116,14 @@ export const commandStore = {
       })
       .select("*")
       .single();
-    if (error) throw wrapError(error, "保存指令失败。");
+    if (error) throw wrapError(error, t('commandStore.saveFailed'));
     return fromDb(data, { source: "user", plan: "free" });
   },
 
   // PATCH update -> updated Command
   async update(id, updates) {
     if (!id) {
-      throw new Error("缺少指令 id");
+      throw new Error(t('commandStore.missingId'));
     }
     const filtered = {};
     if (updates && typeof updates === "object") {
@@ -147,7 +149,7 @@ export const commandStore = {
     }
 
     if (Object.keys(dbUpdates).length === 0) {
-      throw new Error("没有可更新的字段。");
+      throw new Error(t('commandStore.nothingToUpdate'));
     }
 
     const supabase = getSupabaseClient();
@@ -157,23 +159,23 @@ export const commandStore = {
       .eq("id", id)
       .select("*")
       .maybeSingle();
-    if (error) throw wrapError(error, "更新指令失败。");
-    if (!data) throw new NotFoundError("指令不存在。");
+    if (error) throw wrapError(error, t('commandStore.updateFailed'));
+    if (!data) throw new NotFoundError(t('commandStore.notExist'));
     return fromDb(data, { source: "user", plan: "free" });
   },
 
   // DELETE -> { ok: true }
   async remove(id) {
     if (!id) {
-      throw new Error("缺少指令 id");
+      throw new Error(t('commandStore.missingId'));
     }
     const supabase = getSupabaseClient();
     const { error, count } = await supabase
       .from("user_commands")
       .delete({ count: "exact" })
       .eq("id", id);
-    if (error) throw wrapError(error, "删除指令失败。");
-    if (!count || count === 0) throw new NotFoundError("指令不存在。");
+    if (error) throw wrapError(error, t('commandStore.deleteFailed'));
+    if (!count || count === 0) throw new NotFoundError(t('commandStore.notExist'));
     return { ok: true };
   }
 };

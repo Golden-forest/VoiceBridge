@@ -1,4 +1,5 @@
 import { createClient } from "@supabase/supabase-js";
+import { t } from "./i18n/i18n.js";
 
 const config = window.__VB_CONFIG || {};
 const overlay = document.querySelector("#authOverlay");
@@ -33,12 +34,12 @@ function setMessage(message, isError = false) {
 
 function setMode(nextMode) {
   mode = nextMode;
-  if (submitBtn) submitBtn.textContent = mode === "sign-in" ? "登录" : "注册账号";
-  if (switchBtn) switchBtn.textContent = mode === "sign-in" ? "没有账号？创建账号" : "已有账号？返回登录";
+  if (submitBtn) submitBtn.textContent = mode === "sign-in" ? t('auth.submitLogin') : t('auth.submitSignup');
+  if (switchBtn) switchBtn.textContent = mode === "sign-in" ? t('auth.switchToSignup') : t('auth.switchToLogin');
   if (modeLabel) {
     modeLabel.textContent = mode === "sign-in"
-      ? "登录后，手机录音会自动出现在电脑光标处"
-      : "创建免费账号，在任意网络连接手机和电脑";
+      ? t('auth.subtitleLogin')
+      : t('auth.subtitleSignup');
   }
   if (passwordInput) passwordInput.autocomplete = mode === "sign-in" ? "current-password" : "new-password";
   form?.classList.toggle("is-sign-up", mode === "sign-up");
@@ -57,7 +58,7 @@ if (!isCloudMode) {
   emitAuthReady(null);
 } else if (!supabase) {
   overlay?.classList.remove("hidden");
-  setMessage("缺少 Supabase 配置，请检查 /config.js。", true);
+  setMessage(t('auth.missingConfig'), true);
   emitAuthReady(null);
 } else {
   const { data } = await supabase.auth.getSession();
@@ -67,7 +68,7 @@ if (!isCloudMode) {
   supabase.auth.onAuthStateChange((event, session) => {
     overlay?.classList.toggle("hidden", Boolean(session));
     if (!session && event !== "SIGNED_OUT") {
-      setMessage("会话已过期，请重新登录");
+      setMessage(t('status.sessionExpired'));
     }
     emitAuthReady(session);
   });
@@ -93,7 +94,7 @@ githubBtn?.addEventListener("click", async () => {
       githubBtn.disabled = false;
     }
   } catch (error) {
-    setMessage(error instanceof Error ? error.message : "GitHub 登录失败，请稍后再试。", true);
+    setMessage(error instanceof Error ? error.message : t('auth.githubFailed'), true);
     githubBtn.disabled = false;
   }
 });
@@ -114,11 +115,11 @@ form?.addEventListener("submit", async (event) => {
       return;
     }
     if (mode === "sign-up" && !result.data.session) {
-      setMessage("注册成功，请检查邮箱完成验证。");
+      setMessage(t('auth.signupSuccess'));
       resendBtn?.classList.remove("hidden");
     }
   } catch (error) {
-    setMessage(error instanceof Error ? error.message : "认证请求失败，请稍后再试。", true);
+    setMessage(error instanceof Error ? error.message : t('auth.authRequestFailed'), true);
   } finally {
     submitBtn.disabled = false;
   }
@@ -137,7 +138,7 @@ forgotBtn?.addEventListener("click", () => {
   form?.classList.add("hidden");
   resetForm?.classList.remove("hidden");
   if (resetEmailInput && emailInput) resetEmailInput.value = emailInput.value;
-  if (modeLabel) modeLabel.textContent = "找回你的 VoiceBridge 账号";
+  if (modeLabel) modeLabel.textContent = t('auth.backToReset');
 });
 
 resetBackBtn?.addEventListener("click", () => {
@@ -157,16 +158,16 @@ resetBtn?.addEventListener("click", async () => {
       setMessage(error.message, true);
       return;
     }
-    if (resetInfo) resetInfo.textContent = "重置链接已发送到您的邮箱。";
-    resetBtn.textContent = "已发送";
+    if (resetInfo) resetInfo.textContent = t('auth.resetSent');
+    resetBtn.textContent = t('auth.resetSentShort');
     resetBtn.disabled = true;
     setTimeout(() => {
-      resetBtn.textContent = "发送重置链接";
+      resetBtn.textContent = t('auth.sendResetLink');
       resetBtn.disabled = false;
     }, 5000);
   } catch (error) {
     resetBtn.disabled = false;
-    setMessage(error instanceof Error ? error.message : "发送失败，请稍后重试。", true);
+    setMessage(error instanceof Error ? error.message : t('auth.resetSendFailed'), true);
   }
 });
 
@@ -182,10 +183,10 @@ resendBtn?.addEventListener("click", async () => {
       setMessage(error.message, true);
       return;
     }
-    resendBtn.textContent = "已发送";
-    setTimeout(() => { resendBtn.textContent = "重新发送验证邮件"; }, 3000);
+    resendBtn.textContent = t('auth.resetSentShort');
+    setTimeout(() => { resendBtn.textContent = t('auth.resendVerification'); }, 3000);
   } catch (error) {
-    setMessage(error instanceof Error ? error.message : "发送失败，请稍后重试。", true);
+    setMessage(error instanceof Error ? error.message : t('auth.resetSendFailed'), true);
   } finally {
     resendBtn.disabled = false;
   }
