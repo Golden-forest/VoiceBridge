@@ -2,6 +2,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 import { corsHeaders, jsonResponse } from "../_shared/cors.ts";
 import { ERROR_CODE_QUOTA_EXCEEDED, USAGE_PROVIDER_TENCENT_CLOUD } from "../_shared/contracts.ts";
+import type { PlanName } from "../_shared/plan_limits.ts";
 import { transcribeTencentWav } from "../_shared/tencent_asr.ts";
 import { parsePcmWavDurationMs } from "../_shared/wav.ts";
 
@@ -9,7 +10,7 @@ const PROVIDER = USAGE_PROVIDER_TENCENT_CLOUD;
 const MAX_AUDIO_BYTES = 3 * 1024 * 1024;
 type SupabaseClientLike = ReturnType<typeof createClient<any, "public", any>>;
 const PLAN_CACHE_TTL_MS = 60_000;
-const planCache = new Map<string, { plan: "free" | "pro"; expiresAt: number }>();
+const planCache = new Map<string, { plan: PlanName; expiresAt: number }>();
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
@@ -183,7 +184,7 @@ async function reserveAndGetPlan(
     requestId: string;
     durationMs: number;
     audioSizeBytes: number;
-    cachedPlan: "free" | "pro" | null;
+    cachedPlan: PlanName | null;
   }
 ) {
   const { data, error } = await serviceClient.rpc("reserve_and_get_plan", {
@@ -199,7 +200,9 @@ async function reserveAndGetPlan(
     console.error("Failed to reserve usage:", error);
     throw new Error("Usage reservation failed");
   }
-  const plan: "free" | "pro" = data?.plan === "pro" ? "pro" : "free";
+  const plan: PlanName =
+    data?.plan === "admin" ? "admin" :
+    data?.plan === "pro" ? "pro" : "free";
   return {
     plan,
     maxAudioSeconds: Number(data?.max_audio_seconds) || 60,
@@ -207,7 +210,7 @@ async function reserveAndGetPlan(
   };
 }
 
-function getCachedPlan(userId: string): "free" | "pro" | null {
+function getCachedPlan(userId: string): PlanName | null {
   const cached = planCache.get(userId);
   if (!cached) return null;
   if (cached.expiresAt <= Date.now()) {
