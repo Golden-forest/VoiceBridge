@@ -1,0 +1,273 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>隐私政策 / Privacy Policy - VoiceBridge</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+      line-height: 1.7;
+      color: #1a1a1a;
+      background: #f5f5f7;
+      padding: 20px;
+    }
+    .container {
+      max-width: 720px;
+      margin: 0 auto;
+      background: #fff;
+      border-radius: 12px;
+      padding: 40px;
+    }
+    h1 { font-size: 28px; margin-bottom: 8px; }
+    .updated { color: #888; font-size: 14px; margin-bottom: 24px; }
+    h2 { font-size: 20px; margin-top: 28px; margin-bottom: 10px; }
+    h3 { font-size: 16px; margin-top: 18px; margin-bottom: 8px; }
+    p, li { margin-bottom: 6px; color: #333; }
+    ul { padding-left: 24px; margin-bottom: 10px; }
+    a { color: #0066cc; }
+    .footer {
+      margin-top: 36px;
+      padding-top: 16px;
+      border-top: 1px solid #e5e5e7;
+      font-size: 14px;
+      color: #888;
+    }
+    .lang-switch {
+      position: absolute;
+      top: 20px;
+      right: 30px;
+      font-size: 13px;
+    }
+    .lang-switch a {
+      color: #0066cc;
+      text-decoration: none;
+      margin-left: 8px;
+    }
+    .lang-switch a.active { font-weight: 600; color: #333; }
+    /* Language toggle */
+    .en { display: none; }
+    html[lang="en"] .zh { display: none; }
+    html[lang="en"] .en { display: block; }
+    @media (max-width: 600px) {
+      .container { padding: 24px 20px; }
+      h1 { font-size: 24px; }
+      .lang-switch { right: 20px; }
+    }
+  </style>
+</head>
+<body>
+  <div class="lang-switch">
+    <a href="?lang=zh" id="link-zh">中文</a>
+    <a href="?lang=en" id="link-en">English</a>
+  </div>
+  <div class="container">
+
+    <!-- ===== 中文版 ===== -->
+    <div class="zh">
+      <h1>隐私政策</h1>
+      <p class="updated">最后更新日期：2026 年 7 月 31 日</p>
+
+      <p>VoiceBridge（以下简称"本服务"）是一款跨设备语音输入工具，允许用户通过手机录音并将识别后的文字发送至电脑。本政策说明我们收集、使用和保护您数据的方式。</p>
+
+      <h2>1. 我们收集的数据</h2>
+
+      <h3>1.1 账户信息</h3>
+      <ul>
+        <li><strong>电子邮箱地址</strong>：用于注册和登录。</li>
+        <li><strong>密码</strong>：经过 Supabase Auth 加密存储，我们无法看到明文。</li>
+      </ul>
+      <p>我们不收集昵称、头像、手机号或其他个人资料信息。</p>
+
+      <h3>1.2 设备信息</h3>
+      <ul>
+        <li>设备名称、类型（手机/电脑）、操作系统平台、应用版本号、最后活跃时间。</li>
+        <li>用于设备配对和管理。</li>
+      </ul>
+
+      <h3>1.3 语音录音</h3>
+      <ul>
+        <li>手机端录制后，通过加密通道上传至云端语音识别服务（腾讯云 ASR）进行文字转换。</li>
+        <li><strong>录音文件在识别完成后立即丢弃，不做持久化保存。</strong></li>
+      </ul>
+
+      <h3>1.4 识别文本</h3>
+      <ul>
+        <li>语音识别产生的文字仅通过实时通道传输至您的电脑端。</li>
+        <li><strong>识别文本不做持久化存储，传输完成后即从服务端删除。</strong></li>
+      </ul>
+
+      <h3>1.5 用量记录</h3>
+      <ul>
+        <li>每次语音识别请求的元数据：时长（秒）、文件大小（字节）、成功/失败状态、错误码、估算成本。</li>
+        <li>用于配额管理和防止滥用。</li>
+        <li><strong>保留期限：</strong>长期保留，直至您主动删除账户。</li>
+      </ul>
+
+      <h3>1.6 订阅信息</h3>
+      <ul>
+        <li>客户 ID、订阅状态、套餐周期。由支付服务商通过加密 Webhook 同步，我们不接触您的信用卡信息。</li>
+      </ul>
+
+      <h2>2. 数据如何被使用</h2>
+      <ul>
+        <li>提供语音识别和跨设备文本传输功能。</li>
+        <li>计算和管理您的月度使用配额。</li>
+        <li>处理订阅和付款。</li>
+        <li>排除故障和防止滥用。</li>
+      </ul>
+      <p>我们不会将您的数据用于广告、营销或出售给第三方。</p>
+
+      <h2>3. 第三方服务</h2>
+      <p>本服务依赖以下第三方基础设施：</p>
+      <ul>
+        <li><strong>Supabase</strong>（认证、数据库、实时通讯）— <a href="https://supabase.com/privacy" target="_blank">隐私政策</a></li>
+        <li><strong>腾讯云</strong>（语音识别 ASR）— <a href="https://cloud.tencent.com/document/product/301" target="_blank">隐私政策</a></li>
+        <li><strong>Cloudflare</strong>（静态网站托管）— <a href="https://www.cloudflare.com/privacypolicy/" target="_blank">隐私政策</a></li>
+      </ul>
+
+      <h2>4. 数据安全</h2>
+      <ul>
+        <li>所有传输使用 HTTPS / TLS 加密。</li>
+        <li>实时通讯频道为私有频道，仅限已认证的本人设备访问。</li>
+        <li>密码、支付密钥、语音识别密钥等服务端凭证不暴露在客户端。</li>
+      </ul>
+
+      <h2>5. 您的权利</h2>
+      <ul>
+        <li><strong>访问</strong>：您可以随时登录账户查看自己的用量数据。</li>
+        <li><strong>删除</strong>：您可以删除账户，所有关联数据将级联删除。</li>
+        <li><strong>导出</strong>可联系邮箱申请。</li>
+        <li><strong>退订</strong>：可在账户设置中随时取消订阅。</li>
+      </ul>
+
+      <h2>6. 数据存储位置</h2>
+      <p>数据存储在 Supabase 云数据库。语音识别由腾讯云位于中国大陆的服务器处理。静态网页托管在 Cloudflare 全球 CDN。</p>
+
+      <h2>7. Cookie</h2>
+      <p>本服务不使用跟踪类 Cookie。Supabase Auth 可能使用必要的会话 Cookie 维持登录状态。</p>
+
+      <h2>8. 未成年人</h2>
+      <p>本服务不面向 13 岁以下未成年人。</p>
+
+      <h2>9. 政策变更</h2>
+      <p>本政策如有更新，将在本页面公布并更新顶部日期。</p>
+
+      <h2>10. 联系我们</h2>
+      <p>邮箱：<a href="mailto:huanglin37@mail3.sysu.edu.cn">huanglin37@mail3.sysu.edu.cn</a></p>
+    </div>
+
+    <!-- ===== English version ===== -->
+    <div class="en">
+      <h1>Privacy Policy</h1>
+      <p class="updated">Last updated: July 31, 2026</p>
+
+      <p>VoiceBridge ("the Service") is a cross-device voice input tool that lets users record audio on their phone and send the recognized text to a paired computer. This policy explains how we collect, use, and protect your data.</p>
+
+      <h2>1. Data We Collect</h2>
+
+      <h3>1.1 Account Information</h3>
+      <ul>
+        <li><strong>Email address</strong>: used for registration and login.</li>
+        <li><strong>Password</strong>: encrypted by Supabase Auth; we cannot see the plaintext.</li>
+      </ul>
+      <p>We do not collect nicknames, avatars, phone numbers, or other profile information.</p>
+
+      <h3>1.2 Device Information</h3>
+      <ul>
+        <li>Device name, type (phone/computer), OS platform, app version, last active time.</li>
+        <li>Used for device pairing and management.</li>
+      </ul>
+
+      <h3>1.3 Voice Recordings</h3>
+      <ul>
+        <li>After recording on the phone, audio is uploaded via an encrypted channel to a cloud speech recognition service (Tencent Cloud ASR).</li>
+        <li><strong>Audio files are discarded immediately after recognition and are never persisted.</strong></li>
+      </ul>
+
+      <h3>1.4 Recognized Text</h3>
+      <ul>
+        <li>Text produced by speech recognition is transmitted only via a realtime channel to your computer.</li>
+        <li><strong>Recognized text is not persisted; it is deleted from the server after delivery.</strong></li>
+      </ul>
+
+      <h3>1.5 Usage Records</h3>
+      <ul>
+        <li>Metadata for each recognition request: duration (seconds), file size (bytes), success/failure status, error code, estimated cost.</li>
+        <li>Used for quota management and abuse prevention.</li>
+        <li><strong>Retention:</strong> kept long-term until you delete your account.</li>
+      </ul>
+
+      <h3>1.6 Subscription Information</h3>
+      <ul>
+        <li>Customer ID, subscription status, billing period. Synced via encrypted webhook from the payment provider; we never touch your credit card details.</li>
+      </ul>
+
+      <h2>2. How Data Is Used</h2>
+      <ul>
+        <li>To provide speech recognition and cross-device text delivery.</li>
+        <li>To calculate and enforce monthly usage quotas.</li>
+        <li>To process subscriptions and payments.</li>
+        <li>Troubleshooting and abuse prevention.</li>
+      </ul>
+      <p>We will never use your data for advertising, marketing, or sell it to third parties.</p>
+
+      <h2>3. Third-Party Services</h2>
+      <p>The Service relies on the following third-party infrastructure:</p>
+      <ul>
+        <li><strong>Supabase</strong> (auth, database, realtime) — <a href="https://supabase.com/privacy" target="_blank">Privacy Policy</a></li>
+        <li><strong>Tencent Cloud</strong> (speech recognition / ASR) — <a href="https://cloud.tencent.com/document/product/301" target="_blank">Privacy Policy</a></li>
+        <li><strong>Cloudflare</strong> (static hosting) — <a href="https://www.cloudflare.com/privacypolicy/" target="_blank">Privacy Policy</a></li>
+      </ul>
+
+      <h2>4. Data Security</h2>
+      <ul>
+        <li>All transit uses HTTPS / TLS encryption.</li>
+        <li>Realtime channels are private and accessible only to your authenticated devices (Supabase RLS).</li>
+        <li>Server-side secrets (passwords, payment keys, ASR keys) are never exposed to the client.</li>
+      </ul>
+
+      <h2>5. Your Rights</h2>
+      <ul>
+        <li><strong>Access</strong>: log in anytime to view your usage data.</li>
+        <li><strong>Deletion</strong>: delete your account and all associated data is cascade-deleted.</li>
+        <li><strong>Export</strong>: contact us via email to request a data export.</li>
+        <li><strong>Cancel</strong>: manage or cancel your subscription anytime in account settings.</li>
+      </ul>
+
+      <h2>6. Data Storage Location</h2>
+      <p>Data is stored in the Supabase cloud database. Speech recognition is processed by Tencent Cloud servers in mainland China. Static pages are hosted on the Cloudflare global CDN.</p>
+
+      <h2>7. Cookies</h2>
+      <p>We do not use tracking cookies. Supabase Auth may use essential session cookies to maintain login state.</p>
+
+      <h2>8. Minors</h2>
+      <p>The Service is not intended for children under 13.</p>
+
+      <h2>9. Policy Changes</h2>
+      <p>Updates will be posted on this page with a revised date at the top.</p>
+
+      <h2>10. Contact</h2>
+      <p>Email: <a href="mailto:huanglin37@mail3.sysu.edu.cn">huanglin37@mail3.sysu.edu.cn</a></p>
+    </div>
+
+    <div class="footer">
+      <p>VoiceBridge © 2026. All rights reserved.</p>
+    </div>
+  </div>
+
+  <script>
+    (function(){
+      var params = new URLSearchParams(location.search);
+      var lang = params.get('lang');
+      if (!lang) {
+        lang = (navigator.language || 'zh').startsWith('zh') ? 'zh' : 'en';
+      }
+      document.documentElement.lang = lang === 'en' ? 'en' : 'zh-CN';
+      document.getElementById('link-zh').className = lang === 'zh' ? 'active' : '';
+      document.getElementById('link-en').className = lang === 'en' ? 'active' : '';
+    })();
+  </script>
+</body>
+</html>

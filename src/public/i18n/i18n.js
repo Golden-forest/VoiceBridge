@@ -114,6 +114,21 @@ export function applyTranslations(root = document) {
   }
   // 同步 <html lang>，影响屏幕阅读器、字体回退、CSS :lang()
   document.documentElement.lang = LOCALES[currentLocale]?.bcp47 || DEFAULT_LOCALE;
+
+  // 同步 footer 法律链接，附加 ?lang= 参数（与当前语言保持一致）
+  const langParam = currentLocale === 'en' ? 'en' : 'zh';
+  const footer = document.getElementById('legalFooter');
+  if (footer) {
+    for (const a of footer.querySelectorAll('a[href]')) {
+      try {
+        const url = new URL(a.href);
+        if (url.pathname.endsWith('.html')) {
+          url.searchParams.set('lang', langParam);
+          a.href = url.pathname + '?' + url.searchParams.toString();
+        }
+      } catch { /* ignore */ }
+    }
+  }
 }
 
 // === 启动时立即应用一次 ===

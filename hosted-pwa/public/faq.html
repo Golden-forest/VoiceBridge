@@ -1,0 +1,276 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>常见问题 / FAQ - VoiceBridge</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; line-height: 1.7; color: #1a1a1a; background: #f5f5f7; padding: 20px; }
+    .container { max-width: 720px; margin: 0 auto; background: #fff; border-radius: 12px; padding: 40px; }
+    h1 { font-size: 28px; margin-bottom: 8px; }
+    .updated { color: #888; font-size: 14px; margin-bottom: 24px; }
+    .faq-item { margin-top: 20px; padding-top: 20px; border-top: 1px solid #e5e5e7; }
+    .faq-item:first-of-type { margin-top: 0; padding-top: 0; border-top: none; }
+    .faq-item h2 { font-size: 17px; margin-bottom: 8px; color: #1a1a1a; }
+    .faq-item p, .faq-item li { color: #333; margin-bottom: 6px; }
+    .faq-item ol, .faq-item ul { padding-left: 24px; margin-bottom: 8px; }
+    .faq-item .answer-note { background: #f0f5ff; border-left: 3px solid #0066cc; padding: 8px 12px; border-radius: 4px; font-size: 14px; color: #555; margin-top: 8px; }
+    .footer { margin-top: 36px; padding-top: 16px; border-top: 1px solid #e5e5e7; font-size: 14px; color: #888; }
+    a { color: #0066cc; }
+    .lang-switch { position: absolute; top: 20px; right: 30px; font-size: 13px; }
+    .lang-switch a { color: #0066cc; text-decoration: none; margin-left: 8px; }
+    .lang-switch a.active { font-weight: 600; color: #333; }
+    .en { display: none; }
+    html[lang="en"] .zh { display: none; }
+    html[lang="en"] .en { display: block; }
+    @media (max-width: 600px) { .container { padding: 24px 20px; } h1 { font-size: 24px; } .lang-switch { right: 20px; } }
+  </style>
+</head>
+<body>
+  <div class="lang-switch">
+    <a href="?lang=zh" id="link-zh">中文</a>
+    <a href="?lang=en" id="link-en">English</a>
+  </div>
+  <div class="container">
+
+    <div class="zh">
+      <h1>常见问题</h1>
+      <p class="updated">最后更新日期：2026 年 7 月 31 日</p>
+      <p>以下是使用 VoiceBridge 时最常遇到的问题和解决方法。如果这里没有覆盖你的情况，请发邮件到 <a href="mailto:huanglin37@mail3.sysu.edu.cn">huanglin37@mail3.sysu.edu.cn</a>。</p>
+
+      <div class="faq-item">
+        <h2>1. 手机扫二维码后提示"绑定失败"</h2>
+        <p>配对二维码有效期 <strong>10 分钟</strong>，超时后需要刷新。</p>
+        <ol>
+          <li>在电脑端 VoiceBridge Agent 窗口，点击"刷新二维码"。</li>
+          <li>用手机重新扫描新的二维码，并在 10 分钟内点击"允许并绑定"。</li>
+        </ol>
+        <p>如果仍然失败，可能是该电脑已被其他账号绑定。</p>
+      </div>
+
+      <div class="faq-item">
+        <h2>2. 手机端录音时提示"无法访问麦克风"</h2>
+        <p>浏览器需要获得麦克风权限才能录音。</p>
+        <p><strong>iPhone / iPad（iOS Safari）</strong>：</p>
+        <ol>
+          <li>打开系统"设置" → "隐私与安全性" → "麦克风"。</li>
+          <li>找到"Safari 浏览器"，打开开关。</li>
+        </ol>
+        <p><strong>Android（Chrome）</strong>：</p>
+        <ol>
+          <li>长按地址栏左侧的锁形图标 → "权限" → "麦克风" → 允许。</li>
+          <li>或系统"设置" → "应用" → "Chrome" → "权限" → "麦克风"。</li>
+        </ol>
+      </div>
+
+      <div class="faq-item">
+        <h2>3. 录音完成但提示"没有录到声音"</h2>
+        <ul>
+          <li>点击录音按钮后<strong>至少说话 1 秒</strong>再停止。</li>
+          <li>关闭可能占用麦克风的 App（微信语音、其他录音软件）。</li>
+          <li>检查手机是否处于静音模式。</li>
+          <li>插上耳机再试一次（排除硬件故障）。</li>
+        </ul>
+      </div>
+
+      <div class="faq-item">
+        <h2>4. 手机发送文字，电脑端没有反应</h2>
+        <ol>
+          <li>确认电脑端 VoiceBridge Agent 窗口是打开的，状态显示"已上线"。</li>
+          <li>如果状态显示"等待上线"，点击窗口内的刷新按钮。</li>
+          <li>检查电脑和手机是否都能上网。</li>
+          <li>如果手机端设备列表显示"（需更新）"，请重新下载最新版桌面客户端。</li>
+        </ol>
+        <div class="answer-note">提示：手机和电脑<strong>不需要连接同一个 WiFi</strong>，只要都能上网就行。</div>
+      </div>
+
+      <div class="faq-item">
+        <h2>5. 语音识别提示"本月额度已用完"</h2>
+        <p>免费版每月有 <strong>600 秒（10 分钟）</strong>的语音识别额度。用完后需等到下月 1 号自动重置，或升级到专业版（18000 秒/月）。</p>
+      </div>
+
+      <div class="faq-item">
+        <h2>6. 语音识别准确率不高怎么办</h2>
+        <ul>
+          <li><strong>环境噪音</strong>：尽量在安静环境录音，靠近手机说话。</li>
+          <li><strong>语速和清晰度</strong>：正常语速、吐字清晰效果最好。</li>
+          <li><strong>语言</strong>：目前针对普通话优化。方言或中英混杂可能效果不佳。</li>
+          <li><strong>录音距离</strong>：手机离嘴 15-30 厘米效果最佳。</li>
+        </ul>
+      </div>
+
+      <div class="faq-item">
+        <h2>7. macOS 提示"已复制，自动粘贴失败"</h2>
+        <p>VoiceBridge 需要系统"辅助功能"权限来模拟键盘粘贴。</p>
+        <ol>
+          <li>打开系统"设置" → "隐私与安全性" → "辅助功能"。</li>
+          <li>在列表中找到 VoiceBridge Agent，打开开关。</li>
+          <li>如果没有出现，点"+"手动添加。</li>
+          <li>可能需要重启 VoiceBridge Agent 才能生效。</li>
+        </ol>
+        <div class="answer-note">说明：文字已经复制到剪切板，你也可以手动用 Cmd+V 粘贴。</div>
+      </div>
+
+      <div class="faq-item">
+        <h2>8. iPhone 上用 Safari 打开后无法录音</h2>
+        <p>iOS 系统<strong>只允许在 Safari 浏览器</strong>中使用麦克风录音。Chrome、微信内置浏览器等无法录音。</p>
+        <ol>
+          <li>用系统自带的 <strong>Safari</strong> 打开网页。</li>
+          <li>系统版本需 <strong>iOS 14.5 或更高</strong>。</li>
+          <li>建议点击 Safari 底部的分享按钮 → "添加到主屏幕"，体验更好。</li>
+        </ol>
+      </div>
+
+      <div class="faq-item">
+        <h2>9. 登录后提示"云端连接失败"</h2>
+        <ol>
+          <li>刷新页面（下拉或重新打开网址）。</li>
+          <li>如果仍然失败，退出登录后重新输入邮箱密码登录。</li>
+          <li>检查手机网络是否能正常访问网页。</li>
+          <li>如果你在使用 VPN，尝试关闭 VPN 后重试。</li>
+        </ol>
+      </div>
+
+      <div class="faq-item">
+        <h2>10. 桌面端二维码一直显示"等待配对"</h2>
+        <ol>
+          <li>在电脑端点击"刷新"按钮，重新生成二维码。</li>
+          <li>确认电脑已联网。</li>
+          <li>如果更换过电脑硬件或重装系统，可能需要先在手机端"账户设置 → 已连接设备"删除旧的电脑设备，再重新配对。</li>
+        </ol>
+      </div>
+    </div>
+
+    <div class="en">
+      <h1>FAQ</h1>
+      <p class="updated">Last updated: July 31, 2026</p>
+      <p>Here are the most common issues and solutions when using VoiceBridge. If your situation isn't covered, email <a href="mailto:huanglin37@mail3.sysu.edu.cn">huanglin37@mail3.sysu.edu.cn</a>.</p>
+
+      <div class="faq-item">
+        <h2>1. "Pairing failed" after scanning the QR code</h2>
+        <p>The pairing QR code is valid for <strong>10 minutes</strong> and must be refreshed after it expires.</p>
+        <ol>
+          <li>In the VoiceBridge Agent window on your computer, click "Refresh QR".</li>
+          <li>Re-scan the new QR code with your phone and tap "Allow and pair" within 10 minutes.</li>
+        </ol>
+        <p>If it still fails, the computer may already be paired with another account.</p>
+      </div>
+
+      <div class="faq-item">
+        <h2>2. "Cannot access microphone" when recording</h2>
+        <p>The browser needs microphone permission to record.</p>
+        <p><strong>iPhone / iPad (iOS Safari)</strong>:</p>
+        <ol>
+          <li>Open Settings → Privacy & Security → Microphone.</li>
+          <li>Find "Safari" and toggle it on.</li>
+        </ol>
+        <p><strong>Android (Chrome)</strong>:</p>
+        <ol>
+          <li>Long-press the lock icon left of the address bar → Permissions → Microphone → Allow.</li>
+          <li>Or Settings → Apps → Chrome → Permissions → Microphone.</li>
+        </ol>
+      </div>
+
+      <div class="faq-item">
+        <h2>3. "No voice detected" after recording</h2>
+        <ul>
+          <li>Speak for <strong>at least 1 second</strong> before stopping.</li>
+          <li>Close apps that may occupy the microphone (WeChat voice, other recording apps).</li>
+          <li>Check if the phone is in silent mode.</li>
+          <li>Try with earphones plugged in (rules out hardware issues).</li>
+        </ul>
+      </div>
+
+      <div class="faq-item">
+        <h2>4. Text sent from phone but nothing happens on computer</h2>
+        <ol>
+          <li>Make sure the VoiceBridge Agent window is open and shows "Online".</li>
+          <li>If it shows "Waiting", click the refresh button inside the window.</li>
+          <li>Check that both computer and phone have internet access.</li>
+          <li>If the device list shows "(update needed)", download the latest desktop client.</li>
+        </ol>
+        <div class="answer-note">Tip: The phone and computer <strong>do not need to be on the same WiFi</strong>. As long as both have internet, it works.</div>
+      </div>
+
+      <div class="faq-item">
+        <h2>5. "Monthly quota exhausted"</h2>
+        <p>The Free plan has <strong>600 seconds (10 minutes)</strong> of recognition per month. Once exhausted, wait until the 1st of next month for reset, or upgrade to Pro (18,000 seconds/month).</p>
+      </div>
+
+      <div class="faq-item">
+        <h2>6. Low speech recognition accuracy</h2>
+        <ul>
+          <li><strong>Background noise</strong>: record in a quiet environment, close to the phone.</li>
+          <li><strong>Speed and clarity</strong>: normal pace with clear enunciation works best.</li>
+          <li><strong>Language</strong>: optimized for Mandarin Chinese. Dialects or mixed Chinese-English may perform worse.</li>
+          <li><strong>Distance</strong>: 15-30 cm from the phone gives the best results.</li>
+        </ul>
+      </div>
+
+      <div class="faq-item">
+        <h2>7. macOS: "Copied, auto-paste failed"</h2>
+        <p>VoiceBridge needs the "Accessibility" permission to simulate keyboard paste.</p>
+        <ol>
+          <li>Open System Settings → Privacy & Security → Accessibility.</li>
+          <li>Find VoiceBridge Agent in the list and toggle it on.</li>
+          <li>If it doesn't appear, click "+" to add it manually.</li>
+          <li>You may need to restart VoiceBridge Agent for it to take effect.</li>
+        </ol>
+        <div class="answer-note">Note: The text is already in the clipboard. You can also paste manually with Cmd+V.</div>
+      </div>
+
+      <div class="faq-item">
+        <h2>8. Cannot record in Safari on iPhone</h2>
+        <p>iOS <strong>only allows microphone recording in Safari</strong>. Chrome, WeChat's built-in browser, and others cannot record.</p>
+        <ol>
+          <li>Open the page with the system <strong>Safari</strong> browser.</li>
+          <li>iOS <strong>14.5 or later</strong> is required.</li>
+          <li>Tap Safari's Share button → "Add to Home Screen" for a better experience.</li>
+        </ol>
+      </div>
+
+      <div class="faq-item">
+        <h2>9. "Cloud connection failed" after login</h2>
+        <ol>
+          <li>Refresh the page (pull down or reopen the URL).</li>
+          <li>If it still fails, sign out and sign back in with your email and password.</li>
+          <li>Check whether the phone's internet works for other websites.</li>
+          <li>If using a VPN, try turning it off (some VPNs block Supabase connections).</li>
+        </ol>
+      </div>
+
+      <div class="faq-item">
+        <h2>10. Desktop QR code keeps showing "Waiting for pairing"</h2>
+        <ol>
+          <li>Click the "Refresh" button on the desktop to regenerate the QR code.</li>
+          <li>Make sure the computer has internet access.</li>
+          <li>If you changed hardware or reinstalled the OS, you may need to remove the old computer in Account Settings → Connected Devices before re-pairing.</li>
+        </ol>
+      </div>
+    </div>
+
+    <div class="footer">
+      <p>Questions? Email: <a href="mailto:huanglin37@mail3.sysu.edu.cn">huanglin37@mail3.sysu.edu.cn</a></p>
+      <p style="margin-top:8px">
+        <a href="/privacy.html">隐私政策 / Privacy</a> ·
+        <a href="/terms.html">用户协议 / Terms</a>
+      </p>
+      <p style="margin-top:8px">VoiceBridge © 2026. All rights reserved.</p>
+    </div>
+  </div>
+
+  <script>
+    (function(){
+      var params = new URLSearchParams(location.search);
+      var lang = params.get('lang');
+      if (!lang) {
+        lang = (navigator.language || 'zh').startsWith('zh') ? 'zh' : 'en';
+      }
+      document.documentElement.lang = lang === 'en' ? 'en' : 'zh-CN';
+      document.getElementById('link-zh').className = lang === 'zh' ? 'active' : '';
+      document.getElementById('link-en').className = lang === 'en' ? 'active' : '';
+    })();
+  </script>
+</body>
+</html>

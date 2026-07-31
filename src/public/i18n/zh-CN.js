@@ -45,6 +45,7 @@ export default {
     placeholder: '输入文字，或语音识别…',
     textInputAria: '文字输入',
     savePhrase: '收藏',
+    sendToDesktop: '发送',
     charCount: (cur, max) => `${cur}/${max}`,
     textTooLong: '文本过长，最多支持 2000 个字符',
     autoSentNotice: '该文本已通过语音自动发送。',
@@ -325,5 +326,12 @@ export default {
     hoursAgo: (n) => `${n}小时前`,
     daysAgo: (n) => `${n}天前`,
     monthsAgo: (n) => `${n}个月前`,
+  },
+
+  // === 底部法律链接 ===
+  footer: {
+    privacy: '隐私政策',
+    terms: '用户协议',
+    faq: '常见问题',
   },
 };

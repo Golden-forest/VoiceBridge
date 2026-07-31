@@ -45,6 +45,7 @@ export default {
     placeholder: 'Type, or use voice…',
     textInputAria: 'Text input',
     savePhrase: 'Favorite',
+    sendToDesktop: 'Send',
     charCount: (cur, max) => `${cur}/${max}`,
     textTooLong: 'Text too long, max 2000 characters',
     autoSentNotice: 'This text was already auto-sent via voice.',
@@ -317,5 +318,12 @@ export default {
     hoursAgo: (n) => `${n} h ago`,
     daysAgo: (n) => `${n} d ago`,
     monthsAgo: (n) => `${n} mo ago`,
+  },
+
+  // === Footer legal links ===
+  footer: {
+    privacy: 'Privacy Policy',
+    terms: 'Terms of Service',
+    faq: 'FAQ',
   },
 };
