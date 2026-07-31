@@ -203,25 +203,20 @@ export async function startRealtimeAgent({
     return await entry.ready;
   };
 
-  messageChannel.on("broadcast", { event: "command" }, async ({ payload }) => {
-    console.info("[VB realtime] command received", {
-      type: payload?.type,
-      key: payload?.key,
-      target: payload?.target_device_id,
-      myDeviceId: device.id,
-      match: payload?.target_device_id === device.id
+  const warmupAckChannel = (targetDeviceId) => {
+    if (!targetDeviceId || ackChannels.has(targetDeviceId)) return;
+    void getAckChannel(targetDeviceId).catch(() => {
+      // 预热失败不影响主流程，真正发送时会重试
     });
+  };
+
+  messageChannel.on("broadcast", { event: "command" }, async ({ payload }) => {
     const ackChannelPromise = (
       isInsertTextMessage(payload, device.id) || isKeyMessage(payload, device.id)
     )
       ? getAckChannel(payload.source_device_id)
       : null;
     const result = await handleDesktopMessage({ payload, myDeviceId: device.id, output });
-    console.info("[VB realtime] handleDesktopMessage result", {
-      handled: result?.handled,
-      ackStatus: result?.ack?.status,
-      ackDetail: result?.ack?.detail
-    });
     if (result.ack) {
       const targetDeviceId = result.ack.target_device_id;
       const ackChannel = await (ackChannelPromise || getAckChannel(targetDeviceId));
@@ -233,6 +228,12 @@ export async function startRealtimeAgent({
       if (sendStatus !== "ok") {
         onStatus(`ack:${targetDeviceId}:${sendStatus}`);
       }
+    }
+  });
+
+  presence.on("presence", { event: "join" }, ({ key }) => {
+    if (key && key !== device.id) {
+      warmupAckChannel(key);
     }
   });
 

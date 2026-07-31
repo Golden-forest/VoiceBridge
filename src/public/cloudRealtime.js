@@ -57,6 +57,12 @@ export class CloudRealtime {
       const state = presence.presenceState();
       const devices = Object.values(state).flat().filter((entry) => entry.deviceId);
       this.onDevices(devices);
+      // 预热：为桌面设备预订阅目标通道，避免首次发送时冷启动延迟
+      for (const device of devices) {
+        if (device.deviceId && device.deviceId !== this.phoneDeviceId && device.platform !== "web") {
+          this.warmupTargetChannel(device.deviceId);
+        }
+      }
     });
     await this.subscribeChannel(ackChannel, "ack", null, generation);
     await this.subscribeChannel(presence, "presence", async (status) => {
@@ -148,6 +154,13 @@ export class CloudRealtime {
       throw new Error(`发送到桌面端失败：${sendStatus}`);
     }
     return await ackPromise;
+  }
+
+  warmupTargetChannel(targetDeviceId) {
+    if (this.targetChannels.has(targetDeviceId)) return;
+    void this.getTargetChannel(targetDeviceId).catch(() => {
+      // 预热失败不影响主流程，真正发送时会重试
+    });
   }
 
   async getTargetChannel(targetDeviceId) {

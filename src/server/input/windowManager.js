@@ -168,7 +168,7 @@ export async function activateWindow(appName, windowTitle, { execFileAsync: exec
 tell application "System Events"
   set frontmost of process "${safeAppName}" to true
 end tell
-delay 0.1
+delay 0.02
 tell application "${safeAppName}"
   activate
   set index of window "${safeWindowTitle}" to 1

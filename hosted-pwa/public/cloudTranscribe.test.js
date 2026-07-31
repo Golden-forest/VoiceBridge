@@ -1,9 +1,10 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
-import { transcribeCloudAudio } from "./cloudTranscribe.js";
+import { transcribeCloudAudio, __clearAccessTokenCacheForTests } from "./cloudTranscribe.js";
 
 test("transcribeCloudAudio posts audio to the Supabase Edge Function with auth headers", async () => {
+  __clearAccessTokenCacheForTests();
   const calls = [];
   const supabase = createSupabaseClient({
     url: "https://project.supabase.co",
@@ -33,6 +34,7 @@ test("transcribeCloudAudio posts audio to the Supabase Edge Function with auth h
 });
 
 test("transcribeCloudAudio throws the function error message for non-2xx JSON responses", async () => {
+  __clearAccessTokenCacheForTests();
   const supabase = createSupabaseClient({
     url: "https://project.supabase.co",
     anonKey: "anon-key",
@@ -54,6 +56,7 @@ test("transcribeCloudAudio throws the function error message for non-2xx JSON re
 });
 
 test("transcribeCloudAudio requires a signed-in Supabase session", async () => {
+  __clearAccessTokenCacheForTests();
   const supabase = createSupabaseClient({
     url: "https://project.supabase.co",
     anonKey: "anon-key",

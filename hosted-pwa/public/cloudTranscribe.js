@@ -1,3 +1,31 @@
+let cachedAccessToken = null;
+let cachedAccessTokenExpiresAt = 0;
+const ACCESS_TOKEN_TTL_MS = 50_000;
+
+// 测试专用：清理 token 缓存。生产代码不应调用。
+export function __clearAccessTokenCacheForTests() {
+  cachedAccessToken = null;
+  cachedAccessTokenExpiresAt = 0;
+}
+
+async function getAccessToken(supabase) {
+  const now = Date.now();
+  if (cachedAccessToken && cachedAccessTokenExpiresAt > now) {
+    return cachedAccessToken;
+  }
+  const { data, error } = await supabase.auth.getSession();
+  if (error) {
+    throw new Error(error.message || "获取登录状态失败，请重新登录。");
+  }
+  const token = data?.session?.access_token;
+  if (!token) {
+    throw new Error("请先登录后再使用云端语音识别。");
+  }
+  cachedAccessToken = token;
+  cachedAccessTokenExpiresAt = now + ACCESS_TOKEN_TTL_MS;
+  return token;
+}
+
 export async function transcribeCloudAudio({
   supabase = globalThis.window?.VoiceBridgeAuth?.supabase,
   audio,
@@ -15,14 +43,7 @@ export async function transcribeCloudAudio({
     throw new Error("当前浏览器无法发起云端语音识别请求。");
   }
 
-  const { data, error } = await supabase.auth.getSession();
-  if (error) {
-    throw new Error(error.message || "获取登录状态失败，请重新登录。");
-  }
-  const accessToken = data?.session?.access_token;
-  if (!accessToken) {
-    throw new Error("请先登录后再使用云端语音识别。");
-  }
+  const accessToken = await getAccessToken(supabase);
 
   const supabaseUrl = supabase.supabaseUrl || supabase.rest?.url?.replace(/\/rest\/v1\/?$/, "");
   const anonKey = supabase.supabaseKey || supabase.headers?.apikey;

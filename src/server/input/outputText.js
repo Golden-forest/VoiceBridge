@@ -1,3 +1,6 @@
+import { writeClipboard } from "./clipboard.js";
+import { pasteClipboard } from "./paste.js";
+
 export async function outputText(
   text,
   {
@@ -9,27 +12,25 @@ export async function outputText(
     logger = console
   } = {}
 ) {
-  // If autoPaste with a target window, activate first so clipboard write
-  // happens while the correct window is becoming active.
-  if (autoPaste && targetWindow && targetWindow.appName) {
-    try {
-      const activateResult = await activateWindowFn(
-        targetWindow.appName,
-        targetWindow.windowTitle
-      );
-      if (!activateResult.success) {
-        logger.warn?.(`Window activation failed: ${activateResult.error}`);
-      }
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      logger.warn?.(`Window activation error: ${message}`);
-    }
-    await delay(200);
-  }
+  // 激活窗口与写剪贴板并行执行：pbcopy 和 osascript 互不依赖，
+  // 粘贴按键在两者完成后才触发，顺序安全。
+  const activatePromise = (autoPaste && targetWindow && targetWindow.appName)
+    ? activateWindowFn(targetWindow.appName, targetWindow.windowTitle)
+        .then((result) => {
+          if (!result.success) {
+            logger.warn?.(`Window activation failed: ${result.error}`);
+          }
+        })
+        .catch((error) => {
+          const message = error instanceof Error ? error.message : String(error);
+          logger.warn?.(`Window activation error: ${message}`);
+        })
+    : Promise.resolve();
 
-  // clipboardWriter is fully awaited so pbcopy (or equivalent) has
-  // completed before we proceed.  No additional fixed delay is needed.
-  await clipboardWriter(text);
+  await Promise.all([
+    activatePromise,
+    clipboardWriter(text)
+  ]);
 
   if (!autoPaste) {
     return {
@@ -57,20 +58,11 @@ export async function outputText(
   }
 }
 
-function delay(ms) {
-  if (!ms) {
-    return Promise.resolve();
-  }
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
-
 async function defaultClipboardWriter(text) {
-  const { writeClipboard } = await import("./clipboard.js");
   await writeClipboard(text);
 }
 
 async function defaultPasteFn() {
-  const { pasteClipboard } = await import("./paste.js");
   await pasteClipboard();
 }
 
