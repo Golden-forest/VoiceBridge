@@ -46,13 +46,17 @@ function fromDb(row, { source, plan }) {
     source,
     requiredPlan,
     presetId: row.preset_id || null,
-    locked: requiredPlan === "pro" && plan !== "pro"
+    locked: requiredPlan === "pro" && plan !== "pro" && plan !== "admin"
   };
 }
 
 function resolvePlan(subscription) {
-  return subscription
-    && subscription.plan === "pro"
+  if (!subscription) return "free";
+  // Admin 视为已解锁全部指令（与 app.js planBadge 逻辑保持一致）
+  if (subscription.plan === "admin" && ["active", "trialing"].includes(subscription.status)) {
+    return "admin";
+  }
+  return subscription.plan === "pro"
     && ["active", "trialing"].includes(subscription.status)
     ? "pro"
     : "free";
@@ -95,10 +99,12 @@ export const commandStore = {
     if (usersResult.error) throw wrapError(usersResult.error, t('commandStore.fetchPersonalFailed'));
     if (presetsResult.error) throw wrapError(presetsResult.error, t('commandStore.fetchPresetFailed'));
     const plan = resolvePlan(subscriptionResult.data);
-    return [
-      ...(usersResult.data || []).map((row) => fromDb(row, { source: "user", plan })),
-      ...(presetsResult.data || []).map((row) => fromDb(row, { source: "preset", plan }))
-    ];
+    const userCommands = (usersResult.data || []).map((row) => fromDb(row, { source: "user", plan }));
+    const presetCommands = (presetsResult.data || []).map((row) => fromDb(row, { source: "preset", plan }));
+    // 去重：user_commands 优先，按 (label+text) 过滤掉 presets 中的同名指令
+    const seen = new Set(userCommands.map((c) => `${c.label || ""}||${c.text || ""}`));
+    const dedupedPresets = presetCommands.filter((c) => !seen.has(`${c.label || ""}||${c.text || ""}`));
+    return [...userCommands, ...dedupedPresets];
   },
 
   // POST insert -> created Command
