@@ -131,7 +131,14 @@ statusDot.addEventListener("click", () => {
 });
 
 pageRefreshButton?.addEventListener("click", () => {
-  location.reload();
+  if (pageRefreshButton.classList.contains("is-reloading")) return;
+  pageRefreshButton.classList.add("is-reloading");
+  setTimeout(() => location.reload(), 600);
+});
+
+// AutoPaste 开关切换时，重新计算发送按钮的显隐
+autoPasteEl?.addEventListener("change", () => {
+  updateTextInputState();
 });
 
 // === Text Input ===
@@ -139,10 +146,12 @@ function updateTextInputState() {
   const text = textInput.value.trim();
   if (charCount) charCount.textContent = t('input.charCount', textInput.value.length, 2000);
   const saveBtn = document.querySelector("#savePhraseBtn");
+  const sendBtn = document.querySelector("#sendTextBtn");
 
-  // In edit mode, hide save button — handled by edit UI
+  // In edit mode, hide save/send buttons — handled by edit UI
   if (commandLibrary.editingId) {
     saveBtn.classList.add("hidden");
+    sendBtn.classList.add("hidden");
     commandLibrary._checkEditChanges();
     return;
   }
@@ -151,8 +160,15 @@ function updateTextInputState() {
     saveBtn.classList.remove("hidden");
     saveBtn.classList.remove("saved");
     saveBtn.innerHTML = starSvg + " " + t('input.savePhrase');
+    // 仅 AutoPaste 关闭时才需要手动发送按钮
+    if (autoPasteEl && !autoPasteEl.checked) {
+      sendBtn.classList.remove("hidden");
+    } else {
+      sendBtn.classList.add("hidden");
+    }
   } else {
     saveBtn.classList.add("hidden");
+    sendBtn.classList.add("hidden");
   }
 }
 
@@ -1346,6 +1362,20 @@ savePhraseBtn.addEventListener("click", () => {
   }
 });
 
+// === Send Text Button (AutoPaste OFF 时手动发送文本框内容) ===
+const sendTextBtn = document.querySelector("#sendTextBtn");
+sendTextBtn?.addEventListener("click", async () => {
+  const text = textInput.value.trim();
+  if (!text) return;
+  sendTextBtn.disabled = true;
+  const accepted = await sendTextToDesktop(text);
+  sendTextBtn.disabled = false;
+  if (accepted) {
+    textInput.value = "";
+    updateTextInputState();
+  }
+});
+
 // === Command Library Events ===
 const cmdSearchToggle = document.querySelector("#cmdSearchToggle");
 const cmdSearchBar = document.querySelector("#cmdSearchBar");
@@ -1550,12 +1580,16 @@ async function uploadAudio(blob, extension) {
       });
       const text = (payload.text || "").trim();
       if (!text) throw new Error(t('record.noTranscriptText'));
-      textInput.value = text;
-      updateTextInputState();
-      const accepted = await sendTextToDesktop(text);
-      if (accepted && textInput.value.trim() === text) {
-        textInput.value = "";
+      // 识别结果先放入文本框（与 Lan 版本对齐：可见、可编辑、可收藏）
+      if (!commandLibrary.editingId) {
+        textInput.value = text;
         updateTextInputState();
+      }
+      // 仅 AutoPaste ON 时立即异步发送（延迟与原实现相同，void 表示不 await）
+      if (autoPasteEl.checked) {
+        void sendTextToDesktop(text).catch((error) => {
+          showToast(error.message || t('connection.sendFailed'), true);
+        });
       }
       return;
     }
