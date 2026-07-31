@@ -51,8 +51,12 @@ function fromDb(row, { source, plan }) {
 }
 
 function resolvePlan(subscription) {
-  return subscription
-    && subscription.plan === "pro"
+  if (!subscription) return "free";
+  // Admin 视为已解锁全部指令（与 app.js planBadge 逻辑保持一致）
+  if (subscription.plan === "admin" && ["active", "trialing"].includes(subscription.status)) {
+    return "admin";
+  }
+  return subscription.plan === "pro"
     && ["active", "trialing"].includes(subscription.status)
     ? "pro"
     : "free";
