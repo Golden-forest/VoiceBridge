@@ -14,7 +14,7 @@
 
     <!-- Primary Meta -->
     <title>VoiceBridge - 手机说话，电脑输入</title>
-    <meta name="description" content="把手机变成电脑的语音输入遥控器。VoiceBridge 支持语音转写、当前输入框发送和可复用快捷指令。" />
+    <meta name="description" content="把手机变成电脑的语音输入遥控器。一键录音，云端转写，文字直接出现在电脑光标处。一台手机连接多台电脑，随意切换。" />
     <link rel="canonical" href="https://voicebridge-6kr.pages.dev/zh-CN/" />
     <link rel="alternate" hreflang="en" href="https://voicebridge-6kr.pages.dev/" />
     <link rel="alternate" hreflang="zh-CN" href="https://voicebridge-6kr.pages.dev/zh-CN/" />
@@ -23,7 +23,7 @@
     <!-- Open Graph -->
     <meta property="og:type" content="website" />
     <meta property="og:title" content="VoiceBridge - 手机说话，电脑输入" />
-    <meta property="og:description" content="把手机变成电脑的语音输入遥控器。VoiceBridge 支持语音转写、当前输入框发送和可复用快捷指令。" />
+    <meta property="og:description" content="把手机变成电脑的语音输入遥控器。一键录音，云端转写，文字直接出现在电脑光标处。一台手机连接多台电脑，随意切换。" />
     <meta property="og:url" content="https://voicebridge-6kr.pages.dev/zh-CN/" />
     <meta property="og:image" content="https://voicebridge-6kr.pages.dev/og-image-zh.png" />
     <meta property="og:locale" content="zh_CN" />
@@ -31,7 +31,7 @@
     <!-- Twitter Card -->
     <meta name="twitter:card" content="summary_large_image" />
     <meta name="twitter:title" content="VoiceBridge - 手机说话，电脑输入" />
-    <meta name="twitter:description" content="把手机变成电脑的语音输入遥控器。VoiceBridge 支持语音转写、当前输入框发送和可复用快捷指令。" />
+    <meta name="twitter:description" content="把手机变成电脑的语音输入遥控器。一键录音，云端转写，文字直接出现在电脑光标处。一台手机连接多台电脑，随意切换。" />
     <meta name="twitter:image" content="https://voicebridge-6kr.pages.dev/og-image-zh.png" />
 
     <!-- Structured Data: SoftwareApplication -->
@@ -42,7 +42,7 @@
         "name": "VoiceBridge",
         "applicationCategory": "UtilitiesApplication",
         "operatingSystem": "macOS, Windows",
-        "description": "把手机变成电脑的语音输入遥控器。VoiceBridge 支持语音转写、当前输入框发送和可复用快捷指令。",
+        "description": "把手机变成电脑的语音输入遥控器。一键录音，云端转写，文字直接出现在电脑光标处。一台手机连接多台电脑，随意切换。",
         "url": "https://voicebridge-6kr.pages.dev/zh-CN/"
       }
     </script>
@@ -106,12 +106,12 @@
         <div class="hero-inner">
           <div class="hero-content">
             <h1 class="hero-h1">
-              <span class="hero-h1-line">说，</span>
-              <span class="hero-h1-line hero-h1-accent">即是写。</span>
+              <span class="hero-h1-line">手机说话，</span>
+              <span class="hero-h1-line hero-h1-accent">电脑输入。</span>
             </h1>
 
             <!-- Static text for screen readers -->
-            <span class="sr-only">手机说话，电脑输入。按住录音，松开转写，VoiceBridge 会把文字发送到电脑当前输入框。</span>
+            <span class="sr-only">VoiceBridge：手机一键录音，云端转写，文字直接出现在电脑光标处。一台手机可连接多台电脑，随意切换。</span>
 
             <!-- Typewriter target ( visual only ) -->
             <div class="hero-typewriter"
@@ -123,7 +123,7 @@
             </div>
 
             <!-- JSON island for typewriter copy -->
-            <script type="application/json" id="typewriter-data">["手机说话 → 文字自动出现在电脑光标处。","按住手机录音，松开即转写，无需切换窗口。","把常用长文本封装成指令，说一句话就触发。"]</script>
+            <script type="application/json" id="typewriter-data">["一键录音，文字自动出现在电脑光标处。","一台手机连接多台电脑，随意切换。","常用长文本封装成指令，一句话触发。"]</script>
 
             <div class="hero-cta">
               <a class="hero-cta-primary"
@@ -164,38 +164,117 @@
         </div>
       </section>
 
-      <!-- SECTION 2: 产品能力 -->
+      <!-- SECTION 2: 核心能力 -->
       <section class="section section-product" id="product" data-section="product">
         <div class="section-inner">
-          <h2 class="section-h2">不切窗口，直接输入</h2>
-          <p class="section-lead">手机负责录音，电脑接收文字。</p>
+          <h2 class="section-h2">核心能力</h2>
+          <p class="section-lead">手机录音，云端转写，电脑接收。</p>
 
           <div class="product-grid">
-            <!-- Main panel: 跨设备输入 -->
+            <!-- 主卡片: 核心流程 -->
             <article class="product-main">
               <div class="product-media-frame">
-                <img class="product-media-img"
-                     src="/media/product-main.svg"
-                     alt="VoiceBridge 将手机语音转写到电脑的示意图"
-                     loading="lazy" />
+                <!-- Phone mockup with real app UI ( code-rendered ) -->
+                <div class="phone-mockup phone-mockup-lg" aria-hidden="true">
+                  <div class="phone-screen">
+                    <!-- Header -->
+                    <div class="app-mockup-header">
+                      <span class="app-mockup-brand-mark">
+                        <img src="/icons/icon-192.png" alt="" />
+                      </span>
+                      <span class="app-mockup-brand">VoiceBridge</span>
+                      <span class="app-mockup-header-btn">
+                        <svg viewBox="0 0 24 24"><path d="M21 3v5h-5"/><path d="M21 8l-3.2-3.2a9 9 0 1 0 2.5 8.3"/></svg>
+                      </span>
+                    </div>
+                    <!-- Device pill -->
+                    <div class="app-mockup-device-pill">
+                      <span class="app-mockup-device-icon">
+                        <svg viewBox="0 0 24 24"><rect x="3" y="5" width="13" height="10" rx="2"/><rect x="8" y="9" width="13" height="10" rx="2"/></svg>
+                      </span>
+                      <span class="app-mockup-status-dot"></span>
+                      <span class="app-mockup-status-badge">已连接</span>
+                      <span class="app-mockup-toggle">
+                        <span class="app-mockup-toggle-track"></span>
+                        <span>自动粘贴</span>
+                      </span>
+                    </div>
+                    <!-- Input card -->
+                    <div class="app-mockup-input-card">
+                      <div class="app-mockup-text-input">输入文字，或语音识别…</div>
+                      <div class="app-mockup-input-footer">0/2000</div>
+                    </div>
+                    <!-- Primary actions -->
+                    <div class="app-mockup-primary-actions">
+                      <div class="app-mockup-side-btn">
+                        <svg viewBox="0 0 24 24"><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><rect x="8" y="2" width="8" height="4" rx="1"/></svg>
+                        <span>粘贴</span>
+                      </div>
+                      <div class="app-mockup-record-btn">
+                        <span class="app-mockup-record-icon">
+                          <svg viewBox="0 0 24 24"><rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 10a7 7 0 0014 0"/><line x1="12" y1="19" x2="12" y2="22"/></svg>
+                        </span>
+                        <span class="app-mockup-record-label">录音</span>
+                      </div>
+                      <div class="app-mockup-side-btn">
+                        <svg viewBox="0 0 24 24"><polyline points="9 10 4 15 9 20"/><path d="M20 4v7a4 4 0 0 1-4 4H4"/></svg>
+                        <span>回车</span>
+                      </div>
+                    </div>
+                    <!-- Utility keys -->
+                    <div class="app-mockup-utility-keys">
+                      <div class="app-mockup-util-btn">
+                        <svg viewBox="0 0 24 24"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 9.9-1"/></svg>
+                        <span>Esc</span>
+                      </div>
+                      <div class="app-mockup-util-btn">
+                        <svg viewBox="0 0 24 24"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/></svg>
+                        <span>删除</span>
+                      </div>
+                      <div class="app-mockup-util-btn">
+                        <svg viewBox="0 0 24 24"><path d="M3 7v6h6"/><path d="M21 17a9 9 0 0 0-9-9 9 9 0 0 0-6 2.3L3 13"/></svg>
+                        <span>撤销</span>
+                      </div>
+                    </div>
+                    <!-- Library panel -->
+                    <div class="app-mockup-library">
+                      <div class="app-mockup-library-tabs">
+                        <span class="app-mockup-tab active">最近<span class="app-mockup-tab-count">3</span></span>
+                        <span class="app-mockup-tab">全部<span class="app-mockup-tab-count">11+</span></span>
+                        <span class="app-mockup-tab">自定义</span>
+                      </div>
+                      <div class="app-mockup-cmd-grid">
+                        <span class="app-mockup-cmd-btn recent">最小化修改</span>
+                        <span class="app-mockup-cmd-btn recent">代码审查</span>
+                        <span class="app-mockup-cmd-btn recent">UI 设计</span>
+                        <span class="app-mockup-cmd-btn">快速概览</span>
+                        <span class="app-mockup-cmd-btn">回复确认</span>
+                        <span class="app-mockup-cmd-btn">会议纪要</span>
+                        <span class="app-mockup-cmd-btn slash">/help</span>
+                        <span class="app-mockup-cmd-btn">周报模板</span>
+                        <span class="app-mockup-cmd-btn">需求说明</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
               </div>
-              <h3 class="product-card-title">跨设备输入</h3>
-              <p class="product-card-body">手机录制音频，VoiceBridge 在云端完成转写，文字会发送到已登录的电脑。</p>
+              <h3 class="product-card-title">一键录音，直达光标</h3>
+              <p class="product-card-body">在手机上点击录音，再次点击停止，VoiceBridge 完成云端转写后，文字直接发送到电脑当前输入框，无需切换窗口。</p>
             </article>
 
             <div class="product-side">
-              <!-- 辅助 1: 当前输入位置 -->
+              <!-- 辅助 1: 多设备 -->
               <article class="product-aux">
-                <span class="product-aux-eyebrow">当前输入位置</span>
-                <h3 class="product-card-title">发送到当前输入框</h3>
-                <p class="product-card-body">文字会发送到电脑当前的活跃窗口，无需切换应用即可继续输入。</p>
+                <span class="product-aux-eyebrow">多设备</span>
+                <h3 class="product-card-title">一机多连</h3>
+                <p class="product-card-body">同一账号在多台电脑上登录桌面端，手机自动发现所有在线设备，随意选择目标发送。</p>
               </article>
 
               <!-- 辅助 2: 剪切板兜底 -->
               <article class="product-aux">
                 <span class="product-aux-eyebrow">兜底</span>
-                <h3 class="product-card-title">剪切板兜底</h3>
-                <p class="product-card-body">当自动粘贴不可用时，文字仍会保留在电脑剪切板。</p>
+                <h3 class="product-card-title">剪切板备份</h3>
+                <p class="product-card-body">当自动粘贴不可用时，文字仍会复制到电脑剪切板，不会丢。</p>
               </article>
             </div>
           </div>
@@ -205,14 +284,38 @@
       <!-- SECTION 3: 快捷指令 -->
       <section class="section section-commands" id="commands" data-section="commands">
         <div class="section-inner">
-          <h2 class="section-h2">常用长文本，说一句就触发</h2>
+          <h2 class="section-h2">常用长文本，一句话触发</h2>
+          <p class="section-lead">把重复性内容保存成指令，说一句话即可完整输出。</p>
 
           <div class="commands-grid">
             <div class="commands-screenshot">
-              <img class="commands-screenshot-img"
-                   src="/media/commands-library.svg"
-                   alt="VoiceBridge 指令库截图"
-                   loading="lazy" />
+              <!-- Phone mockup showing library panel ( code-rendered ) -->
+              <div class="phone-mockup phone-mockup-md" aria-hidden="true">
+                <div class="phone-screen library-only">
+                  <!-- Library panel -->
+                  <div class="app-mockup-library">
+                    <div class="app-mockup-library-tabs">
+                      <span class="app-mockup-tab active">最近<span class="app-mockup-tab-count">3</span></span>
+                      <span class="app-mockup-tab">全部<span class="app-mockup-tab-count">11+</span></span>
+                      <span class="app-mockup-tab">自定义</span>
+                    </div>
+                    <div class="app-mockup-cmd-grid">
+                      <span class="app-mockup-cmd-btn recent">最小化修改</span>
+                      <span class="app-mockup-cmd-btn recent">代码审查</span>
+                      <span class="app-mockup-cmd-btn recent">UI 设计</span>
+                      <span class="app-mockup-cmd-btn">快速概览</span>
+                      <span class="app-mockup-cmd-btn">回复确认</span>
+                      <span class="app-mockup-cmd-btn">会议纪要</span>
+                      <span class="app-mockup-cmd-btn slash">/help</span>
+                      <span class="app-mockup-cmd-btn">周报模板</span>
+                      <span class="app-mockup-cmd-btn">需求说明</span>
+                      <span class="app-mockup-cmd-btn">测试用例</span>
+                      <span class="app-mockup-cmd-btn">部署清单</span>
+                      <span class="app-mockup-cmd-btn">问题排查</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
             </div>
 
             <ul class="commands-list">
@@ -255,30 +358,30 @@
             </ul>
           </div>
 
-          <p class="commands-footnote">内置 11 条预设，也可以把重复文本保存成自己的指令。</p>
+          <p class="commands-footnote">内置 11 条预设，也可自定义。</p>
         </div>
       </section>
 
       <!-- SECTION 4: 使用流程 -->
       <section class="section section-how" id="how" data-section="how">
         <div class="section-inner">
-          <h2 class="section-h2">两端连接，然后开始说</h2>
+          <h2 class="section-h2">三步开始用</h2>
 
           <ol class="how-steps">
             <li class="how-step">
               <span class="how-step-number" aria-hidden="true">1</span>
-              <h3 class="how-step-title">打开网页版。</h3>
-              <p class="how-step-body">在手机上创建账号或登录。</p>
+              <h3 class="how-step-title">手机打开网页版</h3>
+              <p class="how-step-body">在手机浏览器访问，注册或登录。</p>
             </li>
             <li class="how-step">
               <span class="how-step-number" aria-hidden="true">2</span>
-              <h3 class="how-step-title">安装桌面端。</h3>
-              <p class="how-step-body">使用同一个账号登录。</p>
+              <h3 class="how-step-title">电脑装桌面端</h3>
+              <p class="how-step-body">用同一账号登录，可同时连接多台。</p>
             </li>
             <li class="how-step">
               <span class="how-step-number" aria-hidden="true">3</span>
-              <h3 class="how-step-title">开始说。</h3>
-              <p class="how-step-body">按住录音，松开后继续在电脑上输入。</p>
+              <h3 class="how-step-title">选目标，开始说</h3>
+              <p class="how-step-body">在手机上选目标电脑，一键录音，文字直达那台电脑的光标处。</p>
             </li>
           </ol>
         </div>
@@ -288,21 +391,21 @@
       <section class="section section-download" id="download" data-section="download">
         <div class="section-inner">
           <h2 class="section-h2">选择你的桌面端</h2>
-          <p class="section-lead">支持 macOS 和 Windows。</p>
+          <p class="section-lead">支持 macOS 和 Windows，可多台同时安装。</p>
 
           <!-- Platform buttons container: filled dynamically by landing.js from /downloads.json -->
           <div class="download-platforms"
                id="download-platforms"
                data-download-container
                data-coming-label="即将提供"
-               data-free-note="可使用免费方案，无需信用卡。">
+               data-free-note="免费方案可用，无需信用卡。">
             <!--
               Each platform entry:
               <a class="download-platform" href="..." data-platform="darwin" data-arch="arm64">...</a>
             -->
           </div>
 
-          <p class="download-note">可使用免费方案，无需信用卡。</p>
+          <p class="download-note">免费方案可用，无需信用卡。</p>
         </div>
       </section>
     </main>

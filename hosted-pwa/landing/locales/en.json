@@ -4,7 +4,7 @@
   },
   "meta": {
     "title": "VoiceBridge - Speak on Your Phone, Type on Your Computer",
-    "description": "Use your phone as a voice input remote for your computer. VoiceBridge transcribes speech, sends text to the active field, and runs reusable commands.",
+    "description": "Turn your phone into a voice input remote. One tap to record, cloud transcribes, text appears at your cursor. Connect one phone to multiple computers and switch freely.",
     "canonical": "https://voicebridge-6kr.pages.dev/",
     "hreflang_en": "https://voicebridge-6kr.pages.dev/",
     "hreflang_zh_cn": "https://voicebridge-6kr.pages.dev/zh-CN/",
@@ -12,7 +12,7 @@
   },
   "og": {
     "title": "VoiceBridge - Speak on Your Phone, Type on Your Computer",
-    "description": "Use your phone as a voice input remote for your computer. VoiceBridge transcribes speech, sends text to the active field, and runs reusable commands.",
+    "description": "Turn your phone into a voice input remote. One tap to record, cloud transcribes, text appears at your cursor. Connect one phone to multiple computers and switch freely.",
     "url": "https://voicebridge-6kr.pages.dev/",
     "image": "https://voicebridge-6kr.pages.dev/og-image-en.png",
     "locale": "en_US"
@@ -35,11 +35,11 @@
   "hero": {
     "h1_line1": "Speak on your phone.",
     "h1_line2": "Type on your computer.",
-    "sr_subtitle": "Hold to record. VoiceBridge transcribes your speech and sends it to the active text field.",
+    "sr_subtitle": "VoiceBridge: one tap to record on your phone, cloud transcribes, text appears at your computer's cursor. Connect one phone to multiple computers and switch freely.",
     "typewriter": [
-      "VoiceBridge transcribes your speech and sends it to the active text field.",
-      "Hold to record on your phone. Release. Text appears on your computer.",
-      "Wrap long templates into commands. Trigger them with one sentence."
+      "One tap to record. Text appears at your cursor.",
+      "One phone, multiple computers. Switch freely.",
+      "Wrap long text into commands. Trigger with a phrase."
     ],
     "cta_primary": "Download desktop app",
     "cta_secondary": "Open web app",
@@ -47,23 +47,20 @@
     "video_coming": "Product demo coming soon"
   },
   "product": {
-    "title": "Voice input without switching windows",
-    "lead": "Your phone captures speech, your computer receives the text.",
-    "main_image": "/media/product-main.svg",
-    "main_image_alt": "VoiceBridge transcribing speech from phone to computer",
-    "main_title": "Cross-device input",
-    "main_body": "Your phone records audio, VoiceBridge transcribes it in the cloud, and the text is delivered to your signed-in computer.",
-    "aux1_eyebrow": "Active field",
-    "aux1_title": "Sends to the current input",
-    "aux1_body": "Text is delivered to the active window on your computer, so you can keep typing without switching apps.",
+    "title": "Core features",
+    "lead": "Phone records. Cloud transcribes. Computer receives.",
+    "main_title": "One tap, straight to cursor",
+    "main_body": "Tap to start recording, tap to stop. VoiceBridge transcribes in the cloud and delivers text directly to the active input field on your computer — no window switching.",
+    "aux1_eyebrow": "Multi-device",
+    "aux1_title": "One phone, many computers",
+    "aux1_body": "Sign in on multiple computers with the same account. Your phone auto-discovers all online devices — pick a target and send.",
     "aux2_eyebrow": "Fallback",
     "aux2_title": "Clipboard backup",
-    "aux2_body": "When auto-paste is not supported, the text is still copied to your computer clipboard."
+    "aux2_body": "When auto-paste isn't available, text is still copied to your computer's clipboard. Nothing is lost."
   },
   "commands": {
-    "title": "Reuse the text you type every day",
-    "screenshot": "/media/commands-library.svg",
-    "screenshot_alt": "VoiceBridge preset command library screenshot",
+    "title": "Long text, one phrase",
+    "lead": "Save repetitive content as commands. Say a phrase and get the whole thing typed out.",
     "item1_label": "Minimal changes",
     "item1_source": "Built-in preset",
     "item2_label": "Code review",
@@ -72,20 +69,20 @@
     "item3_source": "Built-in preset",
     "item4_label": "Quick overview",
     "item4_source": "Built-in preset",
-    "footnote": "11 built-in presets. Add your own commands for repeated text."
+    "footnote": "11 built-in presets. Add your own."
   },
   "how": {
-    "title": "Connect both devices, then speak",
-    "step1_title": "Open the web app.",
-    "step1_body": "Create an account or sign in on your phone.",
-    "step2_title": "Install the desktop app.",
-    "step2_body": "Sign in with the same account.",
-    "step3_title": "Speak.",
-    "step3_body": "Hold to record, release, and keep typing on your computer."
+    "title": "Get started in 3 steps",
+    "step1_title": "Open the web app",
+    "step1_body": "Visit on your phone's browser. Sign up or log in.",
+    "step2_title": "Install desktop app",
+    "step2_body": "Sign in with the same account. Connect multiple computers.",
+    "step3_title": "Pick a target, speak",
+    "step3_body": "Choose a computer on your phone, tap to record, and text lands right at that cursor."
   },
   "download": {
     "title": "Choose your desktop app",
-    "lead": "Available for macOS and Windows.",
+    "lead": "macOS and Windows. Install on multiple computers.",
     "coming_label": "Coming soon",
     "free_note": "Free plan available. No credit card required."
   },
@@ -104,5 +101,29 @@
     "col_language_title": "Language",
     "col_language_en": "English",
     "col_language_zh": "简体中文"
+  },
+  "phone_demo": {
+    "status": "Connected",
+    "auto_paste": "Auto-paste",
+    "input_placeholder": "Type text, or use voice recognition…",
+    "paste": "Paste",
+    "record": "Record",
+    "enter": "Enter",
+    "delete": "Delete",
+    "undo": "Undo",
+    "tab_recent": "Recent",
+    "tab_all": "All",
+    "tab_custom": "Custom",
+    "cmd1": "Minimal changes",
+    "cmd2": "Code review",
+    "cmd3": "UI design",
+    "cmd4": "Quick overview",
+    "cmd5": "Reply confirm",
+    "cmd6": "Meeting notes",
+    "cmd7": "Weekly report",
+    "cmd8": "Requirements",
+    "cmd9": "Test cases",
+    "cmd10": "Deploy checklist",
+    "cmd11": "Troubleshoot"
   }
 }

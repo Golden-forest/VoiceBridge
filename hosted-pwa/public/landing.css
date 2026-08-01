@@ -738,11 +738,14 @@ html[lang="zh-CN"] .section-lead {
 }
 
 .product-media-frame {
-  aspect-ratio: 16 / 10;
   border-radius: 12px;
   overflow: hidden;
   margin-bottom: 20px;
   background: var(--landing-surface-muted);
+  padding: 24px 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .product-media-img {
@@ -795,6 +798,9 @@ html[lang="zh-CN"] .product-aux-eyebrow {
 .commands-screenshot {
   position: sticky;
   top: 96px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .commands-screenshot-img {
@@ -1297,5 +1303,522 @@ html[lang="zh-CN"] .footer-col-title {
   html[lang="zh-CN"] .sr-only.hero-fallback {
     min-height: 84px;
     line-height: 1.7;
+  }
+}
+
+/* =========================================================================
+   16. Phone mockup + App UI replica ( code-rendered, no screenshots )
+   ========================================================================= */
+
+/* --- App design tokens ( scoped to phone mockup only ) --- */
+.phone-mockup {
+  /* Colors matching PWA style.css */
+  --app-bg-page: #fffbf5;
+  --app-bg-card: #ffffff;
+  --app-bg-soft: #fff5eb;
+  --app-text-primary: #1c1917;
+  --app-text-secondary: #78716c;
+  --app-text-muted: #7c756f;
+  --app-text-placeholder: #8a827c;
+  --app-border: rgba(0, 0, 0, 0.06);
+  --app-border-strong: rgba(0, 0, 0, 0.1);
+  --app-accent: #e8793a;
+  --app-accent-deep: #c2410c;
+  --app-accent-soft: #fff5eb;
+  --app-accent-gradient: linear-gradient(135deg, #f97316, #ea580c);
+  --app-accent-text: #ffffff;
+  --app-accent-dim: rgba(255, 140, 66, 0.15);
+  --app-accent-glow: rgba(232, 121, 58, 0.35);
+  --app-danger: #ef4444;
+  --app-shadow-card: 0 2px 12px rgba(200, 120, 50, 0.08), 0 1px 3px rgba(0, 0, 0, 0.04);
+  --app-shadow-accent: 0 2px 10px rgba(232, 121, 58, 0.3);
+  --app-shadow-accent-lg: 0 4px 16px rgba(232, 121, 58, 0.35);
+  --app-radius-lg: 18px;
+  --app-radius-md: 14px;
+  --app-radius-sm: 11px;
+  --app-gap: 5px;
+  --app-font-sans: "Nunito", "SF Pro Rounded", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+}
+
+/* --- Phone outer frame --- */
+.phone-mockup {
+  width: 280px;
+  max-width: 100%;
+  aspect-ratio: 9 / 19.5;
+  margin: 0 auto;
+  background: #1c1917;
+  border-radius: 36px;
+  padding: 8px;
+  box-shadow:
+    0 0 0 1.5px rgba(255, 255, 255, 0.08),
+    0 20px 60px rgba(0, 0, 0, 0.25),
+    0 8px 24px rgba(0, 0, 0, 0.12);
+  position: relative;
+  font-family: var(--app-font-sans);
+  box-sizing: border-box;
+}
+
+/* Dynamic island */
+.phone-mockup::before {
+  content: "";
+  position: absolute;
+  top: 16px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 72px;
+  height: 18px;
+  background: #000;
+  border-radius: 999px;
+  z-index: 10;
+  pointer-events: none;
+}
+
+/* Screen container */
+.phone-screen {
+  width: 100%;
+  height: 100%;
+  border-radius: 28px;
+  overflow: hidden;
+  background: linear-gradient(165deg, #fffbf5 0%, #fff5eb 40%, #fef7f0 100%);
+  display: flex;
+  flex-direction: column;
+  gap: var(--app-gap);
+  padding: 28px 7px 7px;
+  font-size: 11px;
+  color: var(--app-text-primary);
+  position: relative;
+}
+
+/* Larger variant for Product section */
+.phone-mockup-lg {
+  width: 300px;
+}
+
+/* --- App Header --- */
+.app-mockup-header {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: 5px;
+  min-height: 28px;
+  flex: 0 0 auto;
+}
+
+.app-mockup-brand-mark {
+  width: 22px;
+  height: 22px;
+  border-radius: 22.37%;
+  display: grid;
+  place-items: center;
+}
+
+.app-mockup-brand-mark img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  border-radius: 22.37%;
+}
+
+.app-mockup-brand {
+  font-size: 14px;
+  font-weight: 800;
+  color: var(--app-text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.app-mockup-header-btn {
+  width: 22px;
+  height: 22px;
+  display: grid;
+  place-items: center;
+  color: var(--app-text-secondary);
+}
+
+.app-mockup-header-btn svg {
+  width: 15px;
+  height: 15px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+/* --- Device Pill --- */
+.app-mockup-device-pill {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 7px;
+  border-radius: var(--app-radius-lg);
+  background: var(--app-bg-card);
+  box-shadow: var(--app-shadow-card);
+  flex: 0 0 auto;
+  min-height: 26px;
+}
+
+.app-mockup-device-icon {
+  width: 20px;
+  height: 20px;
+  border-radius: 999px;
+  background: var(--app-accent-gradient);
+  display: grid;
+  place-items: center;
+  color: var(--app-accent-text);
+  box-shadow: var(--app-shadow-accent);
+  flex: 0 0 auto;
+}
+
+.app-mockup-device-icon svg {
+  width: 12px;
+  height: 12px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.app-mockup-status-dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 999px;
+  background: var(--app-accent);
+  box-shadow: 0 0 4px rgba(232, 121, 58, 0.5);
+  flex: 0 0 auto;
+}
+
+.app-mockup-status-badge {
+  font-size: 9px;
+  font-weight: 700;
+  color: var(--app-accent-deep);
+  background: var(--app-accent-soft);
+  padding: 1px 5px;
+  border-radius: 999px;
+  white-space: nowrap;
+}
+
+.app-mockup-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  margin-left: auto;
+  font-size: 8px;
+  font-weight: 700;
+  color: var(--app-text-secondary);
+}
+
+.app-mockup-toggle-track {
+  width: 18px;
+  height: 10px;
+  border-radius: 999px;
+  background: var(--app-accent);
+  position: relative;
+  flex: 0 0 auto;
+}
+
+.app-mockup-toggle-track::after {
+  content: "";
+  position: absolute;
+  top: 1px;
+  right: 1px;
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  background: #fff;
+}
+
+/* --- Input Card --- */
+.app-mockup-input-card {
+  background: var(--app-bg-card);
+  border: 1px solid rgba(255, 255, 255, 0.8);
+  border-radius: var(--app-radius-lg);
+  box-shadow: var(--app-shadow-card);
+  padding: 7px 9px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+.app-mockup-text-input {
+  font-size: 10px;
+  line-height: 1.4;
+  color: var(--app-text-placeholder);
+  overflow: hidden;
+  flex: 1 1 auto;
+}
+
+.app-mockup-input-footer {
+  display: flex;
+  justify-content: flex-end;
+  font-size: 8px;
+  font-weight: 700;
+  color: var(--app-text-muted);
+  flex: 0 0 auto;
+}
+
+/* --- Primary Actions ( recording row ) --- */
+.app-mockup-primary-actions {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  flex: 0 0 auto;
+}
+
+.app-mockup-side-btn {
+  flex: 1 1 0;
+  max-width: 65px;
+  min-height: 44px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  padding: 3px 0;
+  border: none;
+  border-radius: var(--app-radius-sm);
+  background: var(--app-bg-card);
+  color: var(--app-text-secondary);
+  font-size: 8px;
+  font-weight: 700;
+  box-shadow: var(--app-shadow-card);
+}
+
+.app-mockup-side-btn svg {
+  width: 13px;
+  height: 13px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.9;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.app-mockup-record-btn {
+  width: 46px;
+  height: 46px;
+  display: grid;
+  place-items: center;
+  align-content: center;
+  gap: 1px;
+  border: 0;
+  border-radius: 999px;
+  background: var(--app-accent-gradient);
+  color: var(--app-accent-text);
+  box-shadow: var(--app-shadow-accent-lg);
+  flex: 0 0 auto;
+}
+
+.app-mockup-record-icon {
+  width: 16px;
+  height: 16px;
+}
+
+.app-mockup-record-icon svg {
+  width: 100%;
+  height: 100%;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.app-mockup-record-label {
+  font-size: 8px;
+  font-weight: 800;
+  line-height: 1;
+}
+
+/* --- Utility Keys --- */
+.app-mockup-utility-keys {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  flex: 0 0 auto;
+}
+
+.app-mockup-util-btn {
+  flex: 1 1 0;
+  max-width: 56px;
+  min-height: 28px;
+  border-radius: var(--app-radius-sm);
+  background: var(--app-bg-card);
+  border: none;
+  color: var(--app-text-secondary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  font-size: 8px;
+  font-weight: 700;
+  box-shadow: var(--app-shadow-card);
+}
+
+.app-mockup-util-btn svg {
+  width: 10px;
+  height: 10px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+/* --- Library Panel --- */
+.app-mockup-library {
+  flex: 1 1 auto;
+  min-height: 0;
+  border: 1px solid var(--app-border);
+  border-radius: var(--app-radius-lg);
+  background: var(--app-bg-card);
+  box-shadow: var(--app-shadow-card);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.app-mockup-library-tabs {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 4px 6px;
+  border-bottom: 1px solid var(--app-border);
+  flex: 0 0 auto;
+  overflow: hidden;
+}
+
+.app-mockup-tab {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 3px 7px;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--app-text-secondary);
+  font-size: 8px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.app-mockup-tab.active {
+  background: var(--app-accent);
+  color: var(--app-accent-text);
+  box-shadow: 0 1px 4px rgba(232, 121, 58, 0.3);
+}
+
+.app-mockup-tab-count {
+  font-size: 7px;
+  font-weight: 800;
+  min-width: 10px;
+  height: 10px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.25);
+  padding: 0 2px;
+}
+
+.app-mockup-tab:not(.active) .app-mockup-tab-count {
+  background: var(--app-accent-dim);
+  color: var(--app-accent);
+}
+
+/* Command grid */
+.app-mockup-cmd-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 3px;
+  padding: 4px 5px;
+  flex: 1 1 auto;
+  overflow: hidden;
+  align-content: start;
+}
+
+.app-mockup-cmd-btn {
+  min-height: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 3px;
+  border: none;
+  border-radius: 999px;
+  background: var(--app-bg-card);
+  color: var(--app-text-secondary);
+  font-size: 8px;
+  font-weight: 700;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  box-shadow: var(--app-shadow-card);
+}
+
+.app-mockup-cmd-btn.recent {
+  background: rgba(253, 110, 158, 0.12);
+  color: #F53F80;
+}
+
+.app-mockup-cmd-btn.slash {
+  background: var(--app-accent-dim);
+  color: var(--app-accent);
+}
+
+/* Library-only variant (Commands section) */
+.phone-mockup-md {
+  width: 260px;
+}
+
+.phone-mockup .library-only {
+  padding: 28px 7px 7px;
+}
+
+.phone-mockup .library-only .app-mockup-library {
+  flex: 1 1 auto;
+}
+
+.phone-mockup .library-only .app-mockup-cmd-grid {
+  gap: 4px;
+  padding: 6px 7px;
+}
+
+.phone-mockup .library-only .app-mockup-cmd-btn {
+  min-height: 24px;
+  font-size: 9px;
+}
+
+.phone-mockup .library-only .app-mockup-tab {
+  font-size: 9px;
+  padding: 4px 8px;
+}
+
+.phone-mockup .library-only .app-mockup-library-tabs {
+  padding: 5px 7px;
+}
+
+/* --- Responsive --- */
+@media (max-width: 1023px) {
+  .phone-mockup-lg {
+    width: 260px;
+  }
+  .phone-mockup-md {
+    width: 240px;
+  }
+}
+
+@media (max-width: 639px) {
+  .phone-mockup-lg {
+    width: 230px;
+  }
+  .phone-mockup-md {
+    width: 220px;
   }
 }
