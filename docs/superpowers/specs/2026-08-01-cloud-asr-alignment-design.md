@@ -2,9 +2,20 @@
 
 **日期：** 2026-08-01
 
-**文档版本：** v2
+**文档版本：** v3
 
-**状态：** 已按现有代码、腾讯云接口限制与 Supabase Edge Function 运行边界复核，可进入实施计划
+**状态：** 已按现有代码、腾讯云接口限制与 Supabase Edge Function 运行边界复核；v3 根据 sub-agent 审查报告修正 filler 正则边界 bug、补全文件清单、明示 3 个技术决策（deadline、import 路径、字段命名），可进入实施计划
+
+**v2→v3 变更摘要：**
+- admin 上限确认为 60 秒（用户确认），UI 显示真实值，不显示 ∞。
+- filler 正则修正：v2 的正则对"普通汉字+语气词+标点"模式无效（如"你好嗯嗯嗯，世界"漏删），且会产生重复标点。v3 改为更精确的匹配+清理链。
+- spec 4.3 总 deadline 补具体数值：总 12 秒，Flash 单次 8 秒，剩余 ≥ 3 秒才 fallback。
+- spec 6.1 明示 import 路径方案：复用 `protocol.js` 的 `../shared/planLimits.js` + build 归一化。
+- spec 4.7 明示 migration 字段改名：`max_audio_seconds` → `max_audio_ms`。
+- spec 13 补全遗漏文件：`cloudTranscribe.js`、`wav.ts`、`cors.ts`、`i18n/i18n.js`、多个测试文件。
+- spec 5.2 AudioWorklet 明确标注"本轮不做，留作独立后续任务"。
+- spec 12 Phase 0/1 依赖关系明示。
+- 修正 spec 8 typo。
 
 ---
 
@@ -160,26 +171,65 @@ ConvertNumMode: 1,
 1. 腾讯 `FilterModal=1` 负责第一层部分过滤。
 2. 本地只删除位于句首、句尾或标点/空白边界之间的连续语气词；不删除普通词内部字符。
 
-示意规则：
+v3 正则修正（v2 的正则对"普通汉字+语气词+标点"模式无效，且会产生重复标点）：
+
+核心设计：**语气词必须至少有一侧是边界（句首/句尾/标点/空白），才会被删除。** 两侧都是普通汉字时不删（避免破坏正常词）。
+
+- 模式 A：`边界 + 语气词 + 任意字符` — 删除语气词，保留边界。
+- 模式 B：`任意字符 + 语气词 + 边界` — 删除语气词，保留后随字符。
+
+这两条交替匹配可以覆盖：
+- "嗯，你好"（句首+filler+标点）→ 删
+- "你好嗯嗯嗯，世界"（汉字+filler+标点）→ 删（模式 B）
+- "你好嗯嗯嗯世界"（汉字+filler+汉字）→ 不删（保护正常词）
+
+实现规则（TypeScript / Edge Function 版）：
 
 ```ts
-const FILLER_TOKEN = /(^|[\s，,。.!！？?、；;：:])(?:嗯+|呃+|唔+|噢+|欸+|诶+|哼+|嘖+|啧+)(?=$|[\s，,。.!！？?、；;：:])/gu;
+// 模式 A：前导边界(捕获) + 语气词
+const FILLER_LEADING = /(^|[\s，,。.!！？?、；;：:])(嗯+|呃+|唔+|噢+|欸+|诶+|哼+|嘖+|啧+)/gu;
+// 模式 B：语气词 + 后置边界(捕获)
+const FILLER_TRAILING = /(嗯+|呃+|唔+|噢+|欸+|诶+|哼+|嘖+|啧+)([\s，,。.!！？?、；;：:]|$)/gu;
 
 export function removeFillerWords(text: string): string {
+  if (!text) return text;
   return text
-    .replace(FILLER_TOKEN, "$1")
-    .replace(/[ \t]{2,}/g, " ")
-    .replace(/\s+([，,。.!！？?、；;：:])/gu, "$1")
-    .trim();
+    .replace(FILLER_LEADING, "$1")              // 模式 A：保留前导边界
+    .replace(FILLER_TRAILING, "$2")             // 模式 B：保留后置边界
+    .replace(/([，,。.!！？?、；;：:])\1+/gu, "$1")  // 合并连续相同标点（如"，，"→"，"）
+    .replace(/[ \t]{2,}/g, " ")                  // 合并连续空格
+    .replace(/\s+([，,。.!！？?、；;：:])/gu, "$1")  // 删除标点前的空格
+    .replace(/^[\s，,。.!！？?、；;：:]+/u, "")      // 删除开头的标点/空格
+    .trim() || "";
 }
 ```
 
+> **注意**：模式 A 和模式 B 会重叠（两侧都是边界时两个模式都匹配）。先执行 A 再执行 B，A 已经删除了部分，B 对剩余的再清理，顺序不影响最终结果。
+
+LAN 端（JavaScript / Node 版）使用相同逻辑，去掉类型注解即可。
+
+**fixture 测试用例（两端共用，必须全部通过）：**
+
+| 输入 | 期望输出 | 说明 |
+|---|---|---|
+| `"嗯，你好"` | `"你好"` | 句首 filler + 标点 |
+| `"你好嗯嗯嗯，世界"` | `"你好，世界"` | 普通汉字+filler+标点（v2 漏删场景） |
+| `"嗯嗯嗯你好"` | `"你好"` | 句首连续 filler，无标点 |
+| `"你好，嗯嗯嗯，世界"` | `"你好，世界"` | 标点+filler+标点（v2 重复标点场景） |
+| `"哼唱"` | `"哼唱"` | 正常词保留（LAN v1 bug 场景） |
+| `"啧啧称奇"` | `"啧啧称奇"` | 正常词保留（LAN v1 bug 场景） |
+| `""` | `""` | 空文本 |
+| `"你好世界"` | `"你好世界"` | 无 filler |
+| `"嗯嗯嗯"` | `""` | 全 filler |
+| `"你好，世界嗯嗯嗯"` | `"你好，世界"` | filler 在句尾 |
+
 实现要求：
 
-- 后处理在 `transcribeTencentWav()` 内统一调用，确保 Flash 和 fallback 不会漏掉。
-- LAN `src/server/asr/transcriber.js` 同步采用相同行为。
-- 两端跑同一份 fixture，至少覆盖：句首 filler、标点之间 filler、连续 filler、空文本、“哼唱”“啧啧称奇”、标点保留。
-- 不删除“啊”，因为正常汉语词汇中出现频率高，误删风险更大。
+- 后处理在 `transcribeTencentWav()` 的 **Flash 和 SentenceRecognition 两条路径各自的 return 之前**统一调用，确保不漏。
+  - 推荐：提取为内部函数 `postProcessText(rawText: string): string`，两条路径各调一次。
+- LAN `src/server/asr/transcriber.js` 同步采用相同行为（替换 `FILLER_RE` 字符类为上述边界匹配）。
+- 两端跑同一份 fixture（上表 10 条）。
+- 不删除"啊"，因为正常汉语词汇中出现频率高，误删风险更大。
 
 ### 4.3 Provider 路由和总超时
 
@@ -189,10 +239,22 @@ export function removeFillerWords(text: string): string {
 
 - `<= 60s`：Flash 为主，SentenceRecognition 只作为短音频 fallback。
 - 正常录音由客户端在套餐上限处自动停止。后端的 `> 60s` 拒绝只处理绕过前端、计时器异常或手动构造的非法请求，不是正常用户流程。
-- 单次请求设置总 deadline，而不是每条 provider path 各拥有完整 10 秒。
-- 对“服务未开通、参数不支持”等明确错误可立即 fallback。
-- 对 timeout/网络错误，只有在总 deadline 尚有足够预算时才 fallback；不做第二轮 retry。
+- **总 deadline = 12 秒**（从 Edge 收到请求开始计时）。不再让每条 provider path 各拥有完整 10 秒。
+- **Flash 单次 timeout = 8 秒**（从当前 10 秒缩短）。Flash 失败后剩余预算 ≥ 3 秒才允许 SentenceRecognition fallback。
+- 对"服务未开通（如腾讯 code 4003）、参数不支持"等明确错误可立即 fallback，不消耗 timeout 预算。
+- 对 timeout/网络错误，只有在总 deadline 尚有 ≥ 3 秒预算时才 fallback；不做第二轮 retry。
 - 响应和日志记录 `provider=flash|sentence`、`fallback_reason` 和各阶段时长，但不记录音频或转写正文。
+
+实现要点：
+
+- `transcribeTencentWav()` 顶部记录 `const deadlineStart = Date.now()`。
+- `fetchWithTimeout` 改为接受动态 timeout 参数（而非写死 10_000）。
+  - Flash 调用传 `8_000`。
+  - SentenceRecognition fallback 调用传 `Math.max(1000, 12_000 - (Date.now() - deadlineStart))`。
+- 对 Flash 的 catch 块增加错误分类：
+  - 若 `error.message` 包含明确的服务不可用关键词（如 `4003`、`not enabled`）→ 立即 fallback。
+  - 若是 timeout/abort → 检查剩余预算是否 ≥ 3 秒。
+  - 其他错误 → 检查剩余预算是否 ≥ 3 秒（保守策略）。
 
 VoiceBridge 将 60 秒作为两条 provider path 的统一产品上限。腾讯 SentenceRecognition 官方限制为 60 秒内、3MB 内；即使 FlashRecognition 能处理更长音频，本项目也不开放该差异能力。
 
@@ -259,11 +321,17 @@ supabase migration new align_cloud_asr_limits
 
 新迁移需要：
 
-- 将单次时长判断改为毫秒比较。
-- 将 free/pro/admin batch 上限改为 15/60/60。
-- 保留 advisory lock、月额度、频率限制和 unique request 处理。
+- 将单次时长判断改为毫秒比较（不再使用 `ceil(ms/1000)`）。
+- 将 free/pro/admin batch 上限改为 15000ms / 60000ms / 60000ms。
+- **返回字段 `max_audio_seconds` 改名为 `max_audio_ms`**，内部值为毫秒。
+  - `transcribe/index.ts` 的读取代码（当前 `data?.max_audio_seconds`）需同步改为 `data?.max_audio_ms`。
+  - `reserve_and_get_plan()` 的返回 JSON 中用 `max_audio_ms` 替代 `max_audio_seconds`。
+- **月额度累加改为毫秒级**：当前 `sum(ceil(audio_duration_ms::numeric / 1000))` 改为 `sum(audio_duration_ms)`，月额度 `monthlySeconds` 也换算为毫秒比较（`monthlySeconds * 1000`）。
+- 保留 advisory lock、频率限制和 unique request 处理。
 - 继续只向 `service_role` 授予 RPC execute 权限。
 - 不使用用户可编辑的 metadata 判断 admin；继续读取受服务端控制的 subscription/profile 数据。
+
+> **文件命名**：按现有序号，新 migration 应为 `supabase/migrations/0015_align_cloud_asr_limits.sql`（sub-agent 执行 `supabase migration new` 时会自动生成序号）。
 
 ### 4.8 音频大小校验
 
@@ -292,7 +360,11 @@ supabase migration new align_cloud_asr_limits
 
 这会产生多次整段内存复制，并把计算集中在用户已经停止说话之后。短音频影响有限，录音越长越明显。
 
-### 5.2 推荐替换
+### 5.2 推荐替换（本轮不实施）
+
+> **v3 明示**：AudioWorklet 改造**不在本轮 Phase 1 范围内**。本轮 Phase 1 只在 `cloudRecorder.js` 增加 sample-count 停止机制。AudioWorklet 留作独立后续任务，待 Phase 0 测量数据证实 `encode_ms P95 > 120ms` 后再立项。
+
+以下为未来实施时的设计参考：
 
 在不改变后端协议的前提下，用 `AudioWorklet` 增量输出 16kHz Int16 PCM chunk：
 
@@ -302,8 +374,6 @@ supabase migration new align_cloud_asr_limits
 - 不再创建整段 Float32Array，也不在停止时重采样。
 - AudioWorklet 不可用时保留现有 ScriptProcessor fallback。
 - worklet 初始化在用户点击录音后完成；可在首次授权麦克风时预热，不影响停止后的关键路径。
-
-该改造是性能 P1：先用真实设备测量 `encode_ms`。如果当前 P95 已小于 120ms，可以在参数对齐之后单独发布；如果超过，和本轮一起实施。
 
 ---
 
@@ -317,7 +387,9 @@ supabase migration new align_cloud_asr_limits
 
 - `src/shared/planLimits.js` 作为浏览器/LAN JS 的唯一常量源，并补全 admin。
 - `src/public/app.js` 直接 import `PLAN_LIMITS`，删除内联副本。
-- hosted build 对 import path 做与 `protocol.js` 相同的路径归一化。
+  - **import 路径方案（v3 决策）**：`app.js` 写 `import { PLAN_LIMITS } from '../shared/planLimits.js'`（与 `protocol.js` 相同模式）。
+  - `src/public/shared/` 目录不需要创建。
+  - `hosted-pwa/scripts/build-static.mjs` 的 `cloudFiles` 归一化分支需扩展 `replaceAll` 规则，把 `"../shared/planLimits.js"` 替换为 `"./shared/planLimits.js"`（与现有 `"../shared/protocol.js"` → `"./shared/protocol.js"` 相同）。
 - Edge TypeScript 和 SQL 因运行环境不同保留副本，但新增测试解析三端值并断言一致。
 
 ### 6.2 Hosted PWA mirror
@@ -329,8 +401,18 @@ supabase migration new align_cloud_asr_limits
 - `wavEncoder.js`
 - `i18n/en.js`
 - `i18n/zh-CN.js`
+- `i18n/i18n.js`
 
-当前这些文件内容实际一致，但未被构建门禁覆盖。后续任何一侧修改而未同步，build 必须失败。
+> **注意**：当前需先验证这些文件两侧内容是否一致；若不一致，先手动同步再加入门禁。后续任何一侧修改而未同步，build 必须失败。
+
+**`cloudFiles` 归一化规则扩展**：
+
+当前 `build-static.mjs` 的 `cloudFiles` 循环（第 91-103 行）只对 `"../shared/protocol.js"` 做 `replaceAll`。加入新文件后需同时扩展：
+
+- `"../shared/protocol.js"` → `"./shared/protocol.js"`（现有）
+- `"../shared/planLimits.js"` → `"./shared/planLimits.js"`（新增）
+
+`cloudRecorder.js`、`cloudTranscribe.js`、`wavEncoder.js`、`i18n/*.js` 如果没有 `../shared/` import，归一化后应与源文件一致。
 
 ---
 
@@ -350,7 +432,7 @@ supabase migration new align_cloud_asr_limits
 为避免 provider 分支、套餐和 UI 出现不同语义，系统只维护一个批处理边界：
 
 - free：15 秒。
-- pro：admin：60 秒。
+- pro / admin：60 秒。
 - 全局绝对上限：60 秒。
 - PWA 录音达到 15/60 秒时自动停止，只生成并上传上限以内的 WAV。
 - Edge 的 60 秒校验只是一道安全兜底；正常 PWA 请求不会触发该错误。
@@ -447,24 +529,39 @@ success | failure_code
 
 ## 12. 实施顺序
 
-### Phase 0：先测量
+### Phase 0：先测量（可与 Phase 1 并行启动）
 
 1. 增加客户端时间点和 Edge Server-Timing。
 2. 采集当前基线，按音频时长和 provider path 分桶。
 
+> **Phase 0 与 Phase 1 的依赖关系（v3 明示）**：
+>
+> - Phase 1 的 Task 1-6 **不依赖** Phase 0 测量结果，可以立即并行启动。
+> - Phase 1 的 Task 7（provider 总 deadline）**使用 v3 给出的固定数值**（总 12s，Flash 8s），不依赖 Phase 0。后续可据 Phase 0 数据调优。
+> - Phase 0 的 `encode_ms` 测量结果只影响**独立的 AudioWorklet 后续任务**，不影响本轮 Phase 1。
+> - Phase 0 的 admin `reserve_ms` 测量结果用于验证删除 fast path 后的延迟是否可接受；若 P95 > 350ms，应优化 RPC 查询（如在 `usage_events(user_id, created_at desc, status)` 上建复合索引），但**不回退** fast path 删除决策。
+
 ### Phase 1：本轮必须完成
+
+**可并行启动的任务（无相互依赖）：**
 
 1. 对齐 Tencent 参数。
 2. LAN/Cloud 一起修正 filler 后处理和契约测试。
 3. 删除 admin fast path，所有请求保留一次原子 RPC。
-4. 新 migration 更新 15/60/60 batch limits 和毫秒级判断。
-5. 前端接入共享 PLAN_LIMITS，按真实上限停止，更新 i18n/UI。
+5. 前端接入共享 PLAN_LIMITS，按真实上限停止，更新 i18n/UI（`currentUserPlan` 新增）。
 6. 补全 hosted mirror build gate。
+
+**有依赖关系的任务（需前置任务完成后集成）：**
+
+4. 新 migration 更新 15/60/60 batch limits 和毫秒级判断。
+   - 依赖：Task 3（删 fast path）和 Task 5（前端 plan）需与此协调。
+   - migration 部署后才能集成测试 admin 路径。
 7. 增加 provider 总 deadline、fallback 分类和回归测试。
+   - 依赖：Task 1（参数对齐）和 Task 2（后处理）完成后，再重构 `transcribeTencentWav` 的 deadline 结构。
 
-### 可选性能优化
+### 不在本轮范围
 
-只有当基线显示 `encode_ms P95 > 120ms` 或 60 秒录音出现明显 UI 卡顿时，才单独实施 AudioWorklet 增量 PCM。它不是套餐对齐的前置条件，不与本轮功能修改捆绑。
+AudioWorklet 增量 PCM：只有当 Phase 0 基线显示 `encode_ms P95 > 120ms` 或 60 秒录音出现明显 UI 卡顿时，才作为独立后续任务立项。不与本轮功能修改捆绑。
 
 ---
 
@@ -475,18 +572,26 @@ Phase 1 预计涉及：
 | 文件 | 改动 |
 |---|---|
 | `supabase/functions/_shared/tencent_asr.ts` | 参数、统一后处理、deadline、fallback 分类 |
-| `supabase/functions/_shared/tencent_asr.test.js` | 两条 provider path 和后处理测试 |
-| `supabase/functions/transcribe/index.ts` | 删除 admin fast path、时序、waitUntil、Server-Timing、格式校验 |
+| `supabase/functions/_shared/tencent_asr.test.js` | 两条 provider path 参数测试 + filler fixture 10 条 |
+| `supabase/functions/transcribe/index.ts` | 删除 admin fast path、`max_audio_ms` 读取、waitUntil 统一、Server-Timing、格式校验 |
 | `supabase/functions/_shared/plan_limits.ts` | batch limits 15/60/60 |
-| 新 Supabase migration | 更新 RPC；不改 `0011_admin_plan.sql` |
-| `src/server/asr/transcriber.js` | 采用相同的保守 filler 行为 |
-| `src/shared/planLimits.js` | 补全 admin，作为前端共享源 |
-| `src/public/app.js` | import limits、current plan、真实时长停止、UI 状态 |
-| `src/public/cloudRecorder.js` | sample-count 上限；按测量结果决定是否同时上 AudioWorklet |
-| `src/public/i18n/zh-CN.js` | 动态上限文案 |
-| `src/public/i18n/en.js` | 动态上限文案 |
-| `hosted-pwa/scripts/build-static.mjs` | 扩大 mirror verification |
-| 对应 `hosted-pwa/public/*` 镜像 | 与源文件保持一致 |
+| `supabase/functions/_shared/wav.ts` | `parsePcmWavDurationMs` 增加格式校验返回（PCM/mono/16-bit/16kHz） |
+| `supabase/functions/_shared/cors.ts` | 暴露 `Server-Timing`、`X-Request-Id`；增加 `Access-Control-Expose-Headers` |
+| `supabase/functions/_shared/contracts.ts` | 新增 `fallback_reason` 相关常量（如有需要） |
+| `supabase/migrations/0015_align_cloud_asr_limits.sql`（新） | 更新 RPC：毫秒级判断、15/60/60 上限、`max_audio_ms` 字段 |
+| `src/server/asr/transcriber.js` | 采用相同的保守 filler 行为（替换 `FILLER_RE` 字符类） |
+| `src/server/asr/transcriber.test.js`（新） | LAN filler 契约测试（10 条 fixture） |
+| `src/shared/planLimits.js` | 补全 admin，free 的 maxAudioSeconds 改为 15 |
+| `src/public/app.js` | import PLAN_LIMITS、新增 `currentUserPlan`、动态上限停止、UI 状态 |
+| `src/public/cloudRecorder.js` | 接受 `maxDurationMs` 参数，sample-count 停止机制 |
+| `src/public/cloudTranscribe.js` | 透传 `request_id` 等可观测性字段到调用方 |
+| `src/public/i18n/zh-CN.js` | `reachedLimit` 改函数型；新增 `maxDurationHint` |
+| `src/public/i18n/en.js` | 同上 |
+| `hosted-pwa/scripts/build-static.mjs` | 扩大 mirror verification + `planLimits.js` 归一化 |
+| 对应 `hosted-pwa/public/*` 镜像 | 与源文件保持一致（cloudRecorder/cloudTranscribe/wavEncoder/i18n/*） |
+| 新增三端 plan_limits 一致性测试（位置待定） | 解析 JS/TS/SQL 三处 plan limit，断言一致 |
+
+**测试框架说明**：Edge Function 测试用 `node --test`（Node 20+ 原生 TypeScript），参考现有 `tencent_asr.test.js` 的 import 模式。LAN 端测试同样用 `node --test`。
 
 ---
 
@@ -498,4 +603,4 @@ Phase 1 预计涉及：
 
 ---
 
-**文档结束。下一步应先实现 Phase 0 测量，再据数据拆分 Phase 1 的实施任务。**
+**文档结束。v3 已补全所有技术决策和文件清单，可直接进入 writing-plans 阶段生成详细实施计划。Phase 0 测量可与 Phase 1 并行启动。**
