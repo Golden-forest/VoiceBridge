@@ -77,6 +77,7 @@ async function removeTestFiles(directory) {
 }
 
 async function verifyMirroredSources() {
+  // 1. Byte-exact mirrors: src/shared/* must equal hosted-pwa/public/shared/* verbatim.
   const exactMirrors = ["shared/protocol.js", "shared/planLimits.js"];
   for (const relativePath of exactMirrors) {
     const [localSource, cloudSource] = await Promise.all([
@@ -88,14 +89,19 @@ async function verifyMirroredSources() {
     }
   }
 
-  for (const relativePath of ["app.js", "cloudRealtime.js"]) {
+  // 2. Path-rewritten mirrors: src/public/<file> imports `../shared/<x>.js` (because
+  //    it sits next to src/shared at authoring time), but the published cloud copy
+  //    lives at public/<file> and must import `./shared/<x>.js`. Normalize before
+  //    comparing so the build gate fails only on real drift.
+  const cloudFiles = ["app.js", "cloudRealtime.js"];
+  for (const relativePath of cloudFiles) {
     const [localSource, cloudSource] = await Promise.all([
       readFile(path.join(projectRoot, "src", "public", relativePath), "utf8"),
       readFile(path.join(publicDir, relativePath), "utf8")
     ]);
     const normalizedLocalSource = localSource.replaceAll(
-      '"../shared/protocol.js"',
-      '"./shared/protocol.js"'
+      /"\.\.\/shared\/([^"]+\.js)"/g,
+      '"./shared/$1"'
     );
     if (normalizedLocalSource !== cloudSource) {
       throw new Error(`Cloud source drift detected: ${relativePath}`);
