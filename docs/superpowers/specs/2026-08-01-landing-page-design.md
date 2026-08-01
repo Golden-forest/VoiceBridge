@@ -6,9 +6,9 @@
 
 **目标版本：** v0.1.0
 
-**文档版本：** v3
+**文档版本：** v4
 
-**状态：** 已消解 v2 矛盾点（恢复暗色 Hero、确定双语构建期路线、明确素材占位边界），可进入实施计划
+**状态：** 已完成暗色 Hero、双语字体排版、响应式栅格与素材发布门槛审查，可进入实施计划
 
 ---
 
@@ -59,19 +59,19 @@
 
 ## 2. 设计判断
 
-**Design Read：** 面向个人效率用户和开发者的 SaaS 官网，视觉语言应清晰、克制、有真实产品感，以原生 CSS、现有品牌 Token 和轻量动效实现。
+**Design Read：** 面向个人效率用户和开发者的 SaaS 官网，以圆润友好的双语排版承载真实产品内容，并用暗色灰橙辉光和克制的跨设备粒子流建立 VoiceBridge 的视觉签名。
 
 | 维度 | 数值 | 说明 |
 |---|---:|---|
 | `DESIGN_VARIANCE` | 6 | 使用非对称 Hero 和不等分内容布局，但保持产品易读性 |
-| `MOTION_INTENSITY` | 5 | 动效用于解释数据流、反馈和状态变化，不做炫技式滚动劫持 |
+| `MOTION_INTENSITY` | 6 | Hero 同时包含粒子、打字机和产品媒体，但通过错峰启动、低透明度与 Reduced Motion 控制注意力 |
 | `VISUAL_DENSITY` | 4 | 保持官网节奏紧凑，避免 440vh 以上的冗长页面 |
 
 ### 2.1 视觉方向
 
-- 保留暖橙品牌色和 Nunito 字体。
+- 保留暖橙品牌色；英文和数字使用 Nunito，中文使用明确的圆润中文字体栈，避免依赖不可控的浏览器默认回退。
 - **Hero 区采用暗色橙辉光主题**（已确认决策 B）：深色径向背景 + 橙色辉光球 + 打字机副标题 + 背景微弱粒子流。暖橙渐变在暗色背景里像火焰发光，是 VoiceBridge 的核心视觉签名。
-- Hero 之后的 section 切换回暖白浅色主题，形成"暗色高潮 → 浅色细节"的节奏，与 Supabase / Apple / Vercel 大厂官网结构一致。
+- Hero 之后的 section 经过 64-96px 的短过渡切换回暖白浅色主题，形成“暗色高潮 → 浅色细节”的单次主题转场；不使用贯穿多个 section 的长渐变。
 - Footer 回到深色收尾。
 - 只使用一个橙色强调色体系，不加入紫色、蓝色或绿色装饰色。
 - Hero 内部使用非对称双栏（左侧文案 + 右侧真实产品录屏占位），但保留暗色辉光球作为整页背景层。
@@ -222,8 +222,8 @@ hosted-pwa/
 
 | 位置 | English | 简体中文 |
 |---|---|---|
-| Hero H1 | Speak on your phone. Type on your computer. | 手机说话，电脑输入。 |
-| Hero body | Hold to record. VoiceBridge transcribes your speech and sends it to the active text field. | 按住录音，松开转写。VoiceBridge 会把文字发送到电脑当前输入框。 |
+| Hero H1 | Speak on your phone. Type on your computer. | 说，即是写。 |
+| Hero body | Hold to record. VoiceBridge transcribes your speech and sends it to the active text field. | 手机说话，电脑输入。按住录音，松开转写，VoiceBridge 会把文字发送到电脑当前输入框。 |
 | Primary CTA | Download desktop app | 下载桌面端 |
 | Secondary CTA | Open web app | 打开网页版 |
 | Capability title | Voice input without switching windows | 不切窗口，直接输入 |
@@ -281,7 +281,7 @@ hosted-pwa/
 ```
 
 **配色分布：** 暗色 → 浅色 → 浅色 → 浅色 → 浅色 → 浅色 → 暗色。
-Hero 与 Footer 首尾呼应，中间 5 个 section 统一暖白浅色。
+Hero 与 Footer 首尾呼应，中间 4 个 section 统一暖白浅色。
 
 页面不设置总 `vh` 高度目标。所有 section 由内容决定高度。
 
@@ -293,7 +293,11 @@ Hero 与 Footer 首尾呼应，中间 5 个 section 统一暖白浅色。
 
 **位置：** sticky top，桌面高度 68px。
 
-**背景：** 暖白半透明表面、轻微 blur 和底部分隔线。
+**背景状态：**
+
+- 位于 Hero 内：`rgba(13, 10, 8, 0.55)` 深色半透明表面、暖白文字和轻微 blur；Logo、语言入口与次级链接均需在暗色背景上通过对比度检查。
+- 离开 Hero 后：暖白半透明表面、深色文字、轻微 blur 和底部分隔线。
+- 两种状态使用 180-240ms 的颜色、背景和边框过渡，不改变导航高度，不引起布局移动。
 
 **层级：** `z-index: 30`，统一记录在 landing 层级约定中。
 
@@ -312,40 +316,44 @@ Hero 与 Footer 首尾呼应，中间 5 个 section 统一暖白浅色。
 
 ### 7.2 Hero
 
-**布局：** `min-height: 100dvh`，最大内容宽度 1200px，桌面 `1fr 1.1fr` 非对称双栏，移动端单列。
+**布局：** `min-height: 100dvh`，最大内容宽度 1240px。Hero 使用独立的内容断点：`>= 1080px` 使用 `1.05fr 0.95fr` 非对称双栏、列间距 64px；`< 1080px` 切换为单列。该断点用于保证英文 H1 的两行宽度，不受全局 desktop 断点限制。媒体的视觉中心与左侧整组文案的视觉中心对齐，不只做顶部对齐。
 
 **主题（已确认决策 B）：** 暗色橙辉光。
 
 - 背景：`radial-gradient(ellipse at top right, #2a1810 0%, #1a1310 60%, #0d0a08 100%)`。
 - 装饰辉光球（绝对定位、`filter: blur()`）：
-  - 顶部右侧：`480×480px`, `background: rgba(234, 88, 12, 0.4)`, `top: -120px; right: -100px;`
-  - 底部左侧：`360×360px`, `background: rgba(249, 115, 22, 0.3)`, `bottom: -100px; left: -80px;`
-- 背景粒子流层：6-8 个橙色粒子，CSS `@keyframes` 驱动从左下到右上流动，`opacity: 0.45`，`pointer-events: none`。粒子流是辅助叙事（暗示"跨设备"），不抢打字机的视觉焦点。
+  - 顶部右侧：`480×480px`, `background: rgba(234, 88, 12, 0.28)`, `filter: blur(100px)`, `top: -120px; right: -100px;`
+  - 底部左侧：`360×360px`, `background: rgba(249, 115, 22, 0.16)`, `filter: blur(110px)`, `bottom: -100px; left: -80px;`
+- 背景粒子流层：6-8 个、核心尺寸 2-4px 的橙色粒子，CSS `@keyframes` 驱动，单次轨迹 6-10 秒，`opacity: 0.12-0.20`，`pointer-events: none`。轨迹从手机一侧朝电脑媒体区移动，并通过 mask 将主要活动范围限制在 Hero 中部至右侧；粒子不得穿过 H1 和 CTA，也不得延伸到正文 section。
+- 固定层级：背景 `0`、辉光 `1`、粒子 `2`、文案和产品媒体 `3`、导航 `30`。
 - 文字颜色：H1 主体用 `#f4f1ed`，"即是写 / type on your computer"用 `linear-gradient(135deg, #f97316, #fdba74)` + `background-clip: text`。
 
-**顶部留白：** 不超过 96px。
+**顶部与内部节奏：** 导航到内容 88-96px；H1 到打字机 24-28px；打字机到 CTA 28-32px；CTA 间距 12px。
 
 左侧内容（最多 4 类）：
 
 1. **静态 H1 大字**（不参与打字机）：
    - English: `Speak on your phone.` 换行 `Type on your computer.`
    - 中文：`说，` 换行 `即是写。`（"即是写"用橙色渐变文字）
-   - 字号：`clamp(48px, 7vw, 88px)`, 权重 800, 字距 `-0.035em`, 行高 1.0
+   - English：`clamp(48px, 4.8vw, 68px)`，权重 800，字距 `-0.025em`，行高 1.02
+   - 中文：`clamp(52px, 6vw, 76px)`，权重 700-800，字距 `-0.01em`，行高 1.08
+   - 两种语言均使用 `text-wrap: balance`，桌面目标为两行；不得通过压缩字距或缩放变形强行塞入两行
 2. **打字机副标题**（白色逐字打出，循环 3 条文案）：
    - English: `VoiceBridge transcribes your speech and sends it to the active text field.` 等三条轮播
    - 中文：`手机说话 → 文字自动出现在电脑光标处。` 等三条轮播
-   - 字号：`clamp(15px, 1.8vw, 19px)`, 颜色 `#f4f1ed`
-   - 打字速度 65ms/字，停留 1800ms，清空 25ms/字
+   - 字号：`clamp(16px, 1.5vw, 19px)`，行高 1.6，颜色 `#f4f1ed`
+   - 容器预留当前语言最长文案的高度，切换内容不得推动 CTA 或引起 CLS
+   - 英文打字速度 32-40ms/字符，中文 60-70ms/字；停留 1800ms，清空 25ms/字符
    - 光标：3px 宽 / 1.1em 高，颜色 `#f97316`，闪烁周期 900ms，`steps(1)`
 3. **两个 CTA**（在打字机下方）：
-   - 主 CTA: `Download desktop app / 下载桌面端` — `var(--accent-gradient)` + `var(--shadow-accent-lg)`
+   - 主 CTA: `Download desktop app / 下载桌面端` — `var(--hero-button-primary-gradient)` + 暖色阴影；不复用亮橙文字渐变作为按钮背景
    - 次 CTA: `Open web app / 打开网页版` — `rgba(255,255,255,0.08)` 半透明 + `1px solid rgba(255,255,255,0.15)` 边框，指向 `/app`
 4. **无额外版本号、平台清单或信用卡提示**（保持 Hero 纯净）
 
 右侧使用真实产品演示（**本次实施交付占位，录屏后续替换**）：
 
-- 占位区：`aspect-ratio: 4/3`, 背景 `rgba(255,255,255,0.04)`, 边框 `1px solid rgba(249, 115, 22, 0.2)`, 圆角 `var(--landing-radius-media)`, 内部居中显示 "Product demo coming soon / 产品演示即将上线" 文字 + 播放图标。
-- 占位必须预留 `<video>` 标签位置（包含 `poster`、`muted autoplay loop playsinline` 属性），但 `src` 留空，poster 指向占位图。
+- 桌面占位区使用 `aspect-ratio: 16/10`，移动端使用 `4/3`；背景 `rgba(255,255,255,0.04)`，边框 `1px solid rgba(249, 115, 22, 0.2)`，圆角 `var(--landing-radius-media)`，内部居中显示 "Product demo coming soon / 产品演示即将上线" 文字 + 播放图标。
+- 占位必须预留 `<video>` 标签位置（包含 `poster`、`muted autoplay loop playsinline` 属性），素材未就绪时不输出 `src` 或 `<source>`，poster 指向占位图，避免空 URL 请求当前页面。
 - 真实素材到位后的目标规格：8-12 秒静音循环 `webm` + `mp4` fallback，展示手机按住录音 → 松开 → 电脑活动输入框出现文字的完整链路。
 - 录屏内不展示真实邮箱、用户姓名、Token 或其他敏感数据。
 - 移动端仍显示此占位/视频区域，不隐藏。
@@ -373,7 +381,7 @@ Hero 与 Footer 首尾呼应，中间 5 个 section 统一暖白浅色。
 
 **标题：** Voice input without switching windows / 不切窗口，直接输入。
 
-**布局：** 一个主能力大面板加两个不同尺寸的辅助面板，不使用三等分卡片。
+**布局：** 桌面使用 12 栏栅格，主能力大面板占 7 栏，右侧两个辅助面板占 5 栏并纵向排列，间距 24px；面板内边距 32-40px，主媒体优先使用 `16/10`。不使用三等分卡片。
 
 内容：
 
@@ -387,7 +395,7 @@ Hero 与 Footer 首尾呼应，中间 5 个 section 统一暖白浅色。
 
 **标题：** Reuse the text you type every day / 常用长文本，说一句就触发。
 
-**布局：** 左侧真实 PWA 指令库截图，右侧为 4 个代表性指令条目。
+**布局：** 桌面端左侧真实 PWA 指令库竖向截图占 38-42%，右侧 4 个代表性指令条目占 58-62%，列间距 56-64px。移动端截图居中且最大宽度 360px，条目在空间允许时使用两列。
 
 展示当前数据库中真实存在的代表性预设：
 
@@ -411,7 +419,7 @@ Hero 与 Footer 首尾呼应，中间 5 个 section 统一暖白浅色。
 
 **标题：** Connect both devices, then speak / 两端连接，然后开始说。
 
-**布局：** 桌面端横向三步，移动端纵向三步。使用真实动词作为标题，不显示“Stage 1”一类标签。
+**布局：** 桌面端使用开放式三列时间线，列间距 40px；移动端使用纵向三步。不为三步增加完全相同的卡片外壳。使用真实动词作为标题，不显示“Stage 1”一类标签。
 
 | 序号 | English | 简体中文 |
 |---:|---|---|
@@ -482,6 +490,11 @@ Footer 只放真实可用链接：
 
 ```css
 :root {
+  /* 字体：Nunito 当前仅覆盖 Latin，中文必须有显式字体栈 */
+  --font-display: "Nunito", "MiSans", "PingFang SC", "Microsoft YaHei UI", "Noto Sans SC", sans-serif;
+  --font-body: "Nunito", "MiSans", "PingFang SC", "Microsoft YaHei UI", "Noto Sans SC", sans-serif;
+  --font-mono: "JetBrains Mono", "SFMono-Regular", Consolas, monospace;
+
   /* 浅色 section（功能 / 流程 / 下载） */
   --landing-bg: #fffbf5;
   --landing-surface: #ffffff;
@@ -506,8 +519,9 @@ Footer 只放真实可用链接：
   --hero-accent-soft: #fdba74;
   --hero-accent-deep: #ea580c;
   --hero-accent-gradient: linear-gradient(135deg, #f97316, #fdba74);
-  --hero-glow-1: rgba(234, 88, 12, 0.4);
-  --hero-glow-2: rgba(249, 115, 22, 0.3);
+  --hero-button-primary-gradient: linear-gradient(135deg, #c2410c, #9a3412);
+  --hero-glow-1: rgba(234, 88, 12, 0.28);
+  --hero-glow-2: rgba(249, 115, 22, 0.16);
   --hero-border: rgba(249, 115, 22, 0.2);
   --hero-surface: rgba(255, 255, 255, 0.04);
   --hero-button-secondary-bg: rgba(255, 255, 255, 0.08);
@@ -516,14 +530,15 @@ Footer 只放真实可用链接：
   /* === 打字机 === */
   --cursor-color: #f97316;
   --cursor-width: 3px;
-  --type-speed: 65ms;
+  --type-speed-en: 36ms;
+  --type-speed-zh: 65ms;
   --type-pause: 1800ms;
   --type-clear-speed: 25ms;
 
   /* === 粒子流 === */
   --particle-color: #f97316;
-  --particle-glow: 0 0 8px #f97316, 0 0 16px rgba(249, 115, 22, 0.5);
-  --particle-opacity: 0.45;
+  --particle-glow: 0 0 6px rgba(249, 115, 22, 0.6), 0 0 14px rgba(249, 115, 22, 0.28);
+  --particle-opacity: 0.16;
 
   /* === Footer 暗色 === */
   --footer-bg: #1c1917;
@@ -533,13 +548,42 @@ Footer 只放真实可用链接：
 }
 ```
 
-**说明：** Hero 暗色 token 与浅色 token 完全独立，避免互相污染。CTA 主按钮在 Hero 暗色区使用 `var(--accent-gradient)`（来自 PWA `style.css`），保证与 PWA 视觉签名一致；在浅色 section 中 CTA 使用 `--landing-accent` 纯色，满足 WCAG AA 对比度。
+**说明：** Hero 暗色 token 与浅色 token 完全独立，避免互相污染。亮橙渐变只用于标题和装饰；Hero 主 CTA 使用更深的 `--hero-button-primary-gradient`，确保白色普通字号文字达到 WCAG AA。在浅色 section 中 CTA 使用 `--landing-accent` 纯色。
+
+### 8.1 双语字体与排版系统
+
+当前项目自托管的 Nunito 为 Latin subset，只负责英文、数字和拉丁符号。实现时必须为中文指定显式字体栈，不得只写 `sans-serif` 后依赖浏览器随机回退。
+
+字体策略：
+
+- 默认低依赖方案：Nunito + `PingFang SC` + `Microsoft YaHei UI` + `Noto Sans SC`。
+- 推荐一致性方案：英文和数字使用 Nunito，中文正文自托管 MiSans；引入前必须核对并记录字体版本、子集范围和许可文件。
+- 如需更强的中文标题个性，可仅在中文 H1 评估得意黑；不得用于正文、导航和移动端密集 UI。
+- JetBrains Mono 只用于命令、平台架构、文件大小和代码，不用于普通 eyebrow、正文或功能标题。
+- 页面根节点设置 `font-synthesis: none` 和 `font-optical-sizing: auto`；实际使用字重限定为 400、600、700、800。
+
+排版规格：
+
+| 元素 | English | 简体中文 |
+|---|---|---|
+| Hero H1 | `clamp(48px, 4.8vw, 68px)` / 800 / 1.02 / `-0.025em` | `clamp(52px, 6vw, 76px)` / 700-800 / 1.08 / `-0.01em` |
+| Section H2 | `clamp(32px, 4vw, 48px)` / 700-800 / 1.15 | `clamp(30px, 3.8vw, 46px)` / 700 / 1.2 |
+| 正文（桌面） | 17px / 1.65，最大宽度 58-62ch | 17px / 1.7，最大宽度 28-32em |
+| 正文（移动端） | 16px / 1.65 | 16px / 1.75 |
+| 导航 | 14px / 700 | 14px / 600 |
+| CTA | 15px / 700 / 不换行 | 15px / 700 / 不换行 |
+
+- H1 和 Section H2 使用 `text-wrap: balance`，正文不使用强制 balance。
+- 中英文分别设置字距和行高，不用一组紧缩参数覆盖两种书写系统。
+- Section 标题到主媒体或内容栅格间距 48-64px。
+- Section 上下留白：桌面 112px、平板 80px、移动端 64px。
+- 字体文件必须设置 `font-display: swap` 并预加载首屏实际使用的最小子集；为媒体和打字机区域预留尺寸，字体切换后 CLS 仍需小于 0.1。
 
 **其他视觉规则：**
 
 - 主按钮采用经过对比度验证的颜色，普通字号至少达到 WCAG AA 4.5:1。
 - 正文、次级文字、边框、Focus ring 均需实际测量对比度。
-- 保留 Nunito 和 JetBrains Mono 自托管字体，设置 `font-display: swap`。
+- 保留 Nunito 和 JetBrains Mono 自托管字体，并按 §8.1 明确中文字体来源与回退策略。
 - 图标使用同一套开源图标资源并在构建时自托管，不混用 emoji 和多套线性图标。
 
 ---
@@ -551,7 +595,9 @@ Footer 只放真实可用链接：
 - 视频解释产品工作流。
 - 文字抵达动画解释状态变化。
 - Hover 和 active 只提供操作反馈。
-- 不增加粒子、视差、磁吸按钮和滚动劫持。
+- 粒子流仅允许存在于 Hero，并遵守 §7.2 的数量、范围、透明度和层级限制；正文不增加粒子。
+- 不增加视差、磁吸按钮和滚动劫持。
+- 粒子缓慢持续运动；打字机在 Hero 入场后再启动，避免粒子、文字和视频同时争夺注意力。
 - 动画仅修改 `transform` 和 `opacity`。
 
 ### 9.2 Reduced Motion
@@ -560,6 +606,7 @@ Footer 只放真实可用链接：
 
 - 视频不自动播放，显示 poster 和播放按钮。
 - 文字抵达动画直接显示最终文本。
+- 隐藏 Hero 粒子并直接显示第一条完整的打字机文案。
 - 平滑滚动改为即时跳转。
 - 禁止无限循环动画。
 - 所有 `setTimeout` 和事件监听提供停止或清理逻辑。
@@ -701,21 +748,22 @@ wide:    >= 1440px
 
 ### 13.1 Hero
 
-- Desktop：双栏，文字约 46%，媒体约 54%。
-- Tablet：双栏缩窄，CTA 仍保持单行。
-- Mobile：文字在上，真实双端演示在下，媒体比例约 4:3。
+- `>= 1080px`：双栏 `1.05fr 0.95fr`，最大宽度 1240px，列间距 64px；英文和中文 H1 均不得超过两行。
+- `< 1080px`：切换为单栏，文字在上，真实双端演示在下，不保留被挤压的窄双栏。
+- Mobile：媒体比例约 4:3；CTA 优先保持单行，空间不足时整组纵向排列，不压缩按钮文字。
+- 在 375px、768px、960px、1024px、1080px、1440px 分别验证 H1 行数、打字机预留高度、CTA 换行和媒体比例；320px 作为最低无溢出检查。
 
 ### 13.2 产品能力
 
-- Desktop：主面板跨两列，两个辅助面板分布在侧边或下方。
+- Desktop：12 栏栅格，主面板 7 栏，两个辅助面板在右侧 5 栏内纵向排列。
 - Tablet：主面板全宽，辅助面板双列。
 - Mobile：严格单列。
 
 ### 13.3 快捷指令
 
-- Desktop：截图和条目双栏。
+- Desktop：截图占 38-42%，条目占 58-62%，列间距 56-64px。
 - Tablet：截图在上，条目两列。
-- Mobile：截图在上，条目两列；320px 下仍保证每项可读。
+- Mobile：截图在上且最大宽度 360px，条目在空间允许时两列；320px 下无法保证可读宽度时允许单列。
 
 ### 13.4 使用流程和下载
 
@@ -746,9 +794,12 @@ wide:    >= 1440px
 
 ### 14.3 视觉和交互
 
-- 首屏使用真实产品媒体，不出现假设备 mockup。
-- 页面不出现三张等宽功能卡、重复 eyebrow、粒子流或无意义循环动画。
-- 320px、768px、1024px、1440px 无横向溢出和内容遮挡。
+- 开发验收允许使用 §16 定义的明确占位素材；公开发布验收必须使用真实产品 poster、产品演示媒体和指令库截图。
+- 不出现假设备 mockup、三张等宽功能卡、重复 eyebrow、正文粒子或无意义循环动画。
+- Hero 粒子仅在指定区域内运动，不穿过 H1 和 CTA；Reduced Motion 下完全隐藏。
+- 320px、375px、768px、960px、1024px、1080px、1440px 无横向溢出和内容遮挡。
+- 英文和中文 H1 在 `>= 1080px` 时均不超过两行；字体加载前后 CTA 和媒体不跳动。
+- 导航在暗色 Hero 和浅色正文两种状态下均通过文字、图标和 Focus 对比度检查，状态切换不改变高度。
 - 导航、语言切换、移动菜单和下载控件均可键盘操作。
 - 所有交互有 hover、focus-visible、active 和 disabled 状态。
 
@@ -759,6 +810,7 @@ wide:    >= 1440px
 - INP < 200ms。
 - CLS < 0.1。
 - Hero poster 预留宽高，视频不引起布局移动。
+- 打字机容器按当前语言最长文案预留高度，不引起布局移动。
 - 非首屏媒体使用懒加载，首屏资源总量在实施计划中设预算。
 
 ### 14.5 可访问性
@@ -793,19 +845,19 @@ wide:    >= 1440px
 
 ---
 
-## 16. 素材依赖与本次实施完成标准
+## 16. 素材依赖、开发完成与发布门槛
 
-### 16.1 本次实施完成标准（已确认）
+### 16.1 本次开发完成标准（已确认）
 
-**本次实施交付"占位 + 占位样式完整"作为完成标准。** 真实录屏、截图、OG 图由用户后续替换，不需要在本次 sub-agent 任务中产出。
+**本次开发交付以“占位 + 占位样式完整”作为完成标准。** 真实录屏、截图、OG 图由用户后续替换，不需要在本次实现任务中产出。该标准只代表页面代码和布局完成，不代表官网已经满足公开发布条件。
 
 ### 16.2 占位规则
 
 所有媒体位置在素材未准备好时使用明确的占位：
 
-1. **Hero 右侧视频区**：`<video>` 标签预留正确属性，`src` 留空，`poster` 指向 SVG/PNG 占位图（含"Product demo coming soon"文字 + 播放图标）。
-2. **产品能力 section 主面板**：同样预留 `<img>` 或 `<video>` 位置，src 留空。
-3. **快捷指令 section 左侧截图**：预留 `<img>` 位置，占位图含"Preset library screenshot"文字。
+1. **Hero 右侧视频区**：`<video>` 标签预留正确属性，素材未就绪时不输出 `src` 或 `<source>`，`poster` 指向 SVG/PNG 占位图（含“Product demo coming soon”文字 + 播放图标）。
+2. **产品能力 section 主面板**：同样预留 `<img>` 或 `<video>` 位置；`img` 指向本地占位图，`video` 在素材未就绪时省略媒体源。
+3. **快捷指令 section 左侧截图**：预留 `<img>` 位置并指向本地占位图，占位图含“Preset library screenshot”文字。
 4. **OG 分享图**：`og:image` 指向一张通用占位图（`1200x630`，含 VoiceBridge logo + 主色背景）。
 
 ### 16.3 占位禁止行为
@@ -814,14 +866,16 @@ wide:    >= 1440px
 - 不使用 AI 生成图像冒充产品截图。
 - 不在占位图上使用真实用户数据样例。
 
-### 16.4 用户后续需补齐的真实素材
+### 16.4 公开发布门槛
 
-发布前（或发布后及时）补齐：
+公开发布前必须补齐：
 
 1. 手机录音到电脑输入框的 8-12 秒脱敏录屏（webm + mp4）。
 2. 录屏对应 poster 图。
 3. PWA 指令库真实截图。
 4. `1200x630` 的英文和中文通用 OG 分享图。
+
+公开版本不得出现 “Product demo coming soon / 产品演示即将上线”、通用截图占位文字或占位 OG 图。若真实视频尚未完成，允许使用真实产品静态截图作为 Hero poster，并暂时改为用户主动播放或纯静态展示，但不得用虚构界面代替。
 
 ---
 
