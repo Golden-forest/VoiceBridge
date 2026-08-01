@@ -84,7 +84,7 @@ githubBtn?.addEventListener("click", async () => {
   setMessage("");
   githubBtn.disabled = true;
   try {
-    const redirectTo = new URL("/", window.location.href).href;
+    const redirectTo = new URL("/app", window.location.href).href;
     const { error } = await supabase.auth.signInWithOAuth({
       provider: "github",
       options: { redirectTo }

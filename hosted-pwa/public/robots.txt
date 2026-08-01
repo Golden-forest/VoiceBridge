@@ -1,0 +1,6 @@
+User-agent: *
+Allow: /
+Allow: /zh-CN/
+Disallow: /app
+
+Sitemap: https://voicebridge-6kr.pages.dev/sitemap.xml

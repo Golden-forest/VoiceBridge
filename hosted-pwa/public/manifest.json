@@ -1,7 +1,7 @@
 {
   "name": "VoiceBridge",
   "short_name": "VoiceBridge",
-  "start_url": "/",
+  "start_url": "/app",
   "scope": ".",
   "display": "standalone",
   "background_color": "#fffbf5",

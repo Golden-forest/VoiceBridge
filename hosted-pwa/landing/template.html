@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="en">
+<html lang="{{ html.lang }}">
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
@@ -13,26 +13,26 @@
     </script>
 
     <!-- Primary Meta -->
-    <title>VoiceBridge - Speak on Your Phone, Type on Your Computer</title>
-    <meta name="description" content="Use your phone as a voice input remote for your computer. VoiceBridge transcribes speech, sends text to the active field, and runs reusable commands." />
-    <link rel="canonical" href="https://voicebridge-6kr.pages.dev/" />
-    <link rel="alternate" hreflang="en" href="https://voicebridge-6kr.pages.dev/" />
-    <link rel="alternate" hreflang="zh-CN" href="https://voicebridge-6kr.pages.dev/zh-CN/" />
-    <link rel="alternate" hreflang="x-default" href="https://voicebridge-6kr.pages.dev/" />
+    <title>{{ meta.title }}</title>
+    <meta name="description" content="{{ meta.description }}" />
+    <link rel="canonical" href="{{ meta.canonical }}" />
+    <link rel="alternate" hreflang="en" href="{{ meta.hreflang_en }}" />
+    <link rel="alternate" hreflang="zh-CN" href="{{ meta.hreflang_zh_cn }}" />
+    <link rel="alternate" hreflang="x-default" href="{{ meta.hreflang_default }}" />
 
     <!-- Open Graph -->
     <meta property="og:type" content="website" />
-    <meta property="og:title" content="VoiceBridge - Speak on Your Phone, Type on Your Computer" />
-    <meta property="og:description" content="Use your phone as a voice input remote for your computer. VoiceBridge transcribes speech, sends text to the active field, and runs reusable commands." />
-    <meta property="og:url" content="https://voicebridge-6kr.pages.dev/" />
-    <meta property="og:image" content="https://voicebridge-6kr.pages.dev/og-image-en.png" />
-    <meta property="og:locale" content="en_US" />
+    <meta property="og:title" content="{{ og.title }}" />
+    <meta property="og:description" content="{{ og.description }}" />
+    <meta property="og:url" content="{{ og.url }}" />
+    <meta property="og:image" content="{{ og.image }}" />
+    <meta property="og:locale" content="{{ og.locale }}" />
 
     <!-- Twitter Card -->
     <meta name="twitter:card" content="summary_large_image" />
-    <meta name="twitter:title" content="VoiceBridge - Speak on Your Phone, Type on Your Computer" />
-    <meta name="twitter:description" content="Use your phone as a voice input remote for your computer. VoiceBridge transcribes speech, sends text to the active field, and runs reusable commands." />
-    <meta name="twitter:image" content="https://voicebridge-6kr.pages.dev/og-image-en.png" />
+    <meta name="twitter:title" content="{{ og.title }}" />
+    <meta name="twitter:description" content="{{ og.description }}" />
+    <meta name="twitter:image" content="{{ og.image }}" />
 
     <!-- Structured Data: SoftwareApplication -->
     <script type="application/ld+json">
@@ -42,8 +42,8 @@
         "name": "VoiceBridge",
         "applicationCategory": "UtilitiesApplication",
         "operatingSystem": "macOS, Windows",
-        "description": "Use your phone as a voice input remote for your computer. VoiceBridge transcribes speech, sends text to the active field, and runs reusable commands.",
-        "url": "https://voicebridge-6kr.pages.dev/"
+        "description": "{{ meta.description }}",
+        "url": "{{ meta.canonical }}"
       }
     </script>
 
@@ -58,30 +58,30 @@
     <!-- NAV -->
     <header class="landing-nav" id="landing-nav" data-section="nav">
       <div class="landing-nav-inner">
-        <a class="landing-nav-brand" href="/" aria-label="VoiceBridge">
+        <a class="landing-nav-brand" href="{{ nav.brand_href }}" aria-label="VoiceBridge">
           <img src="/icons/icon-192.png" alt="" width="24" height="24" aria-hidden="true" />
-          <span>VoiceBridge</span>
+          <span>{{ nav.brand }}</span>
         </a>
-        <nav class="landing-nav-links" aria-label="Primary navigation">
-          <a href="#product">Product</a>
-          <a href="#commands">Commands</a>
-          <a href="#how">How it works</a>
-          <a href="#download">Download</a>
+        <nav class="landing-nav-links" aria-label="{{ nav.links_aria }}">
+          <a href="#product">{{ nav.link_product }}</a>
+          <a href="#commands">{{ nav.link_commands }}</a>
+          <a href="#how">{{ nav.link_how }}</a>
+          <a href="#download">{{ nav.link_download }}</a>
         </nav>
         <div class="landing-nav-actions">
           <a class="landing-nav-lang"
-             href="/zh-CN/"
-             hreflang="zh-CN"
-             aria-label="Switch to Simplified Chinese"
-             data-event="landing_language_switch">中文</a>
+             href="{{ nav.lang_href }}"
+             hreflang="{{ nav.lang_hreflang }}"
+             aria-label="{{ nav.lang_aria }}"
+             data-event="landing_language_switch">{{ nav.lang_label }}</a>
           <a class="landing-nav-cta"
              href="/app"
              data-event="landing_open_app"
-             data-section="nav">Open app</a>
+             data-section="nav">{{ nav.open_app }}</a>
           <button type="button"
                   class="landing-nav-menu-btn"
                   id="landing-nav-menu-btn"
-                  aria-label="Open menu"
+                  aria-label="{{ nav.menu_aria }}"
                   aria-expanded="false"
                   aria-controls="landing-nav-mobile-menu">
             <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true">
@@ -106,12 +106,12 @@
         <div class="hero-inner">
           <div class="hero-content">
             <h1 class="hero-h1">
-              <span class="hero-h1-line">Speak on your phone.</span>
-              <span class="hero-h1-line hero-h1-accent">Type on your computer.</span>
+              <span class="hero-h1-line">{{ hero.h1_line1 }}</span>
+              <span class="hero-h1-line hero-h1-accent">{{ hero.h1_line2 }}</span>
             </h1>
 
             <!-- Static text for screen readers -->
-            <span class="sr-only">Hold to record. VoiceBridge transcribes your speech and sends it to the active text field.</span>
+            <span class="sr-only">{{ hero.sr_subtitle }}</span>
 
             <!-- Typewriter target ( visual only ) -->
             <div class="hero-typewriter"
@@ -123,17 +123,17 @@
             </div>
 
             <!-- JSON island for typewriter copy -->
-            <script type="application/json" id="typewriter-data">["VoiceBridge transcribes your speech and sends it to the active text field.","Hold to record on your phone. Release. Text appears on your computer.","Wrap long templates into commands. Trigger them with one sentence."]</script>
+            <script type="application/json" id="typewriter-data">{{ hero.typewriter }}</script>
 
             <div class="hero-cta">
               <a class="hero-cta-primary"
                  href="#download"
                  data-event="landing_download"
-                 data-section="hero">Download desktop app</a>
+                 data-section="hero">{{ hero.cta_primary }}</a>
               <a class="hero-cta-secondary"
                  href="/app"
                  data-event="landing_open_app"
-                 data-section="hero">Open web app</a>
+                 data-section="hero">{{ hero.cta_secondary }}</a>
             </div>
           </div>
 
@@ -150,14 +150,14 @@
                      loop
                      playsinline
                      preload="none"
-                     poster="/media/hero-poster.svg">
+                     poster="{{ hero.video_poster }}">
               </video>
               <div class="hero-media-placeholder" id="hero-media-placeholder">
                 <svg class="hero-media-play" viewBox="0 0 24 24" width="56" height="56" aria-hidden="true">
                   <circle cx="12" cy="12" r="11" fill="rgba(249,115,22,0.15)" stroke="rgba(249,115,22,0.6)" stroke-width="1.5" />
                   <polygon points="10,8 16,12 10,16" fill="#f97316" />
                 </svg>
-                <p class="hero-media-copy">Product demo coming soon</p>
+                <p class="hero-media-copy">{{ hero.video_coming }}</p>
               </div>
             </div>
           </div>
@@ -167,35 +167,35 @@
       <!-- SECTION 2: 产品能力 -->
       <section class="section section-product" id="product" data-section="product">
         <div class="section-inner">
-          <h2 class="section-h2">Voice input without switching windows</h2>
-          <p class="section-lead">Your phone captures speech, your computer receives the text.</p>
+          <h2 class="section-h2">{{ product.title }}</h2>
+          <p class="section-lead">{{ product.lead }}</p>
 
           <div class="product-grid">
             <!-- Main panel: 跨设备输入 -->
             <article class="product-main">
               <div class="product-media-frame">
                 <img class="product-media-img"
-                     src="/media/product-main.svg"
-                     alt="VoiceBridge transcribing speech from phone to computer"
+                     src="{{ product.main_image }}"
+                     alt="{{ product.main_image_alt }}"
                      loading="lazy" />
               </div>
-              <h3 class="product-card-title">Cross-device input</h3>
-              <p class="product-card-body">Your phone records audio, VoiceBridge transcribes it in the cloud, and the text is delivered to your signed-in computer.</p>
+              <h3 class="product-card-title">{{ product.main_title }}</h3>
+              <p class="product-card-body">{{ product.main_body }}</p>
             </article>
 
             <div class="product-side">
               <!-- 辅助 1: 当前输入位置 -->
               <article class="product-aux">
-                <span class="product-aux-eyebrow">Active field</span>
-                <h3 class="product-card-title">Sends to the current input</h3>
-                <p class="product-card-body">Text is delivered to the active window on your computer, so you can keep typing without switching apps.</p>
+                <span class="product-aux-eyebrow">{{ product.aux1_eyebrow }}</span>
+                <h3 class="product-card-title">{{ product.aux1_title }}</h3>
+                <p class="product-card-body">{{ product.aux1_body }}</p>
               </article>
 
               <!-- 辅助 2: 剪切板兜底 -->
               <article class="product-aux">
-                <span class="product-aux-eyebrow">Fallback</span>
-                <h3 class="product-card-title">Clipboard backup</h3>
-                <p class="product-card-body">When auto-paste is not supported, the text is still copied to your computer clipboard.</p>
+                <span class="product-aux-eyebrow">{{ product.aux2_eyebrow }}</span>
+                <h3 class="product-card-title">{{ product.aux2_title }}</h3>
+                <p class="product-card-body">{{ product.aux2_body }}</p>
               </article>
             </div>
           </div>
@@ -205,13 +205,13 @@
       <!-- SECTION 3: 快捷指令 -->
       <section class="section section-commands" id="commands" data-section="commands">
         <div class="section-inner">
-          <h2 class="section-h2">Reuse the text you type every day</h2>
+          <h2 class="section-h2">{{ commands.title }}</h2>
 
           <div class="commands-grid">
             <div class="commands-screenshot">
               <img class="commands-screenshot-img"
-                   src="/media/commands-library.svg"
-                   alt="VoiceBridge preset command library screenshot"
+                   src="{{ commands.screenshot }}"
+                   alt="{{ commands.screenshot_alt }}"
                    loading="lazy" />
             </div>
 
@@ -221,8 +221,8 @@
                   <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 11 12 14 22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
                 </span>
                 <div class="commands-item-body">
-                  <p class="commands-item-label">Minimal changes</p>
-                  <p class="commands-item-source">Built-in preset</p>
+                  <p class="commands-item-label">{{ commands.item1_label }}</p>
+                  <p class="commands-item-source">{{ commands.item1_source }}</p>
                 </div>
               </li>
               <li class="commands-item">
@@ -230,8 +230,8 @@
                   <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 11 12 14 22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
                 </span>
                 <div class="commands-item-body">
-                  <p class="commands-item-label">Code review</p>
-                  <p class="commands-item-source">Built-in preset</p>
+                  <p class="commands-item-label">{{ commands.item2_label }}</p>
+                  <p class="commands-item-source">{{ commands.item2_source }}</p>
                 </div>
               </li>
               <li class="commands-item">
@@ -239,8 +239,8 @@
                   <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 11 12 14 22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
                 </span>
                 <div class="commands-item-body">
-                  <p class="commands-item-label">UI design</p>
-                  <p class="commands-item-source">Built-in preset</p>
+                  <p class="commands-item-label">{{ commands.item3_label }}</p>
+                  <p class="commands-item-source">{{ commands.item3_source }}</p>
                 </div>
               </li>
               <li class="commands-item">
@@ -248,37 +248,37 @@
                   <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 11 12 14 22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
                 </span>
                 <div class="commands-item-body">
-                  <p class="commands-item-label">Quick overview</p>
-                  <p class="commands-item-source">Built-in preset</p>
+                  <p class="commands-item-label">{{ commands.item4_label }}</p>
+                  <p class="commands-item-source">{{ commands.item4_source }}</p>
                 </div>
               </li>
             </ul>
           </div>
 
-          <p class="commands-footnote">11 built-in presets. Add your own commands for repeated text.</p>
+          <p class="commands-footnote">{{ commands.footnote }}</p>
         </div>
       </section>
 
       <!-- SECTION 4: 使用流程 -->
       <section class="section section-how" id="how" data-section="how">
         <div class="section-inner">
-          <h2 class="section-h2">Connect both devices, then speak</h2>
+          <h2 class="section-h2">{{ how.title }}</h2>
 
           <ol class="how-steps">
             <li class="how-step">
               <span class="how-step-number" aria-hidden="true">1</span>
-              <h3 class="how-step-title">Open the web app.</h3>
-              <p class="how-step-body">Create an account or sign in on your phone.</p>
+              <h3 class="how-step-title">{{ how.step1_title }}</h3>
+              <p class="how-step-body">{{ how.step1_body }}</p>
             </li>
             <li class="how-step">
               <span class="how-step-number" aria-hidden="true">2</span>
-              <h3 class="how-step-title">Install the desktop app.</h3>
-              <p class="how-step-body">Sign in with the same account.</p>
+              <h3 class="how-step-title">{{ how.step2_title }}</h3>
+              <p class="how-step-body">{{ how.step2_body }}</p>
             </li>
             <li class="how-step">
               <span class="how-step-number" aria-hidden="true">3</span>
-              <h3 class="how-step-title">Speak.</h3>
-              <p class="how-step-body">Hold to record, release, and keep typing on your computer.</p>
+              <h3 class="how-step-title">{{ how.step3_title }}</h3>
+              <p class="how-step-body">{{ how.step3_body }}</p>
             </li>
           </ol>
         </div>
@@ -287,22 +287,22 @@
       <!-- SECTION 5: 下载 -->
       <section class="section section-download" id="download" data-section="download">
         <div class="section-inner">
-          <h2 class="section-h2">Choose your desktop app</h2>
-          <p class="section-lead">Available for macOS and Windows.</p>
+          <h2 class="section-h2">{{ download.title }}</h2>
+          <p class="section-lead">{{ download.lead }}</p>
 
           <!-- Platform buttons container: filled dynamically by landing.js from /downloads.json -->
           <div class="download-platforms"
                id="download-platforms"
                data-download-container
-               data-coming-label="Coming soon"
-               data-free-note="Free plan available. No credit card required.">
+               data-coming-label="{{ download.coming_label }}"
+               data-free-note="{{ download.free_note }}">
             <!--
               Each platform entry:
               <a class="download-platform" href="..." data-platform="darwin" data-arch="arm64">...</a>
             -->
           </div>
 
-          <p class="download-note">Free plan available. No credit card required.</p>
+          <p class="download-note">{{ download.free_note }}</p>
         </div>
       </section>
     </main>
@@ -311,34 +311,34 @@
     <footer class="landing-footer" data-section="footer">
       <div class="footer-inner">
         <div class="footer-col">
-          <h4 class="footer-col-title">Product</h4>
+          <h4 class="footer-col-title">{{ footer.col_product_title }}</h4>
           <ul class="footer-col-list">
-            <li><a href="/app">Open app</a></li>
-            <li><a href="#download">Download</a></li>
-            <li><a href="#commands">Commands</a></li>
+            <li><a href="/app">{{ footer.col_product_open }}</a></li>
+            <li><a href="#download">{{ footer.col_product_download }}</a></li>
+            <li><a href="#commands">{{ footer.col_product_commands }}</a></li>
           </ul>
         </div>
         <div class="footer-col">
-          <h4 class="footer-col-title">Resources</h4>
+          <h4 class="footer-col-title">{{ footer.col_resources_title }}</h4>
           <ul class="footer-col-list">
-            <li><a href="https://github.com/Golden-forest/VoiceBridge"
+            <li><a href="{{ footer.col_resources_github_href }}"
                    target="_blank"
-                   rel="noopener">GitHub</a></li>
-            <li><a href="/faq.html">FAQ</a></li>
+                   rel="noopener">{{ footer.col_resources_github }}</a></li>
+            <li><a href="/faq.html">{{ footer.col_resources_faq }}</a></li>
           </ul>
         </div>
         <div class="footer-col">
-          <h4 class="footer-col-title">Legal</h4>
+          <h4 class="footer-col-title">{{ footer.col_legal_title }}</h4>
           <ul class="footer-col-list">
-            <li><a href="/privacy.html">Privacy</a></li>
-            <li><a href="/terms.html">Terms</a></li>
+            <li><a href="/privacy.html">{{ footer.col_legal_privacy }}</a></li>
+            <li><a href="/terms.html">{{ footer.col_legal_terms }}</a></li>
           </ul>
         </div>
         <div class="footer-col">
-          <h4 class="footer-col-title">Language</h4>
+          <h4 class="footer-col-title">{{ footer.col_language_title }}</h4>
           <ul class="footer-col-list">
-            <li><a href="/" hreflang="en" lang="en">English</a></li>
-            <li><a href="/zh-CN/" hreflang="zh-CN" lang="zh-CN">简体中文</a></li>
+            <li><a href="/" hreflang="en" lang="en">{{ footer.col_language_en }}</a></li>
+            <li><a href="/zh-CN/" hreflang="zh-CN" lang="zh-CN">{{ footer.col_language_zh }}</a></li>
           </ul>
         </div>
       </div>

@@ -1,0 +1,1301 @@
+/* =========================================================================
+   VoiceBridge landing stylesheet
+   Batch 2: page styles and interaction visuals
+   Source of truth: docs/superpowers/specs/2026-08-01-landing-page-design.md (v4)
+   ========================================================================= */
+
+/* -------------------------------------------------------------------------
+   1. Font faces ( reuse PWA hosted font files )
+   ------------------------------------------------------------------------- */
+@font-face {
+  font-family: "Nunito";
+  font-style: normal;
+  font-weight: 400 800;
+  font-display: swap;
+  src: url("/fonts/Nunito-Variable.woff2") format("woff2");
+}
+
+@font-face {
+  font-family: "JetBrains Mono";
+  font-style: normal;
+  font-weight: 400 700;
+  font-display: swap;
+  src: url("/fonts/JetBrainsMono-Variable.woff2") format("woff2");
+}
+
+/* -------------------------------------------------------------------------
+   2. Design tokens ( spec §8 lines 491-548 )
+   ------------------------------------------------------------------------- */
+:root {
+  /* Fonts: Nunito covers Latin subset; Chinese must have explicit fallback stack */
+  --font-display: "Nunito", "MiSans", "PingFang SC", "Microsoft YaHei UI", "Noto Sans SC", sans-serif;
+  --font-body: "Nunito", "MiSans", "PingFang SC", "Microsoft YaHei UI", "Noto Sans SC", sans-serif;
+  --font-mono: "JetBrains Mono", "SFMono-Regular", Consolas, monospace;
+
+  /* Light sections ( product / commands / how / download ) */
+  --landing-bg: #fffbf5;
+  --landing-surface: #ffffff;
+  --landing-surface-muted: #fff5eb;
+  --landing-text: #1c1917;
+  --landing-text-muted: #625b55;
+  --landing-accent: #c2410c;
+  --landing-accent-hover: #9a3412;
+  --landing-on-accent: #fffaf5;
+  --landing-border: rgba(120, 70, 35, 0.16);
+  --landing-focus: #9a3412;
+  --landing-radius-control: 10px;
+  --landing-radius-card: 16px;
+  --landing-radius-media: 24px;
+
+  /* === Hero ( dark theme, decision B ) === */
+  --hero-bg: radial-gradient(ellipse at top right,
+              #2a1810 0%, #1a1310 60%, #0d0a08 100%);
+  --hero-text: #f4f1ed;
+  --hero-text-muted: #c1bdb7;
+  --hero-accent: #f97316;
+  --hero-accent-soft: #fdba74;
+  --hero-accent-deep: #ea580c;
+  --hero-accent-gradient: linear-gradient(135deg, #f97316, #fdba74);
+  --hero-button-primary-gradient: linear-gradient(135deg, #c2410c, #9a3412);
+  --hero-glow-1: rgba(234, 88, 12, 0.28);
+  --hero-glow-2: rgba(249, 115, 22, 0.16);
+  --hero-border: rgba(249, 115, 22, 0.2);
+  --hero-surface: rgba(255, 255, 255, 0.04);
+  --hero-button-secondary-bg: rgba(255, 255, 255, 0.08);
+  --hero-button-secondary-border: rgba(255, 255, 255, 0.15);
+
+  /* === Typewriter === */
+  --cursor-color: #f97316;
+  --cursor-width: 3px;
+  --type-speed-en: 36ms;
+  --type-speed-zh: 65ms;
+  --type-pause: 1800ms;
+  --type-clear-speed: 25ms;
+
+  /* === Particle flow === */
+  --particle-color: #f97316;
+  --particle-glow: 0 0 6px rgba(249, 115, 22, 0.6), 0 0 14px rgba(249, 115, 22, 0.28);
+  --particle-opacity: 0.16;
+
+  /* === Footer ( dark ) === */
+  --footer-bg: #1c1917;
+  --footer-text: #c1bdb7;
+  --footer-text-muted: #8a827c;
+  --footer-border: rgba(255, 255, 255, 0.08);
+
+  /* Global */
+  color-scheme: light;
+  font-family: var(--font-body);
+  font-synthesis: none;
+  font-optical-sizing: auto;
+}
+
+/* -------------------------------------------------------------------------
+   3. Global reset and base styles
+   ------------------------------------------------------------------------- */
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html {
+  scroll-behavior: smooth;
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+}
+
+html,
+body {
+  width: 100%;
+  max-width: 100%;
+  overflow-x: hidden;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  min-height: 100dvh;
+  background: var(--landing-bg);
+  color: var(--landing-text);
+  font-family: var(--font-body);
+  font-size: 17px;
+  line-height: 1.65;
+  font-weight: 400;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+}
+
+img,
+svg,
+video {
+  display: block;
+  max-width: 100%;
+}
+
+a {
+  color: var(--landing-accent);
+  text-decoration: none;
+  transition: color 0.2s ease;
+}
+
+a:hover {
+  color: var(--landing-accent-hover);
+}
+
+button {
+  font-family: inherit;
+  cursor: pointer;
+}
+
+h1, h2, h3, h4, h5, h6 {
+  margin: 0;
+  font-family: var(--font-display);
+  color: inherit;
+}
+
+p {
+  margin: 0;
+}
+
+ul, ol {
+  margin: 0;
+}
+
+/* -------------------------------------------------------------------------
+   4. Screen-reader only utility
+   ------------------------------------------------------------------------- */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* -------------------------------------------------------------------------
+   5. Focus visible ( spec §14.5 )
+   ------------------------------------------------------------------------- */
+:focus-visible {
+  outline: 2px solid var(--landing-focus);
+  outline-offset: 2px;
+}
+
+/* -------------------------------------------------------------------------
+   6. Navigation ( spec §7.1 lines 294-316 )
+   ------------------------------------------------------------------------- */
+.landing-nav {
+  position: sticky;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 30;
+  background: rgba(13, 10, 8, 0.55);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  border-bottom: 1px solid transparent;
+  color: var(--hero-text);
+  transition:
+    background-color 220ms ease,
+    color 220ms ease,
+    border-color 220ms ease;
+}
+
+.landing-nav.is-scrolled {
+  background: rgba(255, 251, 245, 0.85);
+  border-bottom-color: var(--landing-border);
+  color: var(--landing-text);
+}
+
+.landing-nav-inner {
+  max-width: 1240px;
+  margin: 0 auto;
+  padding: 0 24px;
+  height: 68px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+}
+
+.landing-nav-brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: 17px;
+  letter-spacing: -0.01em;
+  color: inherit;
+  text-decoration: none;
+}
+
+.landing-nav-brand:hover {
+  color: inherit;
+  opacity: 0.85;
+}
+
+.landing-nav-brand img {
+  width: 24px;
+  height: 24px;
+}
+
+.landing-nav-links {
+  display: flex;
+  align-items: center;
+  gap: 28px;
+}
+
+.landing-nav-links a {
+  color: inherit;
+  text-decoration: none;
+  font-size: 14px;
+  font-weight: 700;
+  opacity: 0.85;
+  transition: opacity 0.2s ease;
+}
+
+.landing-nav-links a:hover {
+  color: inherit;
+  opacity: 1;
+}
+
+html[lang="zh-CN"] .landing-nav-links a {
+  font-weight: 600;
+}
+
+.landing-nav-actions {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.landing-nav-lang {
+  color: inherit;
+  text-decoration: none;
+  font-size: 14px;
+  font-weight: 700;
+  opacity: 0.85;
+  white-space: nowrap;
+  transition: opacity 0.2s ease;
+}
+
+html[lang="zh-CN"] .landing-nav-lang {
+  font-weight: 600;
+}
+
+.landing-nav-lang:hover {
+  color: inherit;
+  opacity: 1;
+}
+
+.landing-nav-cta {
+  display: inline-flex;
+  align-items: center;
+  padding: 8px 18px;
+  border-radius: var(--landing-radius-control);
+  background: var(--hero-button-secondary-bg);
+  border: 1px solid var(--hero-button-secondary-border);
+  color: var(--hero-text);
+  font-size: 14px;
+  font-weight: 700;
+  text-decoration: none;
+  white-space: nowrap;
+  transition:
+    background-color 0.2s ease,
+    border-color 0.2s ease,
+    transform 0.2s ease;
+}
+
+.landing-nav.is-scrolled .landing-nav-cta {
+  background: var(--landing-accent);
+  border-color: var(--landing-accent);
+  color: var(--landing-on-accent);
+}
+
+.landing-nav-cta:hover {
+  transform: translateY(-1px);
+  color: var(--hero-text);
+}
+
+.landing-nav.is-scrolled .landing-nav-cta:hover {
+  color: var(--landing-on-accent);
+  background: var(--landing-accent-hover);
+}
+
+.landing-nav-menu-btn {
+  display: none;
+  width: 40px;
+  height: 40px;
+  padding: 0;
+  background: transparent;
+  border: 1px solid var(--hero-button-secondary-border);
+  border-radius: var(--landing-radius-control);
+  color: inherit;
+  align-items: center;
+  justify-content: center;
+  transition: background-color 0.2s ease, border-color 0.2s ease;
+}
+
+.landing-nav-menu-btn:hover {
+  background: var(--hero-button-secondary-bg);
+}
+
+.landing-nav.is-scrolled .landing-nav-menu-btn {
+  border-color: var(--landing-border);
+}
+
+.landing-nav-mobile-menu {
+  background: var(--landing-bg);
+  color: var(--landing-text);
+  border-bottom: 1px solid var(--landing-border);
+}
+
+.landing-nav-mobile-menu[hidden] {
+  display: none;
+}
+
+.landing-nav-mobile-menu-inner {
+  padding: 16px 24px 24px;
+  display: grid;
+  gap: 8px;
+}
+
+.landing-nav-mobile-menu a {
+  color: var(--landing-text);
+  text-decoration: none;
+  font-size: 16px;
+  font-weight: 600;
+  padding: 12px 8px;
+  border-radius: var(--landing-radius-control);
+}
+
+.landing-nav-mobile-menu a:hover {
+  background: var(--landing-surface-muted);
+  color: var(--landing-text);
+}
+
+/* -------------------------------------------------------------------------
+   7. Hero ( spec §7.2 lines 317-376 )
+   ------------------------------------------------------------------------- */
+.section-hero {
+  position: relative;
+  min-height: 100vh;
+  min-height: 100dvh;
+  background: var(--hero-bg);
+  color: var(--hero-text);
+  overflow: hidden;
+  isolation: isolate;
+}
+
+/* Glow orbs ( z-index 1 ) */
+.hero-glow {
+  position: absolute;
+  border-radius: 50%;
+  pointer-events: none;
+  z-index: 1;
+  filter: blur(100px);
+}
+
+.hero-glow-1 {
+  width: 480px;
+  height: 480px;
+  background: var(--hero-glow-1);
+  filter: blur(100px);
+  top: -120px;
+  right: -100px;
+}
+
+.hero-glow-2 {
+  width: 360px;
+  height: 360px;
+  background: var(--hero-glow-2);
+  filter: blur(110px);
+  bottom: -100px;
+  left: -80px;
+}
+
+/* Particle container ( z-index 2 ) */
+.hero-particles {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 2;
+  /* Restrict particles to mid-right area so they do not cross H1 and CTA */
+  -webkit-mask: linear-gradient(
+    to right,
+    transparent 0%,
+    transparent 18%,
+    rgba(0, 0, 0, 0.35) 32%,
+    rgba(0, 0, 0, 0.85) 55%,
+    #000 75%
+  );
+  mask: linear-gradient(
+    to right,
+    transparent 0%,
+    transparent 18%,
+    rgba(0, 0, 0, 0.35) 32%,
+    rgba(0, 0, 0, 0.85) 55%,
+    #000 75%
+  );
+}
+
+.hero-particle {
+  position: absolute;
+  width: 3px;
+  height: 3px;
+  background: var(--particle-color);
+  border-radius: 50%;
+  box-shadow: var(--particle-glow);
+  opacity: var(--particle-opacity);
+  pointer-events: none;
+  will-change: transform, opacity;
+  animation: particle-flow 8s linear infinite;
+}
+
+@keyframes particle-flow {
+  0% {
+    transform: translate3d(0, 0, 0);
+    opacity: 0;
+  }
+  10% {
+    opacity: var(--particle-opacity);
+  }
+  85% {
+    opacity: var(--particle-opacity);
+  }
+  100% {
+    transform: translate3d(var(--tx, 200px), var(--ty, -120px), 0);
+    opacity: 0;
+  }
+}
+
+/* Hero content ( z-index 3 ) */
+.hero-inner {
+  position: relative;
+  z-index: 3;
+  max-width: 1240px;
+  margin: 0 auto;
+  padding: 88px 24px 96px;
+}
+
+.hero-content {
+  max-width: 640px;
+}
+
+.hero-h1 {
+  font-family: var(--font-display);
+  font-size: clamp(48px, 4.8vw, 68px);
+  font-weight: 800;
+  letter-spacing: -0.025em;
+  line-height: 1.02;
+  margin: 0 0 24px;
+  color: var(--hero-text);
+  text-wrap: balance;
+}
+
+html[lang="zh-CN"] .hero-h1 {
+  font-size: clamp(52px, 6vw, 76px);
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  line-height: 1.08;
+}
+
+.hero-h1-line {
+  display: block;
+}
+
+.hero-h1-accent {
+  background: var(--hero-accent-gradient);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  color: transparent;
+}
+
+/* Typewriter */
+.hero-typewriter {
+  min-height: 96px;       /* reserve height for longest English copy (3 lines) */
+  font-size: clamp(16px, 1.5vw, 19px);
+  line-height: 1.6;
+  color: var(--hero-text);
+  margin-bottom: 28px;
+  font-weight: 400;
+}
+
+html[lang="zh-CN"] .hero-typewriter {
+  min-height: 84px;
+  line-height: 1.7;
+}
+
+.typewriter-text {
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.typewriter-cursor {
+  display: inline-block;
+  width: var(--cursor-width);
+  height: 1.1em;
+  background: var(--cursor-color);
+  vertical-align: text-bottom;
+  margin-left: 2px;
+  animation: cursor-blink 900ms steps(1) infinite;
+}
+
+@keyframes cursor-blink {
+  0%, 50% {
+    opacity: 1;
+  }
+  51%, 100% {
+    opacity: 0;
+  }
+}
+
+/* CTAs */
+.hero-cta {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.hero-cta-primary,
+.hero-cta-secondary {
+  display: inline-flex;
+  align-items: center;
+  padding: 14px 28px;
+  border-radius: var(--landing-radius-control);
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 15px;
+  line-height: 1;
+  text-decoration: none;
+  white-space: nowrap;
+  transition:
+    transform 0.2s ease,
+    box-shadow 0.2s ease,
+    background-color 0.2s ease,
+    border-color 0.2s ease;
+}
+
+.hero-cta-primary {
+  background: var(--hero-button-primary-gradient);
+  color: #fffaf5;
+  box-shadow: 0 8px 24px rgba(234, 88, 12, 0.32);
+}
+
+.hero-cta-primary:hover {
+  color: #fffaf5;
+  transform: translateY(-2px);
+  box-shadow: 0 12px 32px rgba(234, 88, 12, 0.4);
+}
+
+.hero-cta-secondary {
+  background: var(--hero-button-secondary-bg);
+  border: 1px solid var(--hero-button-secondary-border);
+  color: var(--hero-text);
+}
+
+.hero-cta-secondary:hover {
+  color: var(--hero-text);
+  transform: translateY(-2px);
+  background: rgba(255, 255, 255, 0.12);
+}
+
+/* Hero media */
+.hero-media {
+  position: relative;
+}
+
+.hero-media-frame {
+  position: relative;
+  aspect-ratio: 16 / 10;
+  background: var(--hero-surface);
+  border: 1px solid var(--hero-border);
+  border-radius: var(--landing-radius-media);
+  overflow: hidden;
+  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.32);
+}
+
+.hero-media-video {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.hero-media-placeholder {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  color: var(--hero-text-muted);
+  text-align: center;
+  padding: 24px;
+}
+
+.hero-media-play {
+  opacity: 0.9;
+}
+
+.hero-media-copy {
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  color: var(--hero-text-muted);
+}
+
+/* -------------------------------------------------------------------------
+   8. Generic section styles ( spec §8.1 lines 578-580 )
+   ------------------------------------------------------------------------- */
+.section {
+  background: var(--landing-bg);
+  color: var(--landing-text);
+  padding: 112px 24px;
+}
+
+.section-inner {
+  max-width: 1200px;
+  margin: 0 auto;
+}
+
+.section-h2 {
+  font-family: var(--font-display);
+  font-size: clamp(32px, 4vw, 48px);
+  font-weight: 800;
+  line-height: 1.15;
+  letter-spacing: -0.02em;
+  text-wrap: balance;
+  color: var(--landing-text);
+  margin-bottom: 16px;
+}
+
+html[lang="zh-CN"] .section-h2 {
+  font-size: clamp(30px, 3.8vw, 46px);
+  font-weight: 700;
+  line-height: 1.2;
+}
+
+.section-lead {
+  font-size: 18px;
+  line-height: 1.65;
+  color: var(--landing-text-muted);
+  max-width: 60ch;
+}
+
+html[lang="zh-CN"] .section-lead {
+  line-height: 1.7;
+  max-width: 32em;
+}
+
+/* Title to content spacing */
+.section-product .product-grid,
+.section-commands .commands-grid,
+.section-how .how-steps,
+.section-download .download-platforms {
+  margin-top: 56px;
+}
+
+.section-commands .commands-grid {
+  margin-top: 48px;
+}
+
+/* -------------------------------------------------------------------------
+   9. Product capability ( spec §7.3 lines 382-392, §13.2 lines 758-761 )
+   ------------------------------------------------------------------------- */
+.product-grid {
+  display: grid;
+  grid-template-columns: repeat(12, 1fr);
+  gap: 24px;
+}
+
+.product-main,
+.product-aux {
+  background: var(--landing-surface);
+  border: 1px solid var(--landing-border);
+  border-radius: var(--landing-radius-card);
+  padding: 32px;
+  box-shadow: 0 2px 12px rgba(200, 120, 50, 0.08);
+}
+
+.product-main {
+  grid-column: span 7;
+}
+
+.product-side {
+  grid-column: span 5;
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+.product-media-frame {
+  aspect-ratio: 16 / 10;
+  border-radius: 12px;
+  overflow: hidden;
+  margin-bottom: 20px;
+  background: var(--landing-surface-muted);
+}
+
+.product-media-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.product-card-title {
+  font-family: var(--font-display);
+  font-size: 22px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  color: var(--landing-text);
+  margin-bottom: 8px;
+  line-height: 1.3;
+}
+
+.product-card-body {
+  color: var(--landing-text-muted);
+  font-size: 16px;
+  line-height: 1.65;
+}
+
+.product-aux-eyebrow {
+  display: inline-block;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--landing-accent);
+  margin-bottom: 8px;
+}
+
+html[lang="zh-CN"] .product-aux-eyebrow {
+  text-transform: none;
+  letter-spacing: 0.02em;
+}
+
+/* -------------------------------------------------------------------------
+   10. Commands ( spec §7.4 lines 396-416, §13.3 lines 763-766 )
+   ------------------------------------------------------------------------- */
+.commands-grid {
+  display: grid;
+  grid-template-columns: 40% 60%;
+  gap: 60px;
+  align-items: start;
+}
+
+.commands-screenshot {
+  position: sticky;
+  top: 96px;
+}
+
+.commands-screenshot-img {
+  width: 100%;
+  border-radius: var(--landing-radius-media);
+  border: 1px solid var(--landing-border);
+  box-shadow: 0 4px 18px rgba(200, 120, 50, 0.1);
+}
+
+.commands-list {
+  list-style: none;
+  padding: 0;
+  display: grid;
+  gap: 16px;
+}
+
+.commands-item {
+  display: flex;
+  gap: 16px;
+  padding: 20px;
+  background: var(--landing-surface);
+  border: 1px solid var(--landing-border);
+  border-radius: var(--landing-radius-card);
+}
+
+.commands-item-icon {
+  flex-shrink: 0;
+  width: 32px;
+  height: 32px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--landing-surface-muted);
+  border-radius: 10px;
+  color: var(--landing-accent);
+}
+
+.commands-item-body {
+  min-width: 0;
+}
+
+.commands-item-label {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 16px;
+  color: var(--landing-text);
+  margin-bottom: 4px;
+}
+
+.commands-item-source {
+  font-size: 14px;
+  color: var(--landing-text-muted);
+}
+
+.commands-footnote {
+  margin-top: 32px;
+  font-size: 15px;
+  color: var(--landing-text-muted);
+}
+
+/* -------------------------------------------------------------------------
+   11. How it works ( spec §7.5 lines 420-430, §13.4 lines 769-771 )
+   ------------------------------------------------------------------------- */
+.how-steps {
+  list-style: none;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 40px;
+  counter-reset: how-step;
+}
+
+.how-step {
+  display: flex;
+  flex-direction: column;
+}
+
+.how-step-number {
+  font-family: var(--font-display);
+  font-size: 48px;
+  font-weight: 800;
+  color: var(--landing-accent);
+  line-height: 1;
+  margin-bottom: 12px;
+}
+
+.how-step-title {
+  font-family: var(--font-display);
+  font-size: 20px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  color: var(--landing-text);
+  margin-bottom: 8px;
+  line-height: 1.3;
+}
+
+.how-step-body {
+  color: var(--landing-text-muted);
+  font-size: 16px;
+  line-height: 1.65;
+}
+
+/* -------------------------------------------------------------------------
+   12. Download ( spec §7.6 lines 434-472, §13.4 lines 769-771 )
+   ------------------------------------------------------------------------- */
+.download-platforms {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+}
+
+.download-platform {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 16px 24px;
+  background: var(--landing-surface);
+  border: 2px solid var(--landing-border);
+  border-radius: var(--landing-radius-card);
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 15px;
+  text-decoration: none;
+  color: var(--landing-text);
+  transition:
+    border-color 0.2s ease,
+    transform 0.2s ease,
+    background-color 0.2s ease,
+    color 0.2s ease;
+  white-space: nowrap;
+}
+
+.download-platform:hover {
+  color: var(--landing-text);
+  border-color: var(--landing-accent);
+  transform: translateY(-2px);
+}
+
+.download-platform.is-recommended {
+  border-color: var(--landing-accent);
+  background: var(--landing-accent);
+  color: var(--landing-on-accent);
+}
+
+.download-platform.is-recommended:hover {
+  color: var(--landing-on-accent);
+  background: var(--landing-accent-hover);
+  border-color: var(--landing-accent-hover);
+}
+
+.download-platform.is-disabled {
+  opacity: 0.5;
+  pointer-events: none;
+  cursor: not-allowed;
+}
+
+.download-platform-meta {
+  font-family: var(--font-mono);
+  font-weight: 400;
+  font-size: 12px;
+  opacity: 0.75;
+  margin-left: 4px;
+}
+
+.download-platform-status {
+  font-family: var(--font-body);
+  font-weight: 600;
+  font-size: 12px;
+  opacity: 0.7;
+  margin-left: 4px;
+}
+
+.download-note {
+  margin-top: 24px;
+  font-size: 14px;
+  color: var(--landing-text-muted);
+}
+
+/* -------------------------------------------------------------------------
+   13. Footer ( spec §7.7 lines 475-483 )
+   ------------------------------------------------------------------------- */
+.landing-footer {
+  background: var(--footer-bg);
+  color: var(--footer-text);
+  padding: 64px 24px 48px;
+}
+
+.footer-inner {
+  max-width: 1200px;
+  margin: 0 auto;
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 40px;
+}
+
+.footer-col-title {
+  font-family: var(--font-display);
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #fff;
+  margin-bottom: 16px;
+}
+
+html[lang="zh-CN"] .footer-col-title {
+  letter-spacing: 0.04em;
+  text-transform: none;
+  font-size: 14px;
+}
+
+.footer-col-list {
+  list-style: none;
+  padding: 0;
+  display: grid;
+  gap: 8px;
+}
+
+.footer-col-list a {
+  color: var(--footer-text);
+  text-decoration: none;
+  font-size: 14px;
+  transition: color 0.2s ease;
+}
+
+.footer-col-list a:hover {
+  color: #fff;
+}
+
+/* =========================================================================
+   14. Responsive breakpoints
+   ========================================================================= */
+
+/* --- Wide ( >= 1440px ): minor tuning --- */
+@media (min-width: 1440px) {
+  .hero-inner {
+    padding-top: 104px;
+    padding-bottom: 112px;
+  }
+  .section {
+    padding: 128px 24px;
+  }
+}
+
+/* --- Hero double-column kicks in at >= 1080px --- */
+@media (min-width: 1080px) {
+  .hero-inner {
+    display: grid;
+    grid-template-columns: 1.05fr 0.95fr;
+    gap: 64px;
+    align-items: center;
+  }
+
+  .hero-content {
+    max-width: none;
+  }
+}
+
+@media (max-width: 1079px) {
+  /* Hero single column, text above media */
+  .hero-inner {
+    display: flex;
+    flex-direction: column;
+    gap: 48px;
+    padding-top: 80px;
+    padding-bottom: 80px;
+  }
+
+  .hero-content {
+    max-width: 720px;
+  }
+}
+
+/* --- Tablet ( 640px - 1023px ) --- */
+@media (max-width: 1023px) {
+  /* Hide desktop nav links, show mobile menu button */
+  .landing-nav-links {
+    display: none;
+  }
+
+  .landing-nav-menu-btn {
+    display: inline-flex;
+  }
+
+  .landing-nav-actions {
+    gap: 10px;
+  }
+
+  .landing-nav-cta {
+    display: none;
+  }
+
+  /* Product: main full width, aux double column */
+  .product-main {
+    grid-column: span 12;
+  }
+
+  .product-side {
+    grid-column: span 12;
+    flex-direction: row;
+    flex-wrap: wrap;
+  }
+
+  .product-aux {
+    flex: 1 1 calc(50% - 12px);
+    min-width: 260px;
+  }
+
+  /* Commands: screenshot on top, items two columns */
+  .commands-grid {
+    grid-template-columns: 1fr;
+    gap: 32px;
+  }
+
+  .commands-screenshot {
+    position: static;
+    max-width: 460px;
+    margin: 0 auto;
+  }
+
+  .commands-list {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  /* Section padding */
+  .section {
+    padding: 80px 24px;
+  }
+}
+
+/* --- Mobile ( < 640px ) --- */
+@media (max-width: 639px) {
+  body {
+    font-size: 16px;
+  }
+
+  .landing-nav-inner {
+    height: 60px;
+    padding: 0 16px;
+    gap: 12px;
+  }
+
+  .landing-nav-brand {
+    font-size: 15px;
+  }
+
+  .landing-nav-lang {
+    font-size: 13px;
+  }
+
+  .hero-inner {
+    padding: 64px 16px 72px;
+    gap: 36px;
+  }
+
+  /* Mobile media 4:3 */
+  .hero-media-frame {
+    aspect-ratio: 4 / 3;
+  }
+
+  .hero-typewriter {
+    min-height: 88px;
+    font-size: 16px;
+  }
+
+  html[lang="zh-CN"] .hero-typewriter {
+    min-height: 76px;
+  }
+
+  /* CTA: full rows if needed */
+  .hero-cta-primary,
+  .hero-cta-secondary {
+    flex: 1 1 auto;
+    justify-content: center;
+  }
+
+  /* Section padding */
+  .section {
+    padding: 64px 16px;
+  }
+
+  /* Product: strict single column */
+  .product-main,
+  .product-side,
+  .product-aux {
+    grid-column: span 12;
+  }
+
+  .product-side {
+    flex-direction: column;
+  }
+
+  .product-main,
+  .product-aux {
+    padding: 24px;
+  }
+
+  /* Commands: strict single column */
+  .commands-grid {
+    gap: 24px;
+  }
+
+  .commands-screenshot {
+    max-width: 360px;
+  }
+
+  .commands-list {
+    grid-template-columns: 1fr;
+  }
+
+  /* How: vertical three steps */
+  .how-steps {
+    grid-template-columns: 1fr;
+    gap: 32px;
+  }
+
+  /* Download: stack */
+  .download-platforms {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .download-platform {
+    justify-content: center;
+  }
+
+  /* Footer: single column */
+  .footer-inner {
+    grid-template-columns: 1fr;
+    gap: 32px;
+  }
+}
+
+/* --- Small phone ( <= 375px ): prevent CTA wrap --- */
+@media (max-width: 375px) {
+  .hero-cta-primary,
+  .hero-cta-secondary {
+    font-size: 14px;
+    padding: 12px 20px;
+  }
+}
+
+/* =========================================================================
+   15. Reduced motion ( spec §9.2 lines 605-612 )
+   ========================================================================= */
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+
+  .hero-glow {
+    animation: none;
+  }
+
+  .hero-particles {
+    display: none;
+  }
+
+  .hero-particle {
+    animation: none;
+  }
+
+  .typewriter-cursor {
+    animation: none;
+    opacity: 0;
+  }
+
+  /* Hide animated typewriter; reveal static fallback text */
+  .hero-typewriter {
+    display: none;
+  }
+
+  .sr-only.hero-fallback {
+    position: static;
+    width: auto;
+    height: auto;
+    margin: 0;
+    padding: 0;
+    overflow: visible;
+    clip: auto;
+    white-space: normal;
+    border: 0;
+    display: block;
+    font-size: clamp(16px, 1.5vw, 19px);
+    line-height: 1.6;
+    color: var(--hero-text);
+    margin-bottom: 28px;
+    min-height: 96px;
+  }
+
+  html[lang="zh-CN"] .sr-only.hero-fallback {
+    min-height: 84px;
+    line-height: 1.7;
+  }
+}

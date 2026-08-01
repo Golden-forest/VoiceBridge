@@ -1,0 +1,108 @@
+{
+  "html": {
+    "lang": "zh-CN"
+  },
+  "meta": {
+    "title": "VoiceBridge - 手机说话，电脑输入",
+    "description": "把手机变成电脑的语音输入遥控器。VoiceBridge 支持语音转写、当前输入框发送和可复用快捷指令。",
+    "canonical": "https://voicebridge-6kr.pages.dev/zh-CN/",
+    "hreflang_en": "https://voicebridge-6kr.pages.dev/",
+    "hreflang_zh_cn": "https://voicebridge-6kr.pages.dev/zh-CN/",
+    "hreflang_default": "https://voicebridge-6kr.pages.dev/"
+  },
+  "og": {
+    "title": "VoiceBridge - 手机说话，电脑输入",
+    "description": "把手机变成电脑的语音输入遥控器。VoiceBridge 支持语音转写、当前输入框发送和可复用快捷指令。",
+    "url": "https://voicebridge-6kr.pages.dev/zh-CN/",
+    "image": "https://voicebridge-6kr.pages.dev/og-image-zh.png",
+    "locale": "zh_CN"
+  },
+  "nav": {
+    "brand": "VoiceBridge",
+    "brand_href": "/zh-CN/",
+    "links_aria": "主导航",
+    "link_product": "产品",
+    "link_commands": "指令",
+    "link_how": "工作原理",
+    "link_download": "下载",
+    "lang_href": "/",
+    "lang_hreflang": "en",
+    "lang_aria": "切换到英文",
+    "lang_label": "English",
+    "open_app": "打开网页版",
+    "menu_aria": "打开菜单"
+  },
+  "hero": {
+    "h1_line1": "说，",
+    "h1_line2": "即是写。",
+    "sr_subtitle": "手机说话，电脑输入。按住录音，松开转写，VoiceBridge 会把文字发送到电脑当前输入框。",
+    "typewriter": [
+      "手机说话 → 文字自动出现在电脑光标处。",
+      "按住手机录音，松开即转写，无需切换窗口。",
+      "把常用长文本封装成指令，说一句话就触发。"
+    ],
+    "cta_primary": "下载桌面端",
+    "cta_secondary": "打开网页版",
+    "video_poster": "/media/hero-poster.svg",
+    "video_coming": "产品演示即将上线"
+  },
+  "product": {
+    "title": "不切窗口，直接输入",
+    "lead": "手机负责录音，电脑接收文字。",
+    "main_image": "/media/product-main.svg",
+    "main_image_alt": "VoiceBridge 将手机语音转写到电脑的示意图",
+    "main_title": "跨设备输入",
+    "main_body": "手机录制音频，VoiceBridge 在云端完成转写，文字会发送到已登录的电脑。",
+    "aux1_eyebrow": "当前输入位置",
+    "aux1_title": "发送到当前输入框",
+    "aux1_body": "文字会发送到电脑当前的活跃窗口，无需切换应用即可继续输入。",
+    "aux2_eyebrow": "兜底",
+    "aux2_title": "剪切板兜底",
+    "aux2_body": "当自动粘贴不可用时，文字仍会保留在电脑剪切板。"
+  },
+  "commands": {
+    "title": "常用长文本，说一句就触发",
+    "screenshot": "/media/commands-library.svg",
+    "screenshot_alt": "VoiceBridge 指令库截图",
+    "item1_label": "最小化修改",
+    "item1_source": "内置预设",
+    "item2_label": "代码审查",
+    "item2_source": "内置预设",
+    "item3_label": "UI 设计",
+    "item3_source": "内置预设",
+    "item4_label": "快速概览",
+    "item4_source": "内置预设",
+    "footnote": "内置 11 条预设，也可以把重复文本保存成自己的指令。"
+  },
+  "how": {
+    "title": "两端连接，然后开始说",
+    "step1_title": "打开网页版。",
+    "step1_body": "在手机上创建账号或登录。",
+    "step2_title": "安装桌面端。",
+    "step2_body": "使用同一个账号登录。",
+    "step3_title": "开始说。",
+    "step3_body": "按住录音，松开后继续在电脑上输入。"
+  },
+  "download": {
+    "title": "选择你的桌面端",
+    "lead": "支持 macOS 和 Windows。",
+    "coming_label": "即将提供",
+    "free_note": "可使用免费方案，无需信用卡。"
+  },
+  "footer": {
+    "col_product_title": "产品",
+    "col_product_open": "打开网页版",
+    "col_product_download": "下载",
+    "col_product_commands": "指令",
+    "col_resources_title": "资源",
+    "col_resources_github": "GitHub",
+    "col_resources_github_href": "https://github.com/Golden-forest/VoiceBridge",
+    "col_resources_faq": "常见问题",
+    "col_legal_title": "法律",
+    "col_legal_privacy": "隐私政策",
+    "col_legal_terms": "用户协议",
+    "col_language_title": "语言",
+    "col_language_en": "English",
+    "col_language_zh": "简体中文"
+  }
+}

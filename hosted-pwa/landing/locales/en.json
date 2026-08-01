@@ -1,0 +1,108 @@
+{
+  "html": {
+    "lang": "en"
+  },
+  "meta": {
+    "title": "VoiceBridge - Speak on Your Phone, Type on Your Computer",
+    "description": "Use your phone as a voice input remote for your computer. VoiceBridge transcribes speech, sends text to the active field, and runs reusable commands.",
+    "canonical": "https://voicebridge-6kr.pages.dev/",
+    "hreflang_en": "https://voicebridge-6kr.pages.dev/",
+    "hreflang_zh_cn": "https://voicebridge-6kr.pages.dev/zh-CN/",
+    "hreflang_default": "https://voicebridge-6kr.pages.dev/"
+  },
+  "og": {
+    "title": "VoiceBridge - Speak on Your Phone, Type on Your Computer",
+    "description": "Use your phone as a voice input remote for your computer. VoiceBridge transcribes speech, sends text to the active field, and runs reusable commands.",
+    "url": "https://voicebridge-6kr.pages.dev/",
+    "image": "https://voicebridge-6kr.pages.dev/og-image-en.png",
+    "locale": "en_US"
+  },
+  "nav": {
+    "brand": "VoiceBridge",
+    "brand_href": "/",
+    "links_aria": "Primary navigation",
+    "link_product": "Product",
+    "link_commands": "Commands",
+    "link_how": "How it works",
+    "link_download": "Download",
+    "lang_href": "/zh-CN/",
+    "lang_hreflang": "zh-CN",
+    "lang_aria": "Switch to Simplified Chinese",
+    "lang_label": "中文",
+    "open_app": "Open app",
+    "menu_aria": "Open menu"
+  },
+  "hero": {
+    "h1_line1": "Speak on your phone.",
+    "h1_line2": "Type on your computer.",
+    "sr_subtitle": "Hold to record. VoiceBridge transcribes your speech and sends it to the active text field.",
+    "typewriter": [
+      "VoiceBridge transcribes your speech and sends it to the active text field.",
+      "Hold to record on your phone. Release. Text appears on your computer.",
+      "Wrap long templates into commands. Trigger them with one sentence."
+    ],
+    "cta_primary": "Download desktop app",
+    "cta_secondary": "Open web app",
+    "video_poster": "/media/hero-poster.svg",
+    "video_coming": "Product demo coming soon"
+  },
+  "product": {
+    "title": "Voice input without switching windows",
+    "lead": "Your phone captures speech, your computer receives the text.",
+    "main_image": "/media/product-main.svg",
+    "main_image_alt": "VoiceBridge transcribing speech from phone to computer",
+    "main_title": "Cross-device input",
+    "main_body": "Your phone records audio, VoiceBridge transcribes it in the cloud, and the text is delivered to your signed-in computer.",
+    "aux1_eyebrow": "Active field",
+    "aux1_title": "Sends to the current input",
+    "aux1_body": "Text is delivered to the active window on your computer, so you can keep typing without switching apps.",
+    "aux2_eyebrow": "Fallback",
+    "aux2_title": "Clipboard backup",
+    "aux2_body": "When auto-paste is not supported, the text is still copied to your computer clipboard."
+  },
+  "commands": {
+    "title": "Reuse the text you type every day",
+    "screenshot": "/media/commands-library.svg",
+    "screenshot_alt": "VoiceBridge preset command library screenshot",
+    "item1_label": "Minimal changes",
+    "item1_source": "Built-in preset",
+    "item2_label": "Code review",
+    "item2_source": "Built-in preset",
+    "item3_label": "UI design",
+    "item3_source": "Built-in preset",
+    "item4_label": "Quick overview",
+    "item4_source": "Built-in preset",
+    "footnote": "11 built-in presets. Add your own commands for repeated text."
+  },
+  "how": {
+    "title": "Connect both devices, then speak",
+    "step1_title": "Open the web app.",
+    "step1_body": "Create an account or sign in on your phone.",
+    "step2_title": "Install the desktop app.",
+    "step2_body": "Sign in with the same account.",
+    "step3_title": "Speak.",
+    "step3_body": "Hold to record, release, and keep typing on your computer."
+  },
+  "download": {
+    "title": "Choose your desktop app",
+    "lead": "Available for macOS and Windows.",
+    "coming_label": "Coming soon",
+    "free_note": "Free plan available. No credit card required."
+  },
+  "footer": {
+    "col_product_title": "Product",
+    "col_product_open": "Open app",
+    "col_product_download": "Download",
+    "col_product_commands": "Commands",
+    "col_resources_title": "Resources",
+    "col_resources_github": "GitHub",
+    "col_resources_github_href": "https://github.com/Golden-forest/VoiceBridge",
+    "col_resources_faq": "FAQ",
+    "col_legal_title": "Legal",
+    "col_legal_privacy": "Privacy",
+    "col_legal_terms": "Terms",
+    "col_language_title": "Language",
+    "col_language_en": "English",
+    "col_language_zh": "简体中文"
+  }
+}

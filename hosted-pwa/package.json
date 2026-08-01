@@ -4,7 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "build": "node scripts/build-static.mjs",
+    "build": "node scripts/build-landing.mjs && node scripts/build-static.mjs",
     "test": "npm run build && node --test tests/static-build.test.mjs"
   }
 }
