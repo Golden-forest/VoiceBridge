@@ -3,6 +3,7 @@ import test from "node:test";
 
 import {
   createTencentFlashRecognitionRequest,
+  createTencentSentenceRecognitionRequest,
   transcribeTencentWav
 } from "./tencent_asr.ts";
 
@@ -55,4 +56,31 @@ test("Tencent ASR falls back to SentenceRecognition when FlashRecognition is una
   assert.equal(calls.length, 2);
   assert.match(calls[0].url, /asr\.cloud\.tencent\.com\/asr\/flash/);
   assert.equal(calls[1].init.headers["X-TC-Action"], "SentenceRecognition");
+});
+
+test("FlashRecognition aligns Tencent filter params (filter_modal=1, filter_punc=0, filter_dirty=0, convert_num_mode=1)", async () => {
+  const request = await createTencentFlashRecognitionRequest({
+    audioBytes: new Uint8Array([1, 2, 3]),
+    config,
+    timestamp: 1_700_000_000
+  });
+  const url = new URL(request.url);
+  assert.equal(url.searchParams.get("filter_modal"), "1", "filter_modal must be 1");
+  assert.equal(url.searchParams.get("filter_punc"), "0", "filter_punc must be 0");
+  assert.equal(url.searchParams.get("filter_dirty"), "0", "filter_dirty must be 0");
+  assert.equal(url.searchParams.get("convert_num_mode"), "1", "convert_num_mode must be 1");
+});
+
+test("SentenceRecognition payload carries aligned Tencent filter params", async () => {
+  const result = await createTencentSentenceRecognitionRequest({
+    audioBase64: "AAAA",
+    audioLength: 4,
+    requestId: "req-1",
+    config,
+    timestamp: 1_700_000_000
+  });
+  assert.equal(result.payload.FilterDirty, 0);
+  assert.equal(result.payload.FilterModal, 1);
+  assert.equal(result.payload.FilterPunc, 0);
+  assert.equal(result.payload.ConvertNumMode, 1);
 });

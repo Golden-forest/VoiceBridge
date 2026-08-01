@@ -96,7 +96,7 @@ export async function createTencentFlashRecognitionRequest({
     convert_num_mode: "1",
     engine_type: config.engServiceType,
     filter_dirty: "0",
-    filter_modal: "0",
+    filter_modal: "1",
     filter_punc: "0",
     first_channel_only: "1",
     secretid: config.secretId,
@@ -145,7 +145,11 @@ export async function createTencentSentenceRecognitionRequest({
     VoiceFormat: "wav",
     UsrAudioKey: `voicebridge-${requestId}`,
     Data: audioBase64,
-    DataLen: audioLength
+    DataLen: audioLength,
+    FilterDirty: 0,
+    FilterModal: 1,
+    FilterPunc: 0,
+    ConvertNumMode: 1
   };
 
   const body = JSON.stringify(payload);
