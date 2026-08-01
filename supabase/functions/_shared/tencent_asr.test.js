@@ -4,6 +4,7 @@ import test from "node:test";
 import {
   createTencentFlashRecognitionRequest,
   createTencentSentenceRecognitionRequest,
+  removeFillerWords,
   transcribeTencentWav
 } from "./tencent_asr.ts";
 
@@ -83,4 +84,65 @@ test("SentenceRecognition payload carries aligned Tencent filter params", async 
   assert.equal(result.payload.FilterModal, 1);
   assert.equal(result.payload.FilterPunc, 0);
   assert.equal(result.payload.ConvertNumMode, 1);
+});
+
+const FILLER_FIXTURES = [
+  ["嗯，你好", "你好"],
+  ["你好嗯嗯嗯，世界", "你好，世界"],
+  ["嗯嗯嗯你好", "你好"],
+  ["你好，嗯嗯嗯，世界", "你好，世界"],
+  ["哼唱", "哼唱"],
+  ["啧啧称奇", "啧啧称奇"],
+  ["", ""],
+  ["你好世界", "你好世界"],
+  ["嗯嗯嗯", ""],
+  ["你好，世界嗯嗯嗯", "你好，世界"]
+];
+
+for (const [input, expected] of FILLER_FIXTURES) {
+  test(`removeFillerWords(${JSON.stringify(input)}) => ${JSON.stringify(expected)}`, () => {
+    assert.equal(removeFillerWords(input), expected);
+  });
+}
+
+test("FlashRecognition path applies removeFillerWords on its returned text", async () => {
+  const fetchImpl = async () =>
+    new Response(
+      JSON.stringify({
+        code: 0,
+        flash_result: [{ text: "嗯，你好嗯嗯嗯，世界" }]
+      }),
+      { status: 200, headers: { "Content-Type": "application/json" } }
+    );
+  const text = await transcribeTencentWav({
+    audioBytes: new Uint8Array([1, 2, 3]),
+    requestId: "req-flash",
+    config,
+    fetchImpl
+  });
+  assert.equal(text, "你好，世界");
+});
+
+test("SentenceRecognition fallback path applies removeFillerWords on its returned text", async () => {
+  const calls = [];
+  const fetchImpl = async (url, init) => {
+    calls.push({ url: String(url), init });
+    if (calls.length === 1) {
+      return new Response(JSON.stringify({ code: 4003, message: "service not enabled" }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" }
+      });
+    }
+    return new Response(
+      JSON.stringify({ Response: { Result: "嗯嗯嗯你好，世界嗯嗯嗯" } }),
+      { status: 200, headers: { "Content-Type": "application/json" } }
+    );
+  };
+  const text = await transcribeTencentWav({
+    audioBytes: new Uint8Array([1, 2, 3]),
+    requestId: "req-sentence",
+    config,
+    fetchImpl
+  });
+  assert.equal(text, "你好，世界");
 });

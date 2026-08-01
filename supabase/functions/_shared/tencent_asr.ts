@@ -4,6 +4,32 @@ const SERVICE = "asr";
 const VERSION = "2019-06-14";
 const ACTION = "SentenceRecognition";
 
+const FILLER_CLASS = "[嗯呃唔噢欸诶哼嘖啧]";
+const BOUNDARY = "[\\s，,。.!！？?、；;：:]";
+const FILLER_BEFORE_BOUNDARY = new RegExp(`${FILLER_CLASS}+(${BOUNDARY})`, "gu");
+const FILLER_AFTER_BOUNDARY = new RegExp(`(${BOUNDARY})${FILLER_CLASS}+`, "gu");
+const ALL_FILLER = new RegExp(`^${FILLER_CLASS}+$`, "u");
+const LEADING_FILLER_3PLUS = new RegExp(`^(${FILLER_CLASS})\\1{2,}`, "u");
+const TRAILING_FILLER_3PLUS = new RegExp(`(${FILLER_CLASS})\\1{2,}$`, "u");
+
+export function removeFillerWords(text: string): string {
+  if (!text) return text;
+
+  let r = text;
+  r = r.replace(FILLER_AFTER_BOUNDARY, "$1");
+  r = r.replace(FILLER_BEFORE_BOUNDARY, "$1");
+  if (ALL_FILLER.test(r.trim())) return "";
+  r = r.replace(LEADING_FILLER_3PLUS, "");
+  r = r.replace(TRAILING_FILLER_3PLUS, "");
+  r = r
+    .replace(/([，,。.!！？?、；;：:])\1+/gu, "$1")
+    .replace(/[ \t]{2,}/g, " ")
+    .replace(/\s+([，,。.!！？?、；;：:])/gu, "$1")
+    .replace(/^[\s，,。.!！？?、；;：:]+/u, "")
+    .trim();
+  return r || "";
+}
+
 export type TencentAsrConfig = {
   secretId: string;
   secretKey: string;
@@ -43,7 +69,7 @@ export async function transcribeTencentWav({
         : "";
       if (!text) throw new Error("Tencent FlashRecognition returned empty text");
       console.info("Tencent ASR provider: FlashRecognition");
-      return text;
+      return removeFillerWords(text);
     } catch (error) {
       console.warn("Tencent FlashRecognition failed; falling back to SentenceRecognition:", error);
     }
@@ -76,7 +102,7 @@ export async function transcribeTencentWav({
     throw new Error("Tencent ASR returned empty text");
   }
 
-  return result.trim();
+  return removeFillerWords(result.trim());
 }
 
 export async function createTencentFlashRecognitionRequest({
