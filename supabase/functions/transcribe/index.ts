@@ -29,7 +29,6 @@ Deno.serve(async (req) => {
   let audioSizeBytes = 0;
   let serviceClient: SupabaseClientLike | null = null;
   let usageReserved = false;
-  let isAdminFastPath = false;
 
   try {
     const env = getSupabaseEnv();
@@ -83,39 +82,35 @@ Deno.serve(async (req) => {
 
     const cachedPlan = getCachedPlan(userId);
 
-    if (cachedPlan === "admin") {
-      isAdminFastPath = true;
-    } else {
-      const reservation = await reserveAndGetPlan(serviceClient, {
-        userId,
-        requestId,
-        durationMs,
-        audioSizeBytes,
-        cachedPlan
-      });
-      planCache.set(userId, {
-        plan: reservation.plan,
-        expiresAt: Date.now() + PLAN_CACHE_TTL_MS
-      });
-      const reservationError = reservation.errorCode;
-      if (reservationError) {
-        await recordUsage(serviceClient, { userId, requestId, durationMs, audioSizeBytes, status: "rejected", errorCode: reservationError });
-        if (reservationError === "audio_too_long") {
-          return errorResponse(
-            reservationError,
-            `单次录音最长支持 ${reservation.maxAudioSeconds} 秒。`,
-            413
-          );
-        }
-        const message = reservationError === ERROR_CODE_QUOTA_EXCEEDED
-          ? "本月云端语音识别额度已用完。"
-          : reservationError === "rate_limited"
-            ? "请求过于频繁，请稍后再试。"
-            : "云端语音识别请求已存在，请稍后再试。";
-        return errorResponse(reservationError, message, 429);
+    const reservation = await reserveAndGetPlan(serviceClient, {
+      userId,
+      requestId,
+      durationMs,
+      audioSizeBytes,
+      cachedPlan
+    });
+    planCache.set(userId, {
+      plan: reservation.plan,
+      expiresAt: Date.now() + PLAN_CACHE_TTL_MS
+    });
+    const reservationError = reservation.errorCode;
+    if (reservationError) {
+      await recordUsage(serviceClient, { userId, requestId, durationMs, audioSizeBytes, status: "rejected", errorCode: reservationError });
+      if (reservationError === "audio_too_long") {
+        return errorResponse(
+          reservationError,
+          `单次录音最长支持 ${Math.ceil(reservation.maxAudioMs / 1000)} 秒。`,
+          413
+        );
       }
-      usageReserved = true;
+      const message = reservationError === ERROR_CODE_QUOTA_EXCEEDED
+        ? "本月云端语音识别额度已用完。"
+        : reservationError === "rate_limited"
+          ? "请求过于频繁，请稍后再试。"
+          : "云端语音识别请求已存在，请稍后再试。";
+      return errorResponse(reservationError, message, 429);
     }
+    usageReserved = true;
 
     const tencentEnv = getTencentEnv();
     const text = await transcribeTencentWav({
@@ -130,27 +125,17 @@ Deno.serve(async (req) => {
       }
     });
 
-    if (isAdminFastPath) {
-      EdgeRuntime.waitUntil(recordUsage(serviceClient, {
-        userId,
-        requestId,
-        durationMs,
-        audioSizeBytes,
-        status: "success"
-      }));
-    } else {
-      // Fire-and-forget: 不阻塞响应等待 usage_event 更新
-      void updateReservedUsage(serviceClient, { userId, requestId, status: "success" })
-        .catch((err) => console.error("Background updateReservedUsage failed:", err));
-    }
+    EdgeRuntime.waitUntil(updateReservedUsage(serviceClient, {
+      userId,
+      requestId,
+      status: "success"
+    }));
     return jsonResponse({ ok: true, request_id: requestId, text });
   } catch (error) {
     console.error("Transcribe function error:", error);
     if (userId && serviceClient) {
       if (usageReserved) {
-        // Fire-and-forget: 失败路径同样不阻塞错误响应
-        void updateReservedUsage(serviceClient, { userId, requestId, status: "failed", errorCode: "transcription_failed" })
-          .catch((err) => console.error("Background updateReservedUsage (failed) failed:", err));
+        EdgeRuntime.waitUntil(updateReservedUsage(serviceClient, { userId, requestId, status: "failed", errorCode: "transcription_failed" }));
       } else {
         await recordUsage(serviceClient, {
           userId,
@@ -224,7 +209,7 @@ async function reserveAndGetPlan(
     data?.plan === "pro" ? "pro" : "free";
   return {
     plan,
-    maxAudioSeconds: Number(data?.max_audio_seconds) || 60,
+    maxAudioMs: Number(data?.max_audio_ms) || 60_000,
     errorCode: typeof data?.error_code === "string" ? data.error_code : null
   };
 }
