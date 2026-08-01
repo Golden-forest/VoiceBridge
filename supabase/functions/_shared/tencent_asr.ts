@@ -4,6 +4,19 @@ const SERVICE = "asr";
 const VERSION = "2019-06-14";
 const ACTION = "SentenceRecognition";
 
+// === Provider deadline constants (Task 7) ===
+// Total budget for the whole transcribeTencentWav() call.
+const TOTAL_DEADLINE_MS = 12_000;
+// Per-call timeout for FlashRecognition (shorter than the legacy 10s).
+const FLASH_TIMEOUT_MS = 8_000;
+// Minimum remaining budget required before attempting SentenceRecognition fallback.
+const FALLBACK_MIN_BUDGET_MS = 3_000;
+// Floor for the SentenceRecognition timeout (never go below 1s).
+const SENTENCE_MIN_TIMEOUT_MS = 1_000;
+// Error message substrings that indicate Flash is explicitly unavailable;
+// these fall back immediately without consuming deadline budget.
+const FLASH_UNAVAILABLE_PATTERNS = ["4003", "not enabled", "not activated", "service not"];
+
 const FILLER_CLASS = "[嗯呃唔噢欸诶哼嘖啧]";
 const BOUNDARY = "[\\s，,。.!！？?、；;：:]";
 const FILLER_BEFORE_BOUNDARY = new RegExp(`${FILLER_CLASS}+(${BOUNDARY})`, "gu");
@@ -42,14 +55,22 @@ export async function transcribeTencentWav({
   audioBytes,
   requestId,
   config,
-  fetchImpl = fetch
+  fetchImpl = fetch,
+  deadlineStart = Date.now()
 }: {
   audioBytes: Uint8Array;
   requestId: string;
   config: TencentAsrConfig;
   fetchImpl?: typeof fetch;
+  /**
+   * Injection point for the overall 12s deadline. Tests can pass a back-dated
+   * timestamp to simulate near-expired budgets. Production callers should omit
+   * this so the deadline starts when Edge receives the request.
+   */
+  deadlineStart?: number;
 }) {
   if (config.appId) {
+    const flashStart = Date.now();
     try {
       const flashRequest = await createTencentFlashRecognitionRequest({
         audioBytes,
@@ -59,7 +80,7 @@ export async function transcribeTencentWav({
         method: "POST",
         headers: flashRequest.headers,
         body: toArrayBuffer(audioBytes)
-      });
+      }, FLASH_TIMEOUT_MS);
       const payload = await response.json().catch(() => ({}));
       if (!response.ok || payload.code !== 0) {
         throw new Error(payload.message || `HTTP ${response.status}`);
@@ -68,13 +89,50 @@ export async function transcribeTencentWav({
         ? payload.flash_result.map((result: { text?: string }) => result?.text || "").join("").trim()
         : "";
       if (!text) throw new Error("Tencent FlashRecognition returned empty text");
-      console.info("Tencent ASR provider: FlashRecognition");
+      console.info("Tencent ASR provider: FlashRecognition", {
+        provider: "flash",
+        duration_ms: Date.now() - flashStart
+      });
       return removeFillerWords(text);
     } catch (error) {
-      console.warn("Tencent FlashRecognition failed; falling back to SentenceRecognition:", error);
+      const elapsed = Date.now() - deadlineStart;
+      const remaining = TOTAL_DEADLINE_MS - elapsed;
+      const message = String((error as Error)?.message || error);
+      const isServiceUnavailable = FLASH_UNAVAILABLE_PATTERNS.some((p) => message.toLowerCase().includes(p));
+      const fallbackReason = isServiceUnavailable
+        ? "service_unavailable"
+        : (error as Error)?.name === "AbortError" || /abort/i.test(message)
+          ? "flash_timeout"
+          : "flash_error";
+
+      if (isServiceUnavailable) {
+        // Immediate fallback — does not consume deadline budget.
+        console.warn("Tencent FlashRecognition unavailable; falling back to SentenceRecognition", {
+          fallback_reason: fallbackReason,
+          elapsed_ms: elapsed
+        });
+      } else if (remaining >= FALLBACK_MIN_BUDGET_MS) {
+        // Timeout / network / unknown error — only fall back if we still have ≥3s.
+        console.warn("Tencent FlashRecognition failed; falling back to SentenceRecognition", {
+          fallback_reason: fallbackReason,
+          elapsed_ms: elapsed,
+          remaining_ms: remaining
+        });
+      } else {
+        // Budget exhausted: re-throw so the caller surfaces the failure instead
+        // of starting a SentenceRecognition request that will almost certainly
+        // be aborted by the overall Edge function timeout.
+        console.error("Tencent FlashRecognition failed and deadline budget exhausted", {
+          fallback_reason: fallbackReason,
+          elapsed_ms: elapsed,
+          remaining_ms: remaining
+        });
+        throw error;
+      }
     }
   }
 
+  const sentenceStart = Date.now();
   const request = await createTencentSentenceRecognitionRequest({
     audioBase64: bytesToBase64(audioBytes),
     audioLength: audioBytes.byteLength,
@@ -82,11 +140,15 @@ export async function transcribeTencentWav({
     config
   });
 
+  const sentenceTimeout = Math.max(
+    SENTENCE_MIN_TIMEOUT_MS,
+    TOTAL_DEADLINE_MS - (Date.now() - deadlineStart)
+  );
   const response = await fetchWithTimeout(fetchImpl, `https://${ENDPOINT}`, {
     method: "POST",
     headers: request.headers,
     body: request.body
-  });
+  }, sentenceTimeout);
   const payload = await response.json().catch(() => ({}));
 
   if (!response.ok || payload.Response?.Error) {
@@ -101,6 +163,12 @@ export async function transcribeTencentWav({
   if (typeof result !== "string" || !result.trim()) {
     throw new Error("Tencent ASR returned empty text");
   }
+
+  console.info("Tencent ASR provider: SentenceRecognition", {
+    provider: "sentence",
+    duration_ms: Date.now() - sentenceStart,
+    timeout_ms: sentenceTimeout
+  });
 
   return removeFillerWords(result.trim());
 }
@@ -258,9 +326,14 @@ async function hmacSha1Bytes(key: Uint8Array, message: string) {
   return new Uint8Array(signature);
 }
 
-async function fetchWithTimeout(fetchImpl: typeof fetch, url: string, init: RequestInit) {
+async function fetchWithTimeout(
+  fetchImpl: typeof fetch,
+  url: string,
+  init: RequestInit,
+  timeoutMs = 10_000
+) {
   const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), 10_000);
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
   try {
     return await fetchImpl(url, { ...init, signal: controller.signal });
   } finally {

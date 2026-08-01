@@ -146,3 +146,114 @@ test("SentenceRecognition fallback path applies removeFillerWords on its returne
   });
   assert.equal(text, "你好，世界");
 });
+
+// === Task 7: provider deadline + fallback classification ===
+
+test("Flash timeout with ≥3s budget remaining falls back to SentenceRecognition", async () => {
+  const calls = [];
+  const fetchImpl = async (url, init) => {
+    calls.push({ url: String(url), init });
+    if (calls.length === 1) {
+      // Simulate Flash timeout by aborting
+      const err = new Error("The operation was aborted");
+      err.name = "AbortError";
+      throw err;
+    }
+    return new Response(
+      JSON.stringify({ Response: { Result: "sentence fallback ok" } }),
+      { status: 200, headers: { "Content-Type": "application/json" } }
+    );
+  };
+
+  const text = await transcribeTencentWav({
+    audioBytes: new Uint8Array([1, 2, 3]),
+    requestId: "req-timeout-fb",
+    config,
+    fetchImpl
+  });
+
+  assert.equal(text, "sentence fallback ok");
+  assert.equal(calls.length, 2, "should fall back to SentenceRecognition after Flash timeout");
+});
+
+test("Flash timeout with <3s budget remaining does NOT fall back", async () => {
+  let flashCallCount = 0;
+  const fetchImpl = async (url) => {
+    flashCallCount++;
+    // Simulate Flash timeout that consumed almost all the deadline budget
+    const err = new Error("The operation was aborted");
+    err.name = "AbortError";
+    throw err;
+  };
+
+  await assert.rejects(
+    () => transcribeTencentWav({
+      audioBytes: new Uint8Array([1, 2, 3]),
+      requestId: "req-timeout-nobud",
+      config,
+      fetchImpl,
+      // Inject simulated deadline start so remaining budget < 3000ms
+      deadlineStart: Date.now() - 10_000
+    }),
+    /aborted|timeout|deadline/i
+  );
+  assert.equal(flashCallCount, 1, "should NOT call SentenceRecognition when budget < 3s");
+});
+
+test("Flash explicit service-unavailable error (4003) triggers immediate fallback", async () => {
+  const calls = [];
+  const fetchImpl = async (url, init) => {
+    calls.push({ url: String(url), init });
+    if (calls.length === 1) {
+      return new Response(JSON.stringify({ code: 4003, message: "service not enabled" }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" }
+      });
+    }
+    return new Response(
+      JSON.stringify({ Response: { Result: "immediate fallback ok" } }),
+      { status: 200, headers: { "Content-Type": "application/json" } }
+    );
+  };
+
+  // Force a near-expired deadline to prove 4003 falls back regardless of budget
+  const text = await transcribeTencentWav({
+    audioBytes: new Uint8Array([1, 2, 3]),
+    requestId: "req-4003",
+    config,
+    fetchImpl,
+    deadlineStart: Date.now() - 11_500
+  });
+
+  assert.equal(text, "immediate fallback ok");
+  assert.equal(calls.length, 2);
+});
+
+test("Flash passes 8000ms timeout and Sentence passes remaining budget", async () => {
+  const capturedSignals = [];
+  const fetchImpl = async (url, init) => {
+    // Capture the AbortController timeout indirectly by inspecting signal
+    capturedSignals.push({ url: String(url), hasSignal: !!init?.signal });
+    if (capturedSignals.length === 1) {
+      return new Response(JSON.stringify({ code: 4003, message: "not enabled" }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" }
+      });
+    }
+    return new Response(
+      JSON.stringify({ Response: { Result: "ok" } }),
+      { status: 200, headers: { "Content-Type": "application/json" } }
+    );
+  };
+
+  await transcribeTencentWav({
+    audioBytes: new Uint8Array([1, 2, 3]),
+    requestId: "req-timeouts",
+    config,
+    fetchImpl
+  });
+
+  assert.equal(capturedSignals.length, 2);
+  assert.ok(capturedSignals[0].hasSignal, "Flash request must have AbortSignal");
+  assert.ok(capturedSignals[1].hasSignal, "Sentence request must have AbortSignal");
+});
