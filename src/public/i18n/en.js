@@ -99,7 +99,8 @@ export default {
   // === Recording / Transcription ===
   record: {
     recordUnsupported: 'Recording is not supported in this browser, use audio upload fallback.',
-    reachedLimit: 'Reached the 55-second limit, uploading audio…',
+    reachedLimit: (seconds) => `Reached the ${seconds}-second limit, uploading audio…`,
+    maxDurationHint: (seconds) => `You can record up to ${seconds} seconds this time.`,
     micDenied: (msg) => `Microphone unavailable: ${msg}`,
     uploading: 'Uploading audio…',
     noVoice: 'No voice detected, please try again.',

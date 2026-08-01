@@ -4,6 +4,7 @@ import { recordWavUntilStopped } from "./cloudRecorder.js";
 import { transcribeCloudAudio } from "./cloudTranscribe.js";
 import { commandStore } from "./commandStore.js";
 import { isProtocolCompatible } from "./shared/protocol.js";
+import { PLAN_LIMITS, getPlanLimit, isAdminPlan } from "./shared/planLimits.js";
 import { t, getAvailableLocales, setLocale, getCurrentLocale, getIntlLocale } from "./i18n/i18n.js";
 
 // === Element References ===
@@ -310,6 +311,7 @@ async function handleAuthState(event) {
         const plan = sub?.plan === "admin"
           ? "admin"
           : (sub?.plan === "pro" && isPaidStatus(sub.status) ? "pro" : "free");
+        currentUserPlan = plan;
         if (plan === "admin") {
           planBadge.textContent = t('planBadge.admin');
           planBadge.classList.remove("pro");
@@ -493,15 +495,11 @@ function resetCloudDeviceSelect() {
   syncDeviceSelectorLabel?.();
 }
 
-const PLAN_LIMITS = {
-  free: { monthlySeconds: 600, maxAudioSeconds: 60, rateLimitPerMinute: 10 },
-  pro: { monthlySeconds: 18000, maxAudioSeconds: 60, rateLimitPerMinute: 30 },
-  admin: { monthlySeconds: 1_000_000, maxAudioSeconds: 3600, rateLimitPerMinute: 10_000 },
-};
-
 function isPaidStatus(status) {
   return status === "active" || status === "trialing";
 }
+
+let currentUserPlan = "free";  // updated by handleAuthState subscription query
 
 function formatRelativeTime(diffMs) {
   const minutes = Math.floor(diffMs / 60_000);
@@ -1488,6 +1486,10 @@ function setRecordProcessing() {
   labelEl.textContent = "";
 }
 
+function currentMaxAudioMs() {
+  return getPlanLimit(currentUserPlan).maxAudioMs;
+}
+
 function beginRecordingState() {
   isRecording = true;
   recordSeconds = 0;
@@ -1498,6 +1500,8 @@ function beginRecordingState() {
   setActionButtonsDisabled(true);
   setConnectionStatus(statusDot.className.includes("connected") ? "connected" : "connecting", t('record.recording'));
 
+  const maxMs = currentMaxAudioMs();
+  const maxSeconds = Math.floor(maxMs / 1000);
   maxRecordTimer = setTimeout(() => {
     if (isRecording) {
       void stopRecording().catch((error) => {
@@ -1505,9 +1509,9 @@ function beginRecordingState() {
         showToast(error.message || t('record.recordingFailed'), true);
         finishUpload();
       });
-      showToast(t('record.reachedLimit'));
+      showToast(t('record.reachedLimit', maxSeconds));
     }
-  }, 55_000);
+  }, maxMs - 500);  // stop 500ms before hard cap so the recorder doesn't overshoot
 
   timerInterval = setInterval(() => {
     recordSeconds++;
@@ -1520,8 +1524,16 @@ function beginRecordingState() {
 async function startRecording() {
   try {
     if (isCloudMode) {
+      const maxMs = currentMaxAudioMs();
       recorder = await recordWavUntilStopped({
-        onStopReady: async (blob) => uploadAudio(blob, "wav")
+        onStopReady: async (blob) => uploadAudio(blob, "wav"),
+        maxDurationMs: maxMs,
+        onMaxDurationReached: () => {
+          void stopRecording().catch((error) => {
+            console.error("Auto-stop failed:", error);
+            finishUpload();
+          });
+        }
       });
       beginRecordingState();
       return;
