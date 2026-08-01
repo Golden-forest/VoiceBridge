@@ -1,392 +1,501 @@
-# 云端 ASR 对齐与录音时长分级限制 设计文档
+# 云端 ASR 功能对齐与低延迟架构设计
 
-## 问题
+**日期：** 2026-08-01
 
-VoiceBridge 的云端模式（Cloud Mode）与 LAN 模式在 ASR 后处理上存在功能断层，同时录音时长缺少按账号等级（plan）的分级限制。
+**文档版本：** v2
 
-### 断层一：语气词未清理
-
-LAN 版有两层语气词过滤：
-
-1. **腾讯 ASR 参数层**：`tencentCloudTranscriber.js:129-133` 显式传 `FilterModal=1`（部分过滤语气词）
-2. **本地二次清理**：`transcriber.js:8-21` 的 `removeFillerWords()` 用正则删除 9 个独立单字语气词（嗯呃唔噢欸诶哼嘖啧）
-
-云端版两层都没有：
-
-- `tencent_asr.ts` Flash 路径硬编码 `filter_modal=0`（不过滤）
-- SentenceRecognition 兜底分支完全不传过滤参数（走腾讯默认值）
-- Edge Function 主流程无任何后处理，腾讯返回什么就给什么
-
-**结果**：云端识别结果包含大量"嗯""呃""噢"等语气词，用户体感差。
-
-### 断层二：ASR 参数不一致
-
-LAN 版显式传 4 个过滤参数（FilterDirty/FilterModal/FilterPunc/ConvertNumMode），云端版 Flash 路径只传部分、兜底路径全不传，导致两条路径行为不可控且与 LAN 不一致。
-
-### 问题三：录音时长无分级限制
-
-前端 `app.js:1501-1510` 写死 `55_000ms`，所有用户一律 55 秒，与 plan 完全解耦。后端 `PLAN_LIMITS` 已定义 `maxAudioSeconds`（free=60/pro=60/admin=3600），但前端未使用。admin 用户也被卡在 55 秒。
-
-## 目标
-
-1. **云端 ASR 处理对齐 LAN 版**：语气词清理 + ASR 参数一致
-2. **按 plan 分级录音时长限制**：free=15s / pro=60s / admin=600s（UI 显示 ∞）
-3. **零延迟影响**：所有处理不增加单次录音往返耗时
-
-## 非目标（本次不做）
-
-- **断句缓冲（asrTextOutputBuffer）**：多段录音合并、句末标点立即 flush、2.8s 空闲 flush 等逻辑不移植到云端。云端每次录音独立处理。
-- **语音命令（句号/逗号/换行/发送/删除/清空）**：云端暂不支持。
-- **LAN 模式改动**：LAN 版已有的逻辑不动，本次只改云端侧。
-
-理由：用户反馈的"断句不合理"问题主要根源是语气词未清理 + ASR 参数不对齐。解决这两点后断句质量大幅改善。断句缓冲和语音命令是更次级的需求，可后续迭代。
-
-## 方案
-
-### 架构选择：后端处理（Edge Function）
-
-`removeFillerWords` 放在 Edge Function（Deno/TS），不放前端。理由：
-
-- 与 LAN 版架构对称（LAN 是 `transcriber.js` 后端处理，Cloud 也是后端处理）
-- 逻辑单点维护，不可绕过
-- 延迟影响 <1ms（纯正则替换），可忽略
-- PWA 端零改动
-
-### 改动清单
-
-共 7 处改动，分 3 组。
+**状态：** 已按现有代码、腾讯云接口限制与 Supabase Edge Function 运行边界复核，可进入实施计划
 
 ---
 
-## 第一组：云端 ASR 处理对齐
+## 1. 结论摘要
 
-### 改动 1：`removeFillerWords` 移植到 Edge Function
+本次目标不是机械复制 LAN 逻辑，而是在保持两端用户行为一致的前提下，保护“停止录音 → 电脑出现文字”这条关键路径。
 
-**文件**：`supabase/functions/_shared/tencent_asr.ts`
+确定采用以下决策：
 
-在文件中新增函数，完全复用 LAN 版 `transcriber.js:8-21` 的逻辑：
+1. **立即对齐云端 ASR 参数和后处理**，但不照搬 LAN 中会误删正常词语的正则缺陷；LAN 与 Cloud 同时改为同一组保守规则和契约测试。
+2. **录音上限固定为 free 15 秒、pro 60 秒、admin 60 秒**。达到上限时前端自动结束录音，并正常上传、识别已经录到的前 15/60 秒；用户不会先录完再收到拒绝。
+3. **推翻“录音上限减 5 秒给上传留余量”**。上传和编码耗时不会增加 WAV 内的音频时长；客户端按真实上限停止，并通过采样数保证不越界。
+4. **不设计超过 60 秒的录音能力**。不做长音频上传、自动分段、实时 ASR 或长连接 relay。
+5. **不移植 2.8 秒空闲缓冲**。任何人为等待都会直接损害核心体验；普通识别结果立即输出。
+6. **不增加新的前台数据库或网络往返**。后端继续使用一次 `reserve_and_get_plan()` 原子 RPC；用量收尾异步执行。
+7. **建立可测量的延迟预算和 Server-Timing**。没有分段指标就不能证明“零延迟影响”。
+
+最终产品规则保持简单：一次录音、达到上限自动停止、一次上传、一次识别、一次输出。
+
+---
+
+## 2. 现状核对
+
+### 2.1 已经对齐的能力
+
+根据当前代码，以下能力已经在 Cloud 模式落地，不应在本设计中重复建设：
+
+| 能力 | LAN | Cloud | 结论 |
+|---|---|---|---|
+| 文本发送到指定桌面设备 | WebSocket | Supabase Realtime | 已对齐 |
+| 自动粘贴与剪切板兜底 | 本地 outputText | desktop realtime agent | 已对齐 |
+| Enter / Esc / Undo / Delete 等按键 | LAN WebSocket | `sendKey()` + ack | 已对齐 |
+| 桌面设备与窗口选择 | 本地 API | Presence + `target_window_id` | 已对齐 |
+| 指令库读取和用户指令 | 本地 commands | Cloud command store | 已有云端实现 |
+| 发送结果确认 | 本地 output 消息 | Realtime ack | 已对齐 |
+
+### 2.2 仍未对齐或存在风险的能力
+
+| # | 差异或风险 | 当前影响 | 本次处理 |
+|---:|---|---|---|
+| 1 | Flash `filter_modal=0` | 云端保留更多语气词 | 必做 |
+| 2 | SentenceRecognition 未显式传 4 个过滤参数 | fallback 行为与 LAN 不一致 | 必做 |
+| 3 | Cloud 无二次 filler 清理 | 同一段音频两端结果不同 | 必做 |
+| 4 | LAN filler 正则会误删“哼唱”“啧啧称奇” | 对齐旧实现会复制 bug | LAN/Cloud 一起修正 |
+| 5 | 前端固定 55 秒，套餐上限未进入录音状态 | UI 与后端配额不一致 | 必做 |
+| 6 | 当前 admin cache fast path 跳过 RPC | 可能跳过单次时长校验和 usage reservation | 必须删除 |
+| 7 | `ScriptProcessor` + 停止后整段 Float32 拼接、重采样和 WAV 编码 | 停止录音后主线程额外等待，60 秒录音时更明显 | 本轮测量；只在指标超标时优化 |
+| 8 | Flash 失败后一律 fallback | timeout 时可能先等 10 秒再走第二条请求 | 增加总 deadline 和错误分类 |
+| 9 | `hosted-pwa` 镜像校验不覆盖录音、转写和 i18n | 本地修了，线上文件仍可能漏同步 | 必做 |
+| 10 | Cloud 没有 LAN 的语音命令/跨录音缓冲 | 功能差异 | 本轮不加延迟缓冲；命令另行设计 |
+
+### 2.3 当前关键路径
+
+```text
+用户松开录音
+  → 主线程拼接 Float32 chunks
+  → 主线程重采样为 16kHz PCM
+  → 主线程生成完整 WAV Blob
+  → PWA 上传 multipart/form-data
+  → Supabase Edge Gateway + JWT claims 校验
+  → req.formData() + audio.arrayBuffer()
+  → 解析 WAV 时长
+  → reserve_and_get_plan() 原子 RPC
+  → Tencent FlashRecognition
+      ↳ 失败时 SentenceRecognition fallback
+  → ASR 后处理
+  → Edge 返回 PWA
+  → PWA 通过预热的 Realtime channel 发送文本
+  → Desktop 写剪切板并粘贴
+  → ack 返回 PWA
+```
+
+不能只测 Edge Function 的响应时间。用户感知延迟从松开录音开始，到文字真正出现在电脑输入框结束。
+
+---
+
+## 3. 延迟目标和约束
+
+### 3.1 核心指标
+
+定义：
+
+- `T0`：用户触发停止录音。
+- `T1`：WAV Blob 可上传。
+- `T2`：Edge 收到完整请求。
+- `T3`：配额 RPC 完成。
+- `T4`：腾讯返回最终文本。
+- `T5`：PWA 收到文本。
+- `T6`：桌面端完成粘贴或剪切板写入。
+
+核心指标为 `stop_to_desktop_ms = T6 - T0`。
+
+| 指标 | P50 目标 | P95 目标 | 说明 |
+|---|---:|---:|---|
+| `encode_ms` (`T1-T0`) | ≤ 40ms | ≤ 120ms | 不允许随录音时长明显线性恶化 |
+| `edge_pre_asr_ms` (`T3-T2`) | ≤ 150ms | ≤ 350ms | 含鉴权、解析和一次 RPC |
+| `asr_ms` (`T4-T3`) | 先建立基线 | 先建立基线 | 按音频时长、provider path 分桶 |
+| `response_ms` (`T5-T4`) | ≤ 120ms | ≤ 300ms | Edge → PWA |
+| `desktop_delivery_ms` (`T6-T5`) | ≤ 180ms | ≤ 500ms | Realtime send + desktop output + ack |
+| `stop_to_desktop_ms` | ≤ 1.2s | ≤ 2.5s | 以 3-8 秒普通话录音为基准 |
+
+以上是验收预算，不是上线前虚构的承诺值。第一阶段先采集至少 100 次真实样本；如果腾讯 ASR 本身超过预算，应单独报告 provider 延迟，不用前端动画掩盖。
+
+### 3.2 不得进入关键路径的操作
+
+- 不在录音停止后重新查询 plan。
+- 不在 ASR 返回后同步更新 usage event。
+- 不等待 Realtime ack 才把文本显示在手机输入框。
+- 不做 2.8 秒空闲 flush。
+- 不在请求中做多次 ASR 重试或无上限 fallback。
+- 不在主线程上对完整录音执行不必要的多次复制。
+
+---
+
+## 4. 本轮方案：批处理短录音对齐
+
+### 4.1 ASR 参数统一
+
+**文件：** `supabase/functions/_shared/tencent_asr.ts`
+
+FlashRecognition 显式固定：
 
 ```ts
-const FILLER_CHARS = "嗯呃唔噢欸诶哼嘖啧";
-const FILLER_RE = new RegExp(`[${FILLER_CHARS}]`, "g");
+filter_dirty: "0",
+filter_modal: "1",
+filter_punc: "0",
+convert_num_mode: "1",
+```
+
+SentenceRecognition 显式固定：
+
+```ts
+FilterDirty: 0,
+FilterModal: 1,
+FilterPunc: 0,
+ConvertNumMode: 1,
+```
+
+这些值与 LAN 当前配置一致。两条 provider path 必须有请求构造单元测试，禁止依赖腾讯默认值。
+
+### 4.2 后处理不复制 LAN 的误删 bug
+
+原 LAN 实现使用字符类全局删除：
+
+```js
+/[嗯呃唔噢欸诶哼嘖啧]/g
+```
+
+该实现与“只删独立语气词”的注释不一致，会把“哼唱”“啧啧称奇”等正常词语破坏。云端不应为了表面对齐而复制错误。
+
+改为两层策略：
+
+1. 腾讯 `FilterModal=1` 负责第一层部分过滤。
+2. 本地只删除位于句首、句尾或标点/空白边界之间的连续语气词；不删除普通词内部字符。
+
+示意规则：
+
+```ts
+const FILLER_TOKEN = /(^|[\s，,。.!！？?、；;：:])(?:嗯+|呃+|唔+|噢+|欸+|诶+|哼+|嘖+|啧+)(?=$|[\s，,。.!！？?、；;：:])/gu;
 
 export function removeFillerWords(text: string): string {
-  if (!text) return text;
-  return text.replace(FILLER_RE, "").trim() || "";
+  return text
+    .replace(FILLER_TOKEN, "$1")
+    .replace(/[ \t]{2,}/g, " ")
+    .replace(/\s+([，,。.!！？?、；;：:])/gu, "$1")
+    .trim();
 }
 ```
 
-**文件**：`supabase/functions/transcribe/index.ts`
+实现要求：
 
-在主流程（行 121-146）中，拿到腾讯返回的 `text` 后、返回响应前，调用 `removeFillerWords`：
+- 后处理在 `transcribeTencentWav()` 内统一调用，确保 Flash 和 fallback 不会漏掉。
+- LAN `src/server/asr/transcriber.js` 同步采用相同行为。
+- 两端跑同一份 fixture，至少覆盖：句首 filler、标点之间 filler、连续 filler、空文本、“哼唱”“啧啧称奇”、标点保留。
+- 不删除“啊”，因为正常汉语词汇中出现频率高，误删风险更大。
 
-```ts
-const rawText = await transcribeTencentWav({...});
-const text = removeFillerWords(rawText);
-return jsonResponse({ ok: true, request_id: requestId, text });
+### 4.3 Provider 路由和总超时
+
+当前 Flash 任意失败都会 fallback，单次 Flash timeout 为 10 秒，最坏情况下用户先完整等待一次失败再开始 SentenceRecognition。
+
+改为：
+
+- `<= 60s`：Flash 为主，SentenceRecognition 只作为短音频 fallback。
+- 正常录音由客户端在套餐上限处自动停止。后端的 `> 60s` 拒绝只处理绕过前端、计时器异常或手动构造的非法请求，不是正常用户流程。
+- 单次请求设置总 deadline，而不是每条 provider path 各拥有完整 10 秒。
+- 对“服务未开通、参数不支持”等明确错误可立即 fallback。
+- 对 timeout/网络错误，只有在总 deadline 尚有足够预算时才 fallback；不做第二轮 retry。
+- 响应和日志记录 `provider=flash|sentence`、`fallback_reason` 和各阶段时长，但不记录音频或转写正文。
+
+VoiceBridge 将 60 秒作为两条 provider path 的统一产品上限。腾讯 SentenceRecognition 官方限制为 60 秒内、3MB 内；即使 FlashRecognition 能处理更长音频，本项目也不开放该差异能力。
+
+### 4.4 套餐与单次录音上限
+
+本轮采用：
+
+| Plan | monthlySeconds | batch maxAudioSeconds | rateLimitPerMinute | UI |
+|---|---:|---:|---:|---|
+| free | 600 | 15 | 10 | 最长 15 秒 |
+| pro | 18000 | 60 | 30 | 最长 60 秒 |
+| admin | 1_000_000 | 60 | 10_000 | 最长 60 秒 |
+
+说明：
+
+- admin 与 pro 使用相同的单次 60 秒上限；admin 的差异只体现在月额度和频率限制，不体现在单次录音时长。
+- UI 必须显示真实限制，不显示 `∞`。
+- plan 只影响最大录音时长和额度，不应改变同一段音频的 ASR 参数或文本质量。
+
+### 4.5 录音停止不再减 5 秒
+
+原方案把 free 15 秒变成实际 10 秒、pro 60 秒变成实际 55 秒，这是错误的产品语义。上传耗时不属于音频时长，不能从用户录音额度中扣除。
+
+实现：
+
+- `currentUserPlan` 只用于前端 UI 和提前停止；后端仍是唯一权威。
+- `handleAuthState()` 已经读取 subscription，直接同步 `currentUserPlan`，不新增请求。
+- plan 未加载时采用 free 作为安全默认；加载后立即更新提示。
+- cloud recorder 接收 `maxDurationMs`，按已采集 PCM sample 数触发停止，避免后台标签页 timer throttling 造成越界。
+- `setTimeout(maxDurationMs)` 只作为 UI/设备异常兜底，不负责精确计量。
+- 后端直接按 WAV header 得到的毫秒数校验，不使用 `ceil(seconds)` 制造 15.01 秒变成 16 秒的边界误判。
+
+`t()` 已确认支持函数型文案和 rest 参数，因此直接使用：
+
+```js
+reachedLimit: (sec) => `已到 ${sec} 秒上限，正在识别...`,
+maxDurationHint: (sec) => `最长 ${sec} 秒`,
 ```
 
-### 改动 2：ASR 参数对齐
+英文提供对应函数型 key，不在 `app.js` 内直接拼中英文字符串。
 
-**文件**：`supabase/functions/_shared/tencent_asr.ts`
+### 4.6 删除 admin fast path
 
-**Flash 路径**（约行 95-107）：
+当前 `transcribe/index.ts` 在命中 admin plan cache 后直接跳过 `reserve_and_get_plan()`。这会同时跳过：
 
-```diff
-- filter_modal: "0",
-+ filter_modal: "1",
+- admin 状态重新确认；
+- 单次时长校验；
+- 原子 usage reservation；
+- request 去重和频率保护。
+
+当字节上限扩大时，这个问题会变得更严重。本设计删除 `isAdminFastPath`；所有 plan 每次请求都执行同一个原子 RPC。保留 60 秒 plan cache 只允许减少 RPC 内部 subscription 查询，不允许绕过 RPC 本身。
+
+这会让命中旧 admin fast path 的请求恢复一次 RPC，但 free/pro 的关键路径不增加往返。该取舍用于修复真实的校验绕过；必须在 Phase 0 单独测量 admin 的 `reserve_ms`。若其 P95 超过 150ms，应优化 RPC 查询和索引，或另行设计录音期间完成的预授权 ticket，不能重新用跳过 reservation 的方式换延迟。
+
+成功或失败后的 usage 状态更新使用 `EdgeRuntime.waitUntil()` 承接，不阻塞文本响应。不能只写裸 `void promise`，否则 isolate 可能在响应结束后提前退出。
+
+### 4.7 数据库迁移规则
+
+不得修改已经存在并可能部署过的 `0011_admin_plan.sql`。应通过 Supabase CLI 创建新的迁移，再使用 `create or replace function` 更新 `reserve_and_get_plan()`：
+
+```text
+supabase migration new align_cloud_asr_limits
 ```
 
-其余 Flash 参数（`filter_dirty: "0"`, `filter_punc: "0"`, `convert_num_mode: "1"`）已与 LAN 一致，不动。
+新迁移需要：
 
-**SentenceRecognition 兜底分支**（约行 125-149）：
+- 将单次时长判断改为毫秒比较。
+- 将 free/pro/admin batch 上限改为 15/60/60。
+- 保留 advisory lock、月额度、频率限制和 unique request 处理。
+- 继续只向 `service_role` 授予 RPC execute 权限。
+- 不使用用户可编辑的 metadata 判断 admin；继续读取受服务端控制的 subscription/profile 数据。
 
-当前 payload 完全不传过滤参数。补全 4 个参数，与 LAN 版 `tencentCloudTranscriber.js:129-133` 一致：
+### 4.8 音频大小校验
 
-```ts
-const payload = {
-  ProjectId: 0,
-  SubServiceType: 2,
-  EngSerViceType: config.engServiceType,
-  SourceType: 1,
-  VoiceFormat: "wav",
-  UsrAudioKey: `voicebridge-${requestId}`,
-  Data: audioBase64,
-  DataLen: audioLength,
-  FilterDirty: 0,        // 新增
-  FilterModal: 1,        // 新增（与 LAN 一致）
-  FilterPunc: 0,         // 新增
-  ConvertNumMode: 1,     // 新增
-};
-```
+16kHz、16-bit、mono PCM WAV 约为 32KB/s：15 秒约 480KB，60 秒约 1.92MB。
+
+本轮保持 3MB 绝对上限，不增加 25MB admin 分支。校验顺序：
+
+1. 在读取 body 后立即做 3MB absolute byte limit。
+2. 解析 WAV header，校验 PCM、mono、16-bit、16kHz 和 duration。
+3. 调用原子 RPC 做 plan duration/quota/rate-limit reservation。
+
+`parsePcmWavDurationMs()` 还应返回或配套校验音频格式字段，不能只计算 duration 后默认格式可信。
 
 ---
 
-## 第二组：按 plan 分级录音时长限制
+## 5. 停止后编码优化
 
-### 改动 3：后端 PLAN_LIMITS 调整
+### 5.1 当前问题
 
-目标配额：
+`cloudRecorder.js` 使用已废弃的 `ScriptProcessorNode`，录音时保存多个 Float32 chunk；停止后再：
 
-| Plan | monthlySeconds | maxAudioSeconds | rateLimitPerMinute |
-|---|---|---|---|
-| free | 600（不变） | **15**（原 60） | 10（不变） |
-| pro | 18000（不变） | 60（不变） | 30（不变） |
-| admin | 1_000_000（不变） | **600**（原 3600） | 10_000（不变） |
+1. 计算总长度；
+2. 拼成一个大 Float32Array；
+3. 最近邻重采样到 16kHz；
+4. 再生成完整 PCM WAV ArrayBuffer。
 
-需同步修改 **4 处**定义：
+这会产生多次整段内存复制，并把计算集中在用户已经停止说话之后。短音频影响有限，录音越长越明显。
+
+### 5.2 推荐替换
+
+在不改变后端协议的前提下，用 `AudioWorklet` 增量输出 16kHz Int16 PCM chunk：
+
+- 录音过程中完成线性插值重采样和 Float32 → Int16 转换。
+- 主线程只保存 Int16 ArrayBuffer chunks。
+- 停止时创建 44-byte WAV header，然后 `new Blob([header, ...pcmChunks])`。
+- 不再创建整段 Float32Array，也不在停止时重采样。
+- AudioWorklet 不可用时保留现有 ScriptProcessor fallback。
+- worklet 初始化在用户点击录音后完成；可在首次授权麦克风时预热，不影响停止后的关键路径。
+
+该改造是性能 P1：先用真实设备测量 `encode_ms`。如果当前 P95 已小于 120ms，可以在参数对齐之后单独发布；如果超过，和本轮一起实施。
+
+---
+
+## 6. 源码单一事实源与镜像防漂移
+
+### 6.1 Plan limits
+
+当前 plan limits 同时存在于 Edge TypeScript、共享 JS、`app.js` 内联对象和 SQL 中，容易再次漂移。
+
+调整：
+
+- `src/shared/planLimits.js` 作为浏览器/LAN JS 的唯一常量源，并补全 admin。
+- `src/public/app.js` 直接 import `PLAN_LIMITS`，删除内联副本。
+- hosted build 对 import path 做与 `protocol.js` 相同的路径归一化。
+- Edge TypeScript 和 SQL 因运行环境不同保留副本，但新增测试解析三端值并断言一致。
+
+### 6.2 Hosted PWA mirror
+
+`hosted-pwa/scripts/build-static.mjs` 的 `verifyMirroredSources()` 增加：
+
+- `cloudRecorder.js`
+- `cloudTranscribe.js`
+- `wavEncoder.js`
+- `i18n/en.js`
+- `i18n/zh-CN.js`
+
+当前这些文件内容实际一致，但未被构建门禁覆盖。后续任何一侧修改而未同步，build 必须失败。
+
+---
+
+## 7. UI 行为
+
+- 录音按钮附近显示当前批处理上限：15 秒或 60 秒。
+- 不使用 `∞`，不把实际不存在的能力包装成管理员特权。
+- 到达上限时自动调用 `stopRecording()`，并显示“已到 15/60 秒上限，正在识别…”。已录制的前 15/60 秒正常上传，不显示错误状态。
+- 录音停止后立即进入“正在识别”状态；文本返回后先写入手机文本框，再异步发送桌面。
+- Realtime 发送失败时保留手机文本和复制入口，不能因桌面 ack 失败丢失转写结果。
+- 录音前 plan 尚未加载时按 free 上限工作，不阻塞麦克风启动。
+
+---
+
+## 8. 统一的 60 秒边界
+
+为避免 provider 分支、套餐和 UI 出现不同语义，系统只维护一个批处理边界：
+
+- free：15 秒。
+- pro：admin：60 秒。
+- 全局绝对上限：60 秒。
+- PWA 录音达到 15/60 秒时自动停止，只生成并上传上限以内的 WAV。
+- Edge 的 60 秒校验只是一道安全兜底；正常 PWA 请求不会触发该错误。
+- Flash 和 SentenceRecognition 都只接收 60 秒以内的请求。
+- 不实现自动分段、连续听写、实时 ASR、WebSocket relay 或浏览器直连腾讯。
+
+未来如果产品确实出现超过 60 秒的真实需求，应单独立项重新评估；本设计不预留隐藏分支，也不提前增加相关协议和状态机。
+
+---
+
+## 9. 明确不做
+
+- 不在本轮加入 2.8 秒空闲缓冲。
+- 不让正常录音超过套餐上限；到点自动停止并识别已有内容。
+- 不增加自动分段、实时 ASR 或 ASR WebSocket。
+- 不为了“功能一致”复制 LAN filler 误删 bug。
+- 不编辑已经部署的历史 migration。
+- 不增加录音停止后的 plan 查询。
+- 不在前台等待 usage 写入。
+- 不把服务端 SecretKey 或 service role key 暴露到 PWA。
+- 不用客户端传入的 plan、duration 或 metadata 作为权限依据。
+
+语音命令若后续补齐，应在桌面 agent 收到最终文本后立即解析并执行；普通文本仍立即输出，不引入跨录音等待。
+
+---
+
+## 10. 测试与验收
+
+### 10.1 ASR 契约
+
+- Flash 和 Sentence 请求参数四项完全一致。
+- 两条 provider path 都经过同一后处理。
+- 句首/标点边界 filler 被删除。
+- “哼唱”“啧啧称奇”等正常词不被破坏。
+- 标点、数字和中英文混合文本保持正常。
+- Flash 明确不可用时短音频能 fallback。
+- timeout 不产生无上限串行等待。
+- 正常 PWA 录音不会生成超过 60 秒的请求；手工构造的超长请求在腾讯调用前被后端兜底拦截。
+
+### 10.2 套餐和安全
+
+- free 在真实 15 秒附近自动停止，随后正常识别前 15 秒，不是 10 秒，也不是报错。
+- pro/admin 在真实 60 秒附近自动停止，随后正常识别前 60 秒，不是 55 秒，也不是报错。
+- recorder 根据 sample count 停止；timer throttling 不会生成超长音频。
+- 后端忽略客户端传入的 plan 和 duration，以 WAV header + DB plan 为准。
+- 所有 plan 都执行 `reserve_and_get_plan()`；admin 也有 request 去重和 usage event。
+- 升级/降级在 plan cache TTL（当前最多 60 秒）内完成收敛；admin 身份每次 RPC 都由数据库重新确认，缓存不得直接授予 admin。
+
+### 10.3 延迟和稳定性
+
+- 在 Wi-Fi、4G/5G 和首次冷启动条件下分别采样。
+- 按 3 秒、8 秒、15 秒、60 秒音频分桶。
+- 记录 `encode_ms`、`edge_pre_asr_ms`、`asr_ms`、`response_ms`、`desktop_delivery_ms` 和总时长。
+- P95 不达标时先定位具体阶段，不允许通过延长 toast 或动画隐藏。
+- Realtime ack 超时不丢失手机文本。
+- `prefers-reduced-motion` 不影响录音和状态可见性。
+
+### 10.4 构建防漂移
+
+- `src/public` 与 `hosted-pwa/public` 的录音、转写、WAV、i18n 镜像不一致时 build 失败。
+- JS、Edge TS、SQL 三处 plan limit 不一致时测试失败。
+- Edge Function 单元测试覆盖 usage 成功、失败、拒绝和 admin 路径。
+
+---
+
+## 11. 可观测性
+
+Edge 响应增加：
+
+- `X-Request-Id`
+- `Server-Timing: auth;dur=..., parse;dur=..., reserve;dur=..., asr;dur=..., post;dur=...`
+- CORS 暴露 `Server-Timing` 和 `X-Request-Id`
+- 如需通过跨域 `PerformanceResourceTiming` 读取阶段数据，按实际 PWA origin 设置 `Timing-Allow-Origin`，不得使用携带凭据的宽泛来源配置
+
+客户端只记录数值和枚举：
+
+```text
+request_id
+plan
+audio_duration_bucket
+audio_size_bucket
+provider_path
+fallback_reason
+encode_ms
+edge_total_ms
+desktop_delivery_ms
+stop_to_desktop_ms
+success | failure_code
+```
+
+禁止记录音频、转写正文、邮箱、用户姓名、窗口标题或完整 access token。
+
+---
+
+## 12. 实施顺序
+
+### Phase 0：先测量
+
+1. 增加客户端时间点和 Edge Server-Timing。
+2. 采集当前基线，按音频时长和 provider path 分桶。
+
+### Phase 1：本轮必须完成
+
+1. 对齐 Tencent 参数。
+2. LAN/Cloud 一起修正 filler 后处理和契约测试。
+3. 删除 admin fast path，所有请求保留一次原子 RPC。
+4. 新 migration 更新 15/60/60 batch limits 和毫秒级判断。
+5. 前端接入共享 PLAN_LIMITS，按真实上限停止，更新 i18n/UI。
+6. 补全 hosted mirror build gate。
+7. 增加 provider 总 deadline、fallback 分类和回归测试。
+
+### 可选性能优化
+
+只有当基线显示 `encode_ms P95 > 120ms` 或 60 秒录音出现明显 UI 卡顿时，才单独实施 AudioWorklet 增量 PCM。它不是套餐对齐的前置条件，不与本轮功能修改捆绑。
+
+---
+
+## 13. 改动文件范围
+
+Phase 1 预计涉及：
 
 | 文件 | 改动 |
 |---|---|
-| `supabase/functions/_shared/plan_limits.ts` | free.maxAudioSeconds: 60→15；admin.maxAudioSeconds: 3600→600 |
-| `supabase/migrations/0011_admin_plan.sql` | free 的 max_audio_seconds: 60→15；admin 的 max_audio_seconds: 3600→600 |
-| `src/public/app.js` 行 496-500 | 同上 |
-| `src/shared/planLimits.js` | 同上 **+ 补全缺失的 admin 条目**（当前缺失，是 bug） |
-
-`src/shared/planLimits.js` 补全后：
-
-```js
-export const PLAN_LIMITS = Object.freeze({
-  free:  { monthlySeconds: 600,      maxAudioSeconds: 15,  rateLimitPerMinute: 10    },
-  pro:   { monthlySeconds: 18000,    maxAudioSeconds: 60,  rateLimitPerMinute: 30    },
-  admin: { monthlySeconds: 1_000_000, maxAudioSeconds: 600, rateLimitPerMinute: 10_000 }
-});
-```
-
-### 改动 4：前端动态录音计时器
-
-**文件**：`src/public/app.js`
-
-**4a. 新增模块级 plan 状态变量**
-
-在录音状态变量区域（约行 1428-1437）附近新增：
-
-```js
-let currentUserPlan = "free";
-```
-
-在 `handleAuthState`（行 307-322）的 plan 计算完成后赋值：
-
-```js
-const plan = sub?.plan === "admin" ? "admin"
-  : (sub?.plan === "pro" && isPaidStatus(sub.status) ? "pro" : "free");
-currentUserPlan = plan; // 新增：同步到模块级变量
-```
-
-**4b. `beginRecordingState()` 动态计时**
-
-将行 1501-1510 的硬编码 `55_000` 替换为按 plan 动态计算：
-
-```js
-function beginRecordingState() {
-  // ... 现有的 UI 计时启动逻辑 ...
-
-  const limits = PLAN_LIMITS[currentUserPlan] || PLAN_LIMITS.free;
-  const maxSec = limits.maxAudioSeconds;
-
-  if (maxSec >= 600) {
-    // admin 或更高：不设自动停止，用户手动控制
-    // maxRecordTimer 保持 null
-  } else {
-    // free(15s) / pro(60s)：预留 5 秒上传/编码余量
-    const maxMs = (maxSec - 5) * 1000;
-    maxRecordTimer = setTimeout(() => {
-      if (isRecording) {
-        void stopRecording().catch((error) => {
-          console.error("[record] auto-stop failed:", error);
-        });
-        showToast(t('record.reachedLimit', maxSec));
-      }
-    }, maxMs);
-  }
-}
-```
-
-注意：free 实际计时 10 秒（15-5），pro 实际计时 55 秒（60-5）。预留 5 秒余量确保音频上传不超时。这个余量策略与当前 55 秒（原 60-5）一致。
-
-### 改动 5：i18n 文案动态化
-
-**文件**：`src/public/i18n/zh-CN.js` 行 102
-
-```diff
-- reachedLimit: '已到 55 秒上限，正在上传音频...',
-+ reachedLimit: (sec) => `已到 ${sec} 秒上限，正在上传音频...`,
-```
-
-**文件**：`src/public/i18n/en.js` 行 102
-
-```diff
-- reachedLimit: 'Reached the 55-second limit, uploading audio…',
-+ reachedLimit: (sec) => `Reached the ${sec}-second limit, uploading audio…`,
-```
-
-**文件**：`src/public/app.js` 调用处（约行 1508）
-
-```diff
-- showToast(t('record.reachedLimit'));
-+ showToast(t('record.reachedLimit', maxSec));
-```
-
-需确认 `t()` 函数支持参数化文案。如果不支持，改为直接拼接：
-
-```js
-const msg = currentUserLang === 'zh-CN'
-  ? `已到 ${maxSec} 秒上限，正在上传音频...`
-  : `Reached the ${maxSec}-second limit, uploading audio…`;
-showToast(msg);
-```
-
-### 改动 6：Edge Function 音频字节上限按 plan 动态
-
-**文件**：`supabase/functions/transcribe/index.ts` 行 10
-
-当前 `MAX_AUDIO_BYTES = 3 * 1024 * 1024`（3MB）。按 plan 动态调整：
-
-| Plan | maxAudioSeconds | 音频大小估算（16kHz/16bit mono ≈ 32kB/s） | MAX_AUDIO_BYTES |
-|---|---|---|---|
-| free | 15s | ~480KB | 3MB（不变，留余量） |
-| pro | 60s | ~1.9MB | 3MB（不变） |
-| admin | 600s | ~19MB | **25MB** |
-
-在 Edge Function 中，从 `reserve_and_get_plan()` 返回的 plan 信息读取用户等级，动态选择字节上限：
-
-```ts
-const PLAN_AUDIO_BYTES: Record<string, number> = {
-  free:  3 * 1024 * 1024,
-  pro:   3 * 1024 * 1024,
-  admin: 25 * 1024 * 1024,
-};
-const maxBytes = PLAN_AUDIO_BYTES[plan] ?? PLAN_AUDIO_BYTES.free;
-if (audioLength > maxBytes) {
-  return jsonResponse({ error: "audio_too_large" }, 413);
-}
-```
+| `supabase/functions/_shared/tencent_asr.ts` | 参数、统一后处理、deadline、fallback 分类 |
+| `supabase/functions/_shared/tencent_asr.test.js` | 两条 provider path 和后处理测试 |
+| `supabase/functions/transcribe/index.ts` | 删除 admin fast path、时序、waitUntil、Server-Timing、格式校验 |
+| `supabase/functions/_shared/plan_limits.ts` | batch limits 15/60/60 |
+| 新 Supabase migration | 更新 RPC；不改 `0011_admin_plan.sql` |
+| `src/server/asr/transcriber.js` | 采用相同的保守 filler 行为 |
+| `src/shared/planLimits.js` | 补全 admin，作为前端共享源 |
+| `src/public/app.js` | import limits、current plan、真实时长停止、UI 状态 |
+| `src/public/cloudRecorder.js` | sample-count 上限；按测量结果决定是否同时上 AudioWorklet |
+| `src/public/i18n/zh-CN.js` | 动态上限文案 |
+| `src/public/i18n/en.js` | 动态上限文案 |
+| `hosted-pwa/scripts/build-static.mjs` | 扩大 mirror verification |
+| 对应 `hosted-pwa/public/*` 镜像 | 与源文件保持一致 |
 
 ---
 
-## 第三组：UI 提示
+## 14. 外部约束依据
 
-### 改动 7：录音时长上限可视化
-
-让用户在录音前就知道自己的时长上限，营造"free 不够用 → 升级 pro"的转化动力。
-
-**位置**：录音按钮附近的 UI 区域（具体位置在实现时确定，建议在录音按钮下方或计时器旁边）。
-
-**显示规则**：
-
-| Plan | 显示文案 |
-|---|---|
-| free | `最长 15 秒` |
-| pro | `最长 60 秒` |
-| admin | `∞` |
-
-**i18n key**（新增）：
-
-```js
-// zh-CN.js
-record.maxDurationHint: (sec) => sec >= 600 ? '∞' : `最长 ${sec} 秒`,
-// en.js
-record.maxDurationHint: (sec) => sec >= 600 ? '∞' : `Max ${sec}s`,
-```
-
-**admin 显示 ∞ 的理由**：虽然 admin 实际有 600 秒上限（防止滥用），但 10 分钟对人类连续语音输入来说等于"实际上不限制"。显示 ∞ 让 admin 用户感受到特权感，不显示具体数字避免造成"我只有 10 分钟"的心理压力。
+- 腾讯 SentenceRecognition：60 秒内、3MB 内：<https://cloud.tencent.com/document/product/1093/35646>
+- 腾讯 FlashRecognition 请求参数：<https://cloud.tencent.com/document/product/1093/52097>
+- Supabase Edge Function limits：<https://supabase.com/docs/guides/functions/limits>
 
 ---
 
-## 数据流
-
-### 改动后的云端 ASR 链路
-
-```
-PWA 录音（按 plan 限制时长）
-    ↓
-上传到 Edge Function
-    ↓
-reserve_and_get_plan() 校验 plan + duration
-    ↓
-MAX_AUDIO_BYTES 按 plan 校验
-    ↓
-tencent_asr.ts 调用腾讯 ASR
-  ├─ Flash 路径：filter_modal=1（与 LAN 一致）
-  └─ SentenceRecognition 兜底：FilterModal=1 + 3 个参数补全
-    ↓
-removeFillerWords(text) 二次清理语气词  ← 新增
-    ↓
-返回 text 到 PWA
-    ↓
-PWA 显示 + 发送桌面
-```
-
-### 录音时长控制流
-
-```
-用户点击录音按钮
-    ↓
-beginRecordingState()
-    ↓
-读取 currentUserPlan → PLAN_LIMITS[plan].maxAudioSeconds
-    ↓
-maxSec >= 600?
-  ├─ 是（admin）：不设自动停止，UI 显示 ∞
-  └─ 否（free/pro）：设 (maxSec-5)s 定时器，到时自动 stopRecording()
-    ↓
-录音中 UI 显示倒计时（可选，实现时确定）
-    ↓
-用户手动停止 或 定时器触发
-    ↓
-上传音频
-```
-
----
-
-## 测试要点
-
-### ASR 对齐测试
-
-1. **语气词清理**：录制含"嗯""呃"的音频，验证云端返回文本中无独立单字语气词
-2. **ASR 参数**：通过腾讯云控制台或日志确认 Flash 路径 `filter_modal=1`、兜底路径 4 参数齐全
-3. **标点保留**：验证标点（。！？，）正常保留，不被误删
-4. **正常用字不误删**：验证含"嗯"的多字词（如"嗯嗯"作为应答词）的行为——注意：当前正则是全局替换所有匹配字符，"嗯嗯"会被全部删除。这是 LAN 版已有行为，云端对齐即可，不在本次修复范围。
-
-### 录音时长测试
-
-5. **free 用户**：录音到 10 秒（15-5 余量）自动停止，提示"已到 15 秒上限"
-6. **pro 用户**：录音到 55 秒（60-5 余量）自动停止，提示"已到 60 秒上限"
-7. **admin 用户**：录音不会自动停止，UI 显示 ∞，用户手动控制
-8. **plan 切换**：升级/降级后刷新页面，录音时长限制立即生效
-
-### UI 测试
-
-9. **三个等级的 UI 显示**正确（15 秒 / 60 秒 / ∞）
-10. **i18n**：中英文文案均正确显示
-
----
-
-## 风险与注意事项
-
-1. **`removeFillerWords` 误删多字词中的语气字**：如"嗯嗯"（应答）、"啊"（多字词的一部分）。当前正则 `[嗯呃唔噢欸诶哼嘖啧]` 是全局替换所有匹配，不区分独立字还是多字词中的字。这是 LAN 版已有行为（LAN 版注释明确"只删独立单字语气词"但实现上是全局替换），云端对齐即可。如需改进（如只删前后独立的语气字），是独立需求，不在本次范围。
-
-2. **`src/shared/planLimits.js` 补全 admin 是 bug fix**：当前该文件缺失 admin 条目，`getPlanLimit("admin")` 会回落到 free。补全是顺带修复，无副作用。
-
-3. **admin 600 秒的音频文件 19MB**：上传时间可能较长（取决于网络）。25MB 的 `MAX_AUDIO_BYTES` 上限留有余量。如实际遇到网络超时，可考虑流式上传或分片，但不在本次范围。
-
-4. **i18n `t()` 函数的参数化支持**：需在实现时确认 `t()` 是否支持 `(key, ...args)` 形式。如不支持，改动 5 改为直接拼接字符串。
-
-5. **前端 `currentUserPlan` 的初始值**：用户刚进页面、`handleAuthState` 尚未完成时，`currentUserPlan` 默认为 `"free"`。如果用户立即点击录音，会按 free 限制。这是安全侧的保守默认（宁可多限制不允许多录音），可接受。
-
----
-
-## 改动文件清单
-
-| # | 文件 | 改动类型 |
-|---|---|---|
-| 1 | `supabase/functions/_shared/tencent_asr.ts` | 新增 removeFillerWords + ASR 参数对齐 |
-| 2 | `supabase/functions/transcribe/index.ts` | 调用 removeFillerWords + 动态 MAX_AUDIO_BYTES |
-| 3 | `supabase/functions/_shared/plan_limits.ts` | free.maxAudioSeconds: 60→15, admin.maxAudioSeconds: 3600→600 |
-| 4 | `supabase/migrations/0011_admin_plan.sql` | 同上（SQL 副本） |
-| 5 | `src/shared/planLimits.js` | 同上 + 补全 admin 条目（bug fix） |
-| 6 | `src/public/app.js` | 动态录音计时器 + currentUserPlan + PLAN_LIMITS 更新 + UI 提示 |
-| 7 | `src/public/i18n/zh-CN.js` | reachedLimit 动态化 + maxDurationHint 新增 |
-| 8 | `src/public/i18n/en.js` | 同上 |
-
-共 8 个文件，预计净新增约 60 行，修改约 30 行。
+**文档结束。下一步应先实现 Phase 0 测量，再据数据拆分 Phase 1 的实施任务。**
