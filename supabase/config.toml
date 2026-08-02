@@ -12,3 +12,6 @@ verify_jwt = true
 
 [functions.stripe-webhook]
 verify_jwt = false
+
+[functions.paddle-webhook]
+verify_jwt = false

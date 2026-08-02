@@ -1,3 +1,11 @@
+// Stripe Webhook（迁移期双写）
+//
+// 保留原有 stripe_events 幂等逻辑和 subscriptions 写入不变，
+// 额外把同样的事实通过 process_billing_event RPC 写入新的支付商无关表
+// （billing_customers / provider_subscriptions / billing_events）。
+// 这样 Paddle 上线后，Stripe 的存量用户在新表中也有记录，
+// Portal 路由和权益投影可以统一工作。
+
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 // @deno-types="data:application/typescript,declare const Stripe: any; export default Stripe;"
 import Stripe from "https://esm.sh/stripe@22.2.0?target=deno&no-dts";
@@ -36,6 +44,7 @@ Deno.serve(async (req) => {
     eventIdRef.id = event.id;
     serviceClient = createClient(env.supabaseUrl, env.supabaseServiceRoleKey);
 
+    // 旧幂等表（保留）
     const inserted = await insertStripeEvent(serviceClient, event);
     if (!inserted) {
       return jsonResponse({ ok: true, duplicate: true });
@@ -68,7 +77,7 @@ async function insertStripeEvent(serviceClient: SupabaseClientLike, event: any) 
 async function processStripeEvent({
   stripe,
   serviceClient,
-  event
+  event,
 }: {
   stripe: any;
   serviceClient: SupabaseClientLike;
@@ -95,7 +104,7 @@ async function processStripeEvent({
 async function handleCheckoutSessionCompleted({
   stripe,
   serviceClient,
-  session
+  session,
 }: {
   stripe: any;
   serviceClient: SupabaseClientLike;
@@ -109,7 +118,7 @@ async function handleCheckoutSessionCompleted({
       .upsert({
         user_id: userId,
         stripe_customer_id: customerId,
-        updated_at: new Date().toISOString()
+        updated_at: new Date().toISOString(),
       }, { onConflict: "user_id" });
     if (error) {
       throw error;
@@ -126,7 +135,7 @@ async function handleCheckoutSessionCompleted({
 async function handleInvoiceEvent({
   stripe,
   serviceClient,
-  invoice
+  invoice,
 }: {
   stripe: any;
   serviceClient: SupabaseClientLike;
@@ -140,10 +149,12 @@ async function handleInvoiceEvent({
   await upsertSubscription(serviceClient, subscription);
 }
 
+// 旧逻辑：写入 subscriptions 表（保留 stripe_* 列兼容）
+// 新逻辑：同时通过 RPC 双写到 billing_customers / provider_subscriptions
 async function upsertSubscription(
   serviceClient: SupabaseClientLike,
   subscription: any,
-  fallbackUserId: string | null = null
+  fallbackUserId: string | null = null,
 ) {
   const customerId = getId(subscription.customer);
   const subscriptionId = subscription.id;
@@ -154,7 +165,7 @@ async function upsertSubscription(
   const userId = await resolveUserId(serviceClient, {
     metadataUserId: subscription.metadata?.user_id,
     fallbackUserId,
-    stripeCustomerId: customerId
+    stripeCustomerId: customerId,
   });
   if (!userId) {
     console.warn("Could not resolve subscription user:", subscriptionId);
@@ -162,7 +173,9 @@ async function upsertSubscription(
   }
 
   const item = subscription.items?.data?.[0];
-  const { error } = await serviceClient
+
+  // 1. 旧表写入（保留兼容）
+  const { error: legacyError } = await serviceClient
     .from("subscriptions")
     .upsert({
       user_id: userId,
@@ -174,11 +187,43 @@ async function upsertSubscription(
       current_period_start: toIsoTime((subscription as any).current_period_start),
       current_period_end: toIsoTime((subscription as any).current_period_end),
       cancel_at_period_end: Boolean(subscription.cancel_at_period_end),
-      updated_at: new Date().toISOString()
+      updated_at: new Date().toISOString(),
     }, { onConflict: "stripe_subscription_id" });
-  if (error) {
-    throw error;
+  if (legacyError) {
+    throw legacyError;
   }
+
+  // 2. 新表双写（通过原子 RPC）
+  const effect = {
+    type: "subscription",
+    user_id: userId,
+    customer_id: customerId,
+    subscription_id: subscriptionId,
+    price_id: item?.price?.id || null,
+    plan: "pro",
+    status: subscription.status,
+    period_start: toIsoTime((subscription as any).current_period_start) || "",
+    period_end: toIsoTime((subscription as any).current_period_end) || "",
+    cancel_at_period_end: Boolean(subscription.cancel_at_period_end),
+    state_occurred_at: toIsoTime((subscription as any).current_period_start) || new Date().toISOString(),
+  };
+  const { error: rpcError } = await serviceClient.rpc("process_billing_event", {
+    p_provider: "stripe",
+    p_event_id: `stripe_${event_id_for_sub(subscriptionId, subscription.status)}`,
+    p_event_type: `customer.subscription.updated`,
+    p_occurred_at: new Date().toISOString(),
+    p_payload: { source: "stripe_webhook_double_write", subscription },
+    p_effect: effect,
+  });
+  if (rpcError) {
+    console.warn("Double-write to billing_events failed:", rpcError.message);
+    // 双写失败不阻塞旧逻辑，只记日志
+  }
+}
+
+// 为 Stripe 双写生成稳定 event_id（同 subscription + status 只写一次）
+function event_id_for_sub(subscriptionId: string, status: string): string {
+  return `${subscriptionId}_${status}`;
 }
 
 async function resolveUserId(
@@ -186,12 +231,12 @@ async function resolveUserId(
   {
     metadataUserId,
     fallbackUserId,
-    stripeCustomerId
+    stripeCustomerId,
   }: {
     metadataUserId?: string | null;
     fallbackUserId?: string | null;
     stripeCustomerId: string;
-  }
+  },
 ) {
   if (metadataUserId) {
     return metadataUserId;
@@ -232,7 +277,7 @@ function toIsoTime(timestamp: number | null | undefined) {
 function createStripe(secretKey: string) {
   return new Stripe(secretKey, {
     apiVersion: STRIPE_API_VERSION as any,
-    httpClient: Stripe.createFetchHttpClient()
+    httpClient: Stripe.createFetchHttpClient(),
   });
 }
 
@@ -241,7 +286,7 @@ function getEnv() {
     supabaseUrl: requireEnv("SUPABASE_URL"),
     supabaseServiceRoleKey: requireEnv("SUPABASE_SERVICE_ROLE_KEY"),
     stripeSecretKey: requireEnv("STRIPE_SECRET_KEY"),
-    stripeWebhookSecret: requireEnv("STRIPE_WEBHOOK_SECRET")
+    stripeWebhookSecret: requireEnv("STRIPE_WEBHOOK_SECRET"),
   };
 }
 

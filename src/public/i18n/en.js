@@ -134,6 +134,8 @@ export default {
     subscribeSuccess: 'Subscription active, welcome to Pro!',
     subscribeCanceled: 'Subscription canceled',
     subscriptionRequestFailed: 'Subscription request failed, please retry.',
+    activating: 'Payment received. Activating Pro…',
+    activatingTimeout: 'Activation is taking longer than expected. Please refresh in a moment.',
   },
 
   // === Window selector ===

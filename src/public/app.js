@@ -536,18 +536,61 @@ async function openBillingSession(functionName, button) {
 
 updateBillingControls(Boolean(window.VoiceBridgeAuth?.session));
 
-// === Stripe Billing Callback ===
+// === Billing Callback ===
 (function handleBillingCallback() {
   const params = new URLSearchParams(location.search);
   const billing = params.get("billing");
   if (billing === "success") {
-    showToast(t('billing.subscribeSuccess'));
     history.replaceState(null, "", location.pathname);
+    pollSubscriptionActivation();
   } else if (billing === "cancel") {
     showToast(t('billing.subscribeCanceled'));
     history.replaceState(null, "", location.pathname);
   }
 })();
+
+// 支付成功后轮询订阅状态，等 Webhook 同步后显示激活成功
+function pollSubscriptionActivation() {
+  const sb = window.VoiceBridgeAuth?.supabase;
+  if (!sb) {
+    showToast(t('billing.subscribeSuccess'));
+    return;
+  }
+  const user = window.VoiceBridgeAuth?.user;
+  if (!user?.id) {
+    showToast(t('billing.subscribeSuccess'));
+    return;
+  }
+
+  showToast(t('billing.activating'));
+  const maxAttempts = 10;
+  const intervalMs = 3000;
+  let attempts = 0;
+
+  const poll = async () => {
+    attempts++;
+    try {
+      const { data: sub } = await sb
+        .from("subscriptions")
+        .select("plan,status")
+        .eq("user_id", user.id)
+        .maybeSingle();
+      if (sub?.plan === "pro" && ["active", "trialing"].includes(sub.status)) {
+        showToast(t('billing.subscribeSuccess'));
+        location.reload();
+        return;
+      }
+    } catch (e) {
+      // 忽略查询错误，继续轮询
+    }
+    if (attempts >= maxAttempts) {
+      showToast(t('billing.activatingTimeout'), true);
+      return;
+    }
+    setTimeout(poll, intervalMs);
+  };
+  setTimeout(poll, intervalMs);
+}
 
 // === SVG Icons ===
 const starSvg = '<svg viewBox="0 0 24 24" width="14" height="14"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>';

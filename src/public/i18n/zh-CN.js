@@ -134,6 +134,8 @@ export default {
     subscribeSuccess: '订阅成功，欢迎使用 Pro 方案',
     subscribeCanceled: '订阅已取消',
     subscriptionRequestFailed: '订阅请求失败，请稍后重试。',
+    activating: '支付已收到，正在激活 Pro…',
+    activatingTimeout: '激活时间较长，请稍后刷新页面查看。',
   },
 
   // === 窗口选择器 ===

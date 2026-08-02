@@ -99,7 +99,8 @@ export default {
   // === 录音 / 转写 ===
   record: {
     recordUnsupported: '当前浏览器无法直接录音，可改用音频上传兜底。',
-    reachedLimit: '已到 55 秒上限，正在上传音频...',
+    reachedLimit: (seconds) => `已到 ${seconds} 秒上限，正在上传音频...`,
+    maxDurationHint: (seconds) => `本次最多录制 ${seconds} 秒。`,
     micDenied: (msg) => `无法访问麦克风：${msg}`,
     uploading: '正在上传音频...',
     noVoice: '没有录到声音，请再试一次。',
@@ -133,6 +134,8 @@ export default {
     subscribeSuccess: '订阅成功，欢迎使用 Pro 方案',
     subscribeCanceled: '订阅已取消',
     subscriptionRequestFailed: '订阅请求失败，请稍后重试。',
+    activating: '支付已收到，正在激活 Pro…',
+    activatingTimeout: '激活时间较长，请稍后刷新页面查看。',
   },
 
   // === 窗口选择器 ===
