@@ -69,6 +69,8 @@ return jsonResponse({ ok: true, url: url.toString() });
 
 该方案可保持现有 Upgrade 按钮和 `createBillingSession()` 调用协议不变，但生产环境依赖 Paddle 对 Hosted Checkout 的额外审批。
 
+`customData` 约束：Paddle 要求 customData 是扁平 key-value 对象，key 必须匹配 `[a-zA-Z0-9_]{1,40}`，单值最大 500 字符，总条目有限制。`user_id` 作为 key 合法。实施时必须把 Supabase UUID（36 字符）作为值传入，不得嵌入 email、JWT 或其他可变信息；Webhook 回调时以 `customData.user_id` 为主要关联，customer ID 反查为兜底。
+
 ### 5.2 备选方案：自有 Paddle.js 支付页
 
 增加一个静态 `/pay/` 页面，加载 Paddle.js 并使用 client-side token。后端仍通过 Transaction API 创建交易，返回 `transaction.checkout.url`；支付页仅负责承载 Checkout，不包含业务状态或密钥。
@@ -228,6 +230,30 @@ alter table public.billing_events enable row level security;
 
 处理失败时保留事件，并写入 `failed`、`attempt_count` 和 `last_error`，不得删除记录。这样既能让 Paddle 重试，也能审计和人工重放。
 
+RPC 函数签名（在 `0016` 中定义，仅授予 `service_role`）：
+
+```sql
+create or replace function public.claim_billing_event(
+  p_provider text,
+  p_event_id text,
+  p_occurred_at timestamptz
+) returns table(action text)   -- 'first' | 'duplicate' | 'stale'
+language plpgsql
+security definer
+as $$
+  -- 1. insert ... on conflict do nothing
+  -- 2. 若刚插入（first）→ 返回 'first'，调用方继续解析 payload 并按 occurred_at 更新订阅
+  -- 3. 若已存在且 status='processed' → 返回 'duplicate'，调用方立即返回 200
+  -- 4. 若已存在且 status='received'/'failed' 且本次 occurred_at 不旧于已记录 → 返回 'first'，调用方重新尝试
+  -- 5. 若 occurred_at 早于 subscriptions.provider_updated_at → 返回 'stale'，标记 ignored
+$$;
+
+grant execute on function public.claim_billing_event(text, text, timestamptz) to service_role;
+revoke execute on function public.claim_billing_event(text, text, timestamptz) from anon, authenticated;
+```
+
+订阅 upsert 不直接由 RPC 完成，而是由 Webhook Function 在 `claim_billing_event` 返回 `first` 后调用，这样可以把 user ID 解析、price 校验、customer 冲突检测放在 Edge Function 里，避免把业务校验逻辑埋在 SQL 中。`provider_updated_at` 的条件更新由 upsert 语句的 `where occurred_at >= provider_updated_at` 完成，或通过乐观更新重试。
+
 ## 8. Edge Functions
 
 ### 8.1 billing-create-checkout-session（原地重写）
@@ -259,6 +285,14 @@ alter table public.billing_events enable row level security;
 5. 返回通用 Portal URL。
 
 不要把 `subscription.management_urls.update_payment_method` 或 `.cancel` 当成通用 Portal，也不要缓存临时 URL。API Key 必须具备创建 Customer Portal Session 的权限。
+
+Customer Portal Session API 在当前 SDK 版本中可能仍处于 preview 阶段。实施时按以下优先级选择：
+
+1. 若 SDK 已稳定暴露 `paddle.customerPortalSessions.create(...)`，直接使用，传入已知的 customer_id 和 `return_url`。
+2. 若仅作为 preview 存在，确认 SDK 版本兼容后使用，并在代码中标注 preview 依赖。
+3. 若当前 SDK 版本完全不支持，临时回退为 `subscription.management_urls`（已确认是稳定的），但必须明确这是过渡方案，不缓存 URL，且记录技术债待 SDK 升级后迁移。
+
+实施前必须查阅锁定版本（§10.3）的 SDK 文档，确认 Portal Session 接口的实际可用性和参数签名。
 
 ### 8.3 paddle-webhook（新增）
 
@@ -365,12 +399,14 @@ alter table public.billing_events enable row level security;
 
 如果使用 Paddle.js 备选方案，再增加 `/pay/` 静态页和公开 client-side token；任何 API Key 或 Webhook secret 都不得进入前端。
 
+前端不感知 `BILLING_PROVIDER` 的值。`billing-create-checkout-session` 和 `billing-create-portal-session` 两个 Edge Function 共用同一组调用路径，内部读取环境变量决定走 Stripe 还是 Paddle 分支。这样切换支付商时不需要重新部署前端，也不需要在客户端代码里维护 if/else。
+
 ## 10. 配置
 
 ### 10.1 双环境变量
 
 ```text
-BILLING_PROVIDER=paddle
+BILLING_PROVIDER=paddle                   # stripe | paddle，决定 checkout/portal 走哪条分支
 PADDLE_ENVIRONMENT=sandbox              # sandbox | production
 PADDLE_API_KEY=
 PADDLE_WEBHOOK_SECRET=
