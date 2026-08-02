@@ -209,9 +209,7 @@ export async function createTencentFlashRecognitionRequest({
     url: `https://${FLASH_ENDPOINT}${path}?${query}`,
     headers: {
       Authorization: authorization,
-      "Content-Type": "application/octet-stream",
-      "Content-Length": String(audioBytes.byteLength),
-      Host: FLASH_ENDPOINT
+      "Content-Type": "application/octet-stream"
     }
   };
 }
