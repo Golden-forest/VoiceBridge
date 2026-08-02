@@ -3,16 +3,16 @@
     "lang": "en"
   },
   "meta": {
-    "title": "VoiceBridge - Speak on Your Phone, Type on Your Computer",
-    "description": "Turn your phone into a voice input remote. One tap to record, cloud transcribes, text appears at your cursor. Connect one phone to multiple computers and switch freely.",
+    "title": "VoiceBridge - Your Voice, Any Cursor",
+    "description": "Use your phone as a voice input remote for macOS and Windows. Record once, choose a screen, and send text straight to the active cursor.",
     "canonical": "https://voicebridge-6kr.pages.dev/",
     "hreflang_en": "https://voicebridge-6kr.pages.dev/",
     "hreflang_zh_cn": "https://voicebridge-6kr.pages.dev/zh-CN/",
     "hreflang_default": "https://voicebridge-6kr.pages.dev/"
   },
   "og": {
-    "title": "VoiceBridge - Speak on Your Phone, Type on Your Computer",
-    "description": "Turn your phone into a voice input remote. One tap to record, cloud transcribes, text appears at your cursor. Connect one phone to multiple computers and switch freely.",
+    "title": "VoiceBridge - Your Voice, Any Cursor",
+    "description": "Use your phone as a voice input remote for macOS and Windows. Record once, choose a screen, and send text straight to the active cursor.",
     "url": "https://voicebridge-6kr.pages.dev/",
     "image": "https://voicebridge-6kr.pages.dev/og-image-en.png",
     "locale": "en_US"
@@ -33,34 +33,43 @@
     "menu_aria": "Open menu"
   },
   "hero": {
-    "h1_line1": "Speak on your phone.",
-    "h1_line2": "Type on your computer.",
-    "sr_subtitle": "VoiceBridge: one tap to record on your phone, cloud transcribes, text appears at your computer's cursor. Connect one phone to multiple computers and switch freely.",
+    "h1_line1": "Your voice.",
+    "h1_line2": "Any cursor.",
+    "sr_subtitle": "Speak on your phone and send the transcribed text straight to the active cursor on any connected computer.",
     "typewriter": [
-      "One tap to record. Text appears at your cursor.",
-      "One phone, multiple computers. Switch freely.",
-      "Wrap long text into commands. Trigger with a phrase."
+      "Speak on your phone. Text lands at your cursor.",
+      "One phone. Every connected screen.",
+      "Save long text. Send it again with one tap."
     ],
     "cta_primary": "Download desktop app",
     "cta_secondary": "Open web app",
-    "video_poster": "/media/hero-poster.svg",
-    "video_coming": "Product demo coming soon"
+    "media_alt": "VoiceBridge on a phone beside a laptop, with an orange voice stream flowing toward the active cursor.",
+    "slide1_alt": "VoiceBridge on a phone beside a laptop, with an orange voice stream flowing toward the active cursor.",
+    "slide2_alt": "A phone sending voice input to active cursors across a browser, code editor, and document on multiple computers.",
+    "slide3_alt": "Before and after scene showing VoiceBridge freeing a user from typing at the keyboard.",
+    "slide4_alt": "A developer dictates a rate limit change from a phone while VoiceBridge sends the text to the active cursor in a code editor."
   },
   "product": {
-    "title": "Core features",
-    "lead": "Phone records. Cloud transcribes. Computer receives.",
-    "main_title": "One tap, straight to cursor",
-    "main_body": "Tap to start recording, tap to stop. VoiceBridge transcribes in the cloud and delivers text directly to the active input field on your computer — no window switching.",
+    "title": "Speak once. Keep your flow.",
+    "lead": "Record on your phone. VoiceBridge transcribes and sends text to the computer you choose.",
+    "main_title": "One phone. Every screen.",
+    "main_body": "Choose the active computer, speak, and keep working. Your text arrives at the cursor without pulling you into another window.",
+    "media_alt": "A phone sending voice input to active cursors across a browser, code editor, and document on multiple computers.",
     "aux1_eyebrow": "Multi-device",
-    "aux1_title": "One phone, many computers",
-    "aux1_body": "Sign in on multiple computers with the same account. Your phone auto-discovers all online devices — pick a target and send.",
+    "aux1_title": "Switch screens, not tools",
+    "aux1_body": "Sign in on your computers with the same account. Your phone finds every online device, ready for you to choose and send.",
     "aux2_eyebrow": "Fallback",
     "aux2_title": "Clipboard backup",
-    "aux2_body": "When auto-paste isn't available, text is still copied to your computer's clipboard. Nothing is lost."
+    "aux2_body": "If auto-paste is unavailable, your text still reaches the computer clipboard, ready to paste."
+  },
+  "showcase": {
+    "aria_label": "Voice input without being tied to a keyboard",
+    "image_alt": "Before and after scene showing VoiceBridge freeing a user from typing at the keyboard. The image reads: Your ideas shouldn't be tied to a keyboard.",
+    "caption": "Capture the idea while it is fresh. Keep your computer focused on the work."
   },
   "commands": {
-    "title": "Long text, one phrase",
-    "lead": "Save repetitive content as commands. Say a phrase and get the whole thing typed out.",
+    "title": "Save it once. Send it in seconds.",
+    "lead": "Turn repeatable text into commands, then send the full version to your active cursor with one tap.",
     "item1_label": "Minimal changes",
     "item1_source": "Built-in preset",
     "item2_label": "Code review",
@@ -71,8 +80,13 @@
     "item4_source": "Built-in preset",
     "footnote": "11 built-in presets. Add your own."
   },
+  "developer": {
+    "aria_label": "VoiceBridge for developers",
+    "image_alt": "A developer dictates a rate limit change from a phone while VoiceBridge sends the text to the active cursor in a code editor. The image reads: Lean back. Keep coding.",
+    "caption": "Developer flow, uninterrupted. Dictate prompts, review notes, and code changes while your editor stays active."
+  },
   "how": {
-    "title": "Get started in 3 steps",
+    "title": "Phone to cursor in 3 steps",
     "step1_title": "Open the web app",
     "step1_body": "Visit on your phone's browser. Sign up or log in.",
     "step2_title": "Install desktop app",
@@ -81,8 +95,8 @@
     "step3_body": "Choose a computer on your phone, tap to record, and text lands right at that cursor."
   },
   "download": {
-    "title": "Choose your desktop app",
-    "lead": "macOS and Windows. Install on multiple computers.",
+    "title": "Bring VoiceBridge to your computer",
+    "lead": "Available for macOS and Windows. Install it on every computer you use.",
     "coming_label": "Coming soon",
     "free_note": "Free plan available. No credit card required."
   },
@@ -103,14 +117,6 @@
     "col_language_zh": "简体中文"
   },
   "phone_demo": {
-    "status": "Connected",
-    "auto_paste": "Auto-paste",
-    "input_placeholder": "Type text, or use voice recognition…",
-    "paste": "Paste",
-    "record": "Record",
-    "enter": "Enter",
-    "delete": "Delete",
-    "undo": "Undo",
     "tab_recent": "Recent",
     "tab_all": "All",
     "tab_custom": "Custom",

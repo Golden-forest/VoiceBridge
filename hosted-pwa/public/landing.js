@@ -186,7 +186,7 @@
     if (!container) return null;
     if (REDUCED_MOTION) return null;
 
-    var PARTICLE_COUNT = 7;            // spec: 6-8 particles
+    var PARTICLE_COUNT = 9;            // spec: 6-8 particles
     var MIN_DURATION = 6;              // seconds
     var MAX_DURATION = 10;             // seconds
     var MAX_DELAY = 5;                 // seconds
@@ -206,8 +206,8 @@
       p.style.left = startX + "px";
       p.style.top = startY + "px";
 
-      // Random size 2-4 px.
-      var size = 2 + Math.random() * 2;
+      // Random size 3-5 px.
+      var size = 3 + Math.random() * 2;
       p.style.width = size + "px";
       p.style.height = size + "px";
 
@@ -253,6 +253,92 @@
           }
         }
         particles = [];
+      },
+    };
+  }
+
+  /* =====================================================================
+     Module B2: Hero carousel crossfade
+     ===================================================================== */
+
+  function initHeroCarousel(container) {
+    if (!container) return null;
+    var slides = container.querySelectorAll(".hero-carousel-slide");
+    var dots = container.querySelectorAll(".hero-carousel-dot");
+    if (slides.length < 2) return null;
+
+    var INTERVAL = 5000;
+    var current = 0;
+    var timer = null;
+    var io = null;
+
+    function show(index) {
+      for (var i = 0; i < slides.length; i++) {
+        if (i === index) {
+          slides[i].classList.add("is-active");
+        } else {
+          slides[i].classList.remove("is-active");
+        }
+        if (dots[i]) {
+          dots[i].classList.toggle("is-active", i === index);
+        }
+      }
+      current = index;
+    }
+
+    function next() {
+      show((current + 1) % slides.length);
+    }
+
+    function start() {
+      stop();
+      timer = setInterval(next, INTERVAL);
+    }
+
+    function stop() {
+      if (timer) {
+        clearInterval(timer);
+        timer = null;
+      }
+    }
+
+    // Dot click → jump + restart timer
+    for (var d = 0; d < dots.length; d++) {
+      (function (dot, idx) {
+        dot.addEventListener("click", function () {
+          show(idx);
+          start();
+        });
+      })(dots[d], d);
+    }
+
+    // Pause when Hero is off-screen
+    if ("IntersectionObserver" in window) {
+      io = new IntersectionObserver(function (entries) {
+        for (var k = 0; k < entries.length; k++) {
+          if (entries[k].isIntersecting) {
+            start();
+          } else {
+            stop();
+          }
+        }
+      }, { threshold: 0.15 });
+      var hero = document.getElementById("hero");
+      if (hero) io.observe(hero);
+    } else {
+      start();
+    }
+
+    // Pause on hover (desktop)
+    if (window.matchMedia("(hover: hover) and (pointer: fine)").matches) {
+      container.addEventListener("mouseenter", stop);
+      container.addEventListener("mouseleave", start);
+    }
+
+    return {
+      destroy: function () {
+        stop();
+        if (io) io.disconnect();
       },
     };
   }
@@ -702,6 +788,9 @@
     if (heroSection) {
       // Particle flow.
       initParticles(document.getElementById("hero-particles"));
+
+      // Hero carousel crossfade.
+      initHeroCarousel(document.getElementById("hero-carousel"));
 
       // Typewriter ( delayed start happens inside the class ).
       initTypewriter();

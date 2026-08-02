@@ -1,369 +1,551 @@
 # Stripe → Paddle 支付迁移设计
 
 **日期**：2026-08-02
-**状态**：已确认，待制定实施计划
-**方案**：A（纯后端 API，前端零改动）
 
-## 背景与动机
+**状态**：已修订，待制定实施计划
 
-VoiceBridge 当前使用 Stripe 作为唯一支付提供商，实现了 Pro 月订阅的完整链路：Checkout → Webhook → 配额生效。用户（项目所有者）位于中国，只有国内银行卡，无法注册 Stripe。Paddle 作为 Merchant of Record 平台，支持中国开发者注册，且代收全球销售税/VAT，适合面向全球用户的 SaaS 产品。
+**主方案**：Paddle Transaction API + Hosted Checkout（以生产环境审批通过为前提）
 
-## 目标
+**备选方案**：Paddle Transaction API + 自有极简 Paddle.js 支付页
 
-将支付后端从 Stripe 迁移到 Paddle，同时满足：
-- 前端代码零改动（`billing.js`、`app.js`、`billing.test.js` 均不变）
-- 配额执行链路不变（`reserve_and_get_plan` RPC + `transcribe` Edge Function 不变）
-- 三档套餐（free/pro/admin）语义不变
-- 幂等 webhook 处理保持等价
+## 1. 背景与动机
 
-## 非目标
+VoiceBridge 当前使用 Stripe 完成 Pro 月订阅链路：Checkout → Webhook → 订阅状态同步 → 配额生效。项目所有者位于中国，Paddle 作为 Merchant of Record，可代收全球销售税/VAT，并提供更适合当前主体条件的收款方案。
 
-- 不做 Paddle.js 前端 Overlay 模式（保留为未来优化项）
-- 不处理历史 Stripe 数据迁移（内测期无真实付费用户）
-- 不变更套餐定价或配额
+“Paddle 支持中国商户”不等于账户、网站、Hosted Checkout 和收款渠道一定自动通过。身份验证、网站审核、生产 Hosted Checkout 权限及实际收款验证必须作为迁移前置条件，不能等开发完成后再确认。
 
-## 整体架构
+## 2. 目标
 
-```
-[前端 PWA]                    [Supabase Edge Functions]           [Paddle API]
-  app.js                        billing-create-checkout-session  →   checkouts.create
-  billing.js                    billing-create-portal-session    →   subscriptions.get (management_urls)
-       ↓                        paddle-webhook                   ←   webhook events
-  openBillingSession()
-       ↓                        [PostgreSQL]
-  location.href 跳转             subscriptions 表 (upsert)
-                               profiles 表 (paddle_customer_id)
-                               paddle_events 表 (幂等去重)
-                               reserve_and_get_plan RPC (不变)
-```
+- 将新购买和订阅管理从 Stripe 切换到 Paddle。
+- 保持现有前端支付函数名称和返回协议基本不变。
+- 保持 `reserve_and_get_plan` RPC、`transcribe` Edge Function和 free/pro/admin 配额语义不变。
+- 使用支付商无关的数据模型，避免未来接入 Apple、Google 或再次更换支付商时重复改表。
+- 正确处理 Webhook 重复、乱序、重试和并发。
+- 支持安全的灰度切换和快速回滚，不在切换当天删除 Stripe 能力。
+- 支付成功后尽快生效，同时不把浏览器跳转误认为订阅已经同步完成。
 
-**不变的部分**：
-- `subscriptions` 表（字段重命名，语义不变）、`profiles` 表、`usage_events` 表
-- `reserve_and_get_plan` RPC + 配额执行逻辑
-- `transcribe` Edge Function
-- 前端全部文件
+## 3. 非目标
 
-**替换的部分**：
-- 3 个 Stripe Edge Function → 3 个 Paddle Edge Function（其中 2 个原地重写，1 个新建+1 个删除）
-- `stripe_events` 幂等表 → 新增 `paddle_events` 幂等表（`stripe_events` 保留存档）
-- 环境变量从 Stripe 的 6 个 → Paddle 的 5 个
+- 不迁移历史 Stripe 付费用户数据（当前内测期无真实付费用户）。
+- 不变更 Pro 套餐定价或配额。
+- 不用 Paddle 替代 iOS App Store / Google Play 的原生应用内购买要求。
+- 本次不设计多套餐、多币种和优惠码管理后台，但数据结构不应阻碍未来扩展。
 
-## 数据库 Migration
+## 4. 实施前置条件（Milestone 0）
 
-**新增 migration**：`supabase/migrations/0015_migrate_stripe_to_paddle.sql`
+进入开发前完成：
 
-### 字段重命名
+1. Paddle 账户、身份及业务验证通过。
+2. VoiceBridge 官网、隐私政策、服务条款、退款说明满足 Paddle 审核要求。
+3. Sandbox 产品和月付 Price 已创建。
+4. 生产网站和 Default Payment Link 已审批。
+5. 若采用主方案，生产 Hosted Checkout 权限已明确获批。
+6. 确认可用的收款路径、结算周期、最低打款门槛及手续费。
+7. 明确退款、拒付、全额退款后是否撤销 Pro 权益的业务规则。
 
-```sql
--- profiles 表
-alter table public.profiles rename column stripe_customer_id to paddle_customer_id;
+若第 5 项未通过，不阻塞迁移，改用备选的自有 Paddle.js 支付页。
 
--- subscriptions 表
-alter table public.subscriptions rename column stripe_customer_id to paddle_customer_id;
-alter table public.subscriptions rename column stripe_subscription_id to paddle_subscription_id;
-alter table public.subscriptions rename column stripe_price_id to paddle_price_id;
+## 5. Checkout 方案决策
 
--- 唯一索引重命名（如果存在）
-alter index if exists public.subscriptions_stripe_subscription_id_key
-  rename to subscriptions_paddle_subscription_id_key;
-```
+### 5.1 主方案：Paddle Hosted Checkout
 
-### 新增 paddle_events 表
+Paddle 服务端没有 `checkouts.create` API。后端必须先调用 Transaction API：
 
-```sql
-create table if not exists public.paddle_events (
-  id text primary key,          -- evt_xxx
-  type text not null,           -- subscription.created 等
-  processed_at timestamptz not null default now()
-);
-alter table public.paddle_events enable row level security;
--- 仅 service_role 可写
-```
-
-### 保留
-
-- `stripe_events` 表保留，不删除（存档，避免回滚风险）
-- 所有历史 migration 文件保留不动
-
-### 不受影响
-
-- `reserve_and_get_plan` RPC 不直接引用 `stripe_*` 字段，不受重命名影响
-- `subscriptions` 表的 `plan`、`status`、`current_period_start/end`、`cancel_at_period_end` 字段名不变（语义通用）
-
-## Edge Function 重写（核心）
-
-### billing-create-checkout-session/index.ts（原地重写）
-
-**流程**：验证 JWT → `getOrCreateCustomer`（含 address）→ `paddle.checkouts.create` → 返回 hosted checkout URL
-
-**Stripe → Paddle 差异**：
-
-| 概念 | Stripe | Paddle |
-|------|--------|--------|
-| Customer | `stripe.customers.create` | `paddle.customers.create` |
-| Address | 不需要单独创建 | 需要 `paddle.addresses.create`（结账前置条件） |
-| Checkout | `checkout.sessions.create({ line_items })` | `paddle.checkouts.create({ items })` |
-| 元数据 | `metadata: { user_id }` | `custom_data: { user_id }` |
-| 返回 URL | `success_url` / `cancel_url` | checkout settings 中 `successUrl` |
-
-**getOrCreateCustomer 逻辑**：
-1. 查 `profiles.paddle_customer_id`
-2. 若无 → `paddle.customers.create({ email })` → `paddle.addresses.create({ customerId, countryCode })` → 回写 profiles
-3. 返回 customerId + addressId
-
-**创建 checkout**：
 ```typescript
-const checkout = await paddle.checkouts.create({
-  collection_mode: "automatic",
-  customer_id: customerId,
-  address_id: addressId,
-  items: [{ price_id: env.paddlePriceId, quantity: 1 }],
-  custom_data: { user_id: userId },
-  // successUrl 在 checkout settings 中设置
+const transaction = await paddle.transactions.create({
+  items: [{ priceId: env.paddlePriceId, quantity: 1 }],
+  collectionMode: "automatic",
+  customData: { user_id: userId },
 });
-return jsonResponse({ ok: true, url: checkout.url });
 ```
 
-### billing-create-portal-session/index.ts（原地重写）
-
-**流程**：验证 JWT → 查用户 active subscription → 用 Paddle API 获取 `management_urls` → 返回 URL
-
-**简化**：Paddle subscription 自带 `management_urls`（`update_payment_method` / `cancel`），不需要像 Stripe 那样创建 portal session。
+然后把 Transaction ID 加到已审批的 Hosted Checkout URL：
 
 ```typescript
-// 查 subscriptions 表拿 paddle_subscription_id
-// 调 paddle.subscriptions.get() 获取最新状态
-// 返回 management_urls.update_payment_method 或 .cancel
+const url = new URL(env.paddleHostedCheckoutUrl);
+url.searchParams.set("transaction_id", transaction.id);
+return jsonResponse({ ok: true, url: url.toString() });
 ```
 
-### paddle-webhook/index.ts（新增，替代 stripe-webhook）
+该方案可保持现有 Upgrade 按钮和 `createBillingSession()` 调用协议不变，但生产环境依赖 Paddle 对 Hosted Checkout 的额外审批。
 
-**流程**：验签 → 幂等去重 → 事件分发 → upsertSubscription
+### 5.2 备选方案：自有 Paddle.js 支付页
 
-#### 签名验证
+增加一个静态 `/pay/` 页面，加载 Paddle.js 并使用 client-side token。后端仍通过 Transaction API 创建交易，返回 `transaction.checkout.url`；支付页仅负责承载 Checkout，不包含业务状态或密钥。
 
-Paddle header 格式：`ts=<timestamp>;h1=<hmac_hex>`
+备选方案会增加少量前端文件，但不会改变现有 PWA 的支付入口和后端函数协议。
 
-```typescript
-// SDK 方式（优先）
-const eventData = await paddle.webhooks.unmarshal(rawBody, secretKey, signature);
+### 5.3 首次购买不预创建 Address
 
-// 手动方式（fallback）
-// signed_payload = `${timestamp}:${rawBody}`
-// HMAC-SHA256(secretKey, signedPayload) === h1
-// 额外校验：timestamp 与当前时间差 > 5 秒则拒绝（防重放）
+首次结账时不猜测或硬编码用户国家，也不要求预先创建 Paddle Address。Transaction 可以不传 customer/address，由 Checkout 收集邮箱、国家和邮编。
+
+若 `profiles.provider_customer_id` 已存在，可传入已知 customer ID。若不存在，优先让 Checkout 创建 Customer，再通过 Webhook 回写。只有未来确有服务端预填资料需求时，才增加 Customer/Address 预创建流程。
+
+## 6. 整体架构
+
+```text
+[PWA]
+  Upgrade / Manage
+       │
+       ▼
+[Supabase Edge Functions]
+  billing-create-checkout-session ──→ Paddle transactions.create
+  billing-create-portal-session   ──→ Paddle customer portal session
+  paddle-webhook                  ←── Paddle webhook events
+       │
+       ▼
+[PostgreSQL]
+  profiles
+  subscriptions（支付商无关字段）
+  billing_events（幂等、乱序控制、审计）
+  reserve_and_get_plan（不变）
 ```
 
-#### 事件映射
+### 保持不变
 
-| Stripe 事件 | Paddle 事件 | 处理逻辑 |
-|---|---|---|
-| `checkout.session.completed` | `transaction.completed` | 从 `custom_data.user_id` 取 userId，更新 profiles.paddle_customer_id |
-| `customer.subscription.created` | `subscription.created` | upsertSubscription |
-| `customer.subscription.updated` | `subscription.updated` | upsertSubscription |
-| `customer.subscription.deleted` | `subscription.canceled` | upsertSubscription (status=canceled) |
-| `invoice.paid` | `subscription.updated`（含续费） | upsertSubscription |
-| `invoice.payment_failed` | `transaction.payment_failed` | upsertSubscription (status=past_due) |
+- `reserve_and_get_plan` RPC 和 ASR 配额执行链路。
+- `transcribe` Edge Function。
+- free/pro/admin 套餐语义和配额。
+- 前端 `createBillingSession()` 的调用签名和 Edge Function 路径。
 
-#### upsertSubscription 字段映射
+### 需要替换或调整
+
+- Checkout Edge Function 内部实现。
+- Portal Edge Function 内部实现。
+- 新增 Paddle Webhook。
+- 数据库字段改为支付商无关命名。
+- 支付成功提示改为“正在激活”，并短暂轮询订阅状态。
+- Stripe 保留为迁移期回滚通道，稳定后再下线。
+
+## 7. 数据库设计
+
+**新增 migration**：`supabase/migrations/0016_migrate_stripe_to_paddle.sql`
+
+`0015_align_cloud_asr_limits.sql` 已存在，因此不得再使用 `0015`。如果项目继续维护聚合迁移文件，必须同步更新 `supabase/apply_all_migrations.sql`；否则应明确废弃该文件，避免新环境结构漂移。
+
+### 7.1 支付商无关字段
+
+将 Stripe 专属列改成通用列：
+
+```sql
+-- profiles
+alter table public.profiles
+  rename column stripe_customer_id to provider_customer_id;
+
+alter table public.profiles
+  add column if not exists billing_provider text;
+
+-- subscriptions
+alter table public.subscriptions
+  rename column stripe_customer_id to provider_customer_id;
+alter table public.subscriptions
+  rename column stripe_subscription_id to provider_subscription_id;
+alter table public.subscriptions
+  rename column stripe_price_id to provider_price_id;
+
+alter table public.subscriptions
+  add column if not exists provider text,
+  add column if not exists provider_updated_at timestamptz,
+  add column if not exists latest_transaction_id text;
+```
+
+约束要求：
+
+```sql
+alter table public.subscriptions
+  add constraint subscriptions_provider_check
+  check (provider in ('stripe', 'paddle', 'apple', 'google', 'admin'));
+
+create unique index if not exists subscriptions_provider_subscription_uidx
+  on public.subscriptions(provider, provider_subscription_id)
+  where provider_subscription_id is not null;
+```
+
+迁移现有行时：
+
+- 真实 Stripe 行写入 `provider = 'stripe'`。
+- 现有 `admin_<user_id>` 哨兵行写入 `provider = 'admin'`，不得转成 Paddle Customer。
+- 管理员权益不能被普通 Paddle Webhook 覆盖。
+- `profiles.billing_provider` 只表示该用户当前外部支付提供商，不用于判断管理员权限。
+
+### 7.2 每个用户的当前权益
+
+当前前端按 `user_id` 使用 `.maybeSingle()` 读取订阅，因此必须避免同一用户出现多条可竞争的当前订阅。
+
+本次采用“每个用户最多一条当前权益记录”的简化模型：
+
+```sql
+create unique index if not exists subscriptions_user_id_uidx
+  on public.subscriptions(user_id);
+```
+
+Checkout 创建前必须查询当前权益：
+
+- `active` / `trialing`：拒绝重复购买并引导至 Portal。
+- `past_due`：引导更新付款方式，不创建第二份订阅。
+- 已计划期末取消但仍在有效期：引导至 Portal。
+- `canceled` 且已过期：允许创建新交易。
+- `admin`：不允许购买 Pro。
+
+数据库唯一索引负责兜底并发请求；Edge Function 的前置检查只负责友好提示。
+
+### 7.3 billing_events 事件表
+
+使用通用事件表，而不是新增 Paddle 专属表：
+
+```sql
+create table if not exists public.billing_events (
+  provider text not null,
+  event_id text not null,
+  event_type text not null,
+  occurred_at timestamptz not null,
+  status text not null default 'received'
+    check (status in ('received', 'processed', 'failed', 'ignored')),
+  attempt_count integer not null default 0,
+  user_id uuid references auth.users(id) on delete set null,
+  provider_subscription_id text,
+  payload jsonb,
+  last_error text,
+  received_at timestamptz not null default now(),
+  processed_at timestamptz,
+  primary key (provider, event_id)
+);
+
+alter table public.billing_events enable row level security;
+```
+
+客户端无访问策略，仅 `service_role` 使用。旧 `stripe_events` 保留存档，不在本次迁移删除。
+
+### 7.4 原子事件处理
+
+新增 service-role 专用数据库 RPC，在一个事务中完成：
+
+1. 根据 `(provider, event_id)` 领取事件。
+2. 校验事件是否已处理。
+3. 仅当 `event.occurred_at >= subscriptions.provider_updated_at` 时更新订阅。
+4. 写入 `provider_updated_at = event.occurred_at`。
+5. 标记事件 `processed` / `ignored`。
+
+处理失败时保留事件，并写入 `failed`、`attempt_count` 和 `last_error`，不得删除记录。这样既能让 Paddle 重试，也能审计和人工重放。
+
+## 8. Edge Functions
+
+### 8.1 billing-create-checkout-session（原地重写）
+
+流程：
+
+1. 验证 JWT，取得 user ID 和邮箱。
+2. 查询用户当前权益，阻止管理员和已有有效订阅的用户重复购买。
+3. 根据 `PADDLE_PRICE_ID` 创建自动收款 Transaction。
+4. `customData` 写入 `{ user_id }`。
+5. 根据 Checkout 模式返回 Hosted Checkout 或 Default Payment Link URL。
+6. 不在此时授予 Pro 权益。
+
+必须校验：
+
+- 当前环境与 Paddle API Key 匹配。
+- Price ID 在服务端允许列表中。
+- Price 为目标 Pro 循环订阅价格。
+- 返回的 Transaction environment 与配置一致。
+
+### 8.2 billing-create-portal-session（原地重写）
+
+流程：
+
+1. 验证 JWT。
+2. 查询用户当前 `provider_customer_id`。
+3. 确认 `billing_provider = 'paddle'`。
+4. 调用 Paddle Customer Portal Session API。
+5. 返回通用 Portal URL。
+
+不要把 `subscription.management_urls.update_payment_method` 或 `.cancel` 当成通用 Portal，也不要缓存临时 URL。API Key 必须具备创建 Customer Portal Session 的权限。
+
+### 8.3 paddle-webhook（新增）
+
+流程：
+
+1. 读取未经 JSON 解析的原始请求体。
+2. 使用官方 SDK和 `Paddle-Signature` 验签。
+3. 校验事件环境、时间和类型。
+4. 通过 `(provider, event_id)` 幂等领取事件。
+5. 解析并校验 user ID、customer、subscription、price。
+6. 按 `occurred_at` 条件更新订阅。
+7. 在 5 秒内返回 2xx；较慢的补充任务可使用 Edge Runtime 后台任务。
+
+签名验证优先使用 SDK `webhooks.unmarshal()`。如果确需手写 fallback，必须：
+
+- 对原始 body 做 HMAC，不得对重新序列化的 JSON 验签。
+- 使用 timing-safe compare。
+- 支持密钥轮换时同一 header 中多个 `h1`。
+- 使用可配置的 timestamp tolerance，默认跟随官方 SDK。
+
+### 8.4 订阅事件权威来源
+
+| Paddle 事件 | 处理策略 |
+|---|---|
+| `subscription.created` | 创建/更新当前订阅，校验 price 和 user ID |
+| `subscription.updated` | 订阅状态、账期和 scheduled change 的主要权威来源 |
+| `subscription.canceled` | 标记取消，保留历史标识 |
+| `transaction.completed` | 记录付款、customer 和 transaction ID；不单独推断订阅状态 |
+| `transaction.payment_failed` | 记录失败和告警；不直接把订阅写成 `past_due` |
+| adjustment/refund 相关事件 | 按退款策略记录并决定是否撤销权益 |
+
+续费失败后的 `past_due`、恢复、暂停等状态，以 Subscription 实体事件为准。不得从任意 Transaction 失败事件直接修改订阅状态。
+
+### 8.5 upsertSubscription 字段映射
 
 ```typescript
 {
-  user_id: userId,                                          // 从 custom_data 解析
-  paddle_customer_id: sub.customer_id,                      // ctm_xxx
-  paddle_subscription_id: sub.id,                           // sub_xxx
-  paddle_price_id: sub.items[0].price.id,                   // pri_xxx
-  plan: "pro",                                               // 固定写 pro
-  status: mapPaddleStatus(sub.status),
-  current_period_start: sub.current_billing_period?.starts_at,
-  current_period_end: sub.current_billing_period?.ends_at,
-  cancel_at_period_end: sub.scheduled_change?.action === "cancel",
+  user_id: userId,
+  provider: "paddle",
+  provider_customer_id: subscription.customerId,
+  provider_subscription_id: subscription.id,
+  provider_price_id: validatedPriceId,
+  latest_transaction_id: subscription.transactionId ?? null,
+  plan: "pro",
+  status: mapPaddleStatus(subscription.status),
+  current_period_start: subscription.currentBillingPeriod?.startsAt,
+  current_period_end: subscription.currentBillingPeriod?.endsAt,
+  cancel_at_period_end: subscription.scheduledChange?.action === "cancel",
+  provider_updated_at: event.occurredAt,
 }
 ```
 
-#### Paddle status 映射
+不能仅凭 `customData.user_id` 就授予 Pro。至少同时验证：
 
-| Paddle status | DB status | isPaidStatus |
+- `user_id` 是有效 UUID 且用户存在。
+- `price_id === PADDLE_PRICE_ID`。
+- Price 对应允许的 Pro 循环订阅。
+- Customer 与用户现有映射不冲突。
+- Webhook 来自当前环境。
+
+`customData` 写在 Transaction 上，Paddle 会将其复制到相关 Subscription，可作为 user ID 的主要关联方式；customer ID 反查仅作为恢复路径。
+
+### 8.6 Paddle 状态映射
+
+| Paddle status | DB status | 当前提供 Pro 配额 |
 |---|---|---|
-| `active` | `active` | true |
-| `trialing` | `trialing` | true |
-| `paused` | `paused` | false |
-| `past_due` | `past_due` | false |
-| `canceled` | `canceled` | false |
+| `active` | `active` | 是 |
+| `trialing` | `trialing` | 是 |
+| `paused` | `paused` | 否 |
+| `past_due` | `past_due` | 否 |
+| `canceled` | `canceled` | 否 |
 
-#### 幂等去重
+保持现有 `reserve_and_get_plan` 对 active/trialing/admin 的判断不变。
 
-与 Stripe webhook 逻辑相同：用 `paddle_events` 表 PK (`event_id`) 去重，23505 唯一约束冲突 → 跳过。出错时回滚（删除刚插入的 event 记录）。
+### 8.7 _shared/paddle.ts（新增）
 
-### _shared/paddle.ts（新增）
+提供：
 
-提取 Paddle SDK 初始化和共享工具函数：
-- `createPaddle(apiKey, environment)` — 返回 Paddle 客户端实例
-- `getEnv()` — 读取 Paddle 环境变量
-- `mapPaddleStatus(status)` — Paddle status → DB status 映射
-- `resolveUserId(serviceClient, { customDataUserId, paddleCustomerId })` — 从 custom_data 或 customer_id 反查 userId
+- `createPaddle(apiKey, environment)`
+- `getBillingEnv()` 和启动时配置校验
+- `mapPaddleStatus(status)`
+- `validatePaddlePrice(items, allowedPriceId)`
+- `resolveUserId(serviceClient, customData, customerId)`
+- Checkout URL 构造
 
-## 前端改动
+## 9. 前端改动
 
-**零改动。**
+支付入口保持不变，但成功状态需要做最小调整，不能继续把 `?billing=success` 直接当作 Pro 已经激活。
 
-| 文件 | 改动 |
-|------|------|
-| `src/public/billing.js` | 零 — `createBillingSession()` 函数签名不变 |
-| `hosted-pwa/public/billing.js` | 零 — 镜像 |
-| `src/public/app.js` | 零 — `openBillingSession("billing-create-checkout-session")` 调用不变 |
-| `hosted-pwa/public/app.js` | 零 — 镜像 |
-| `billing.test.js`（× 2） | 零 — 断言路径 `/functions/v1/billing-create-checkout-session` 不变 |
+### 保持不变
 
-`?billing=success` / `?billing=cancel` 回调逻辑完全复用——Paddle hosted checkout 通过 `PADDLE_RETURN_URL` 设置同样的 URL 参数。
+- `createBillingSession()` 函数签名。
+- `/functions/v1/billing-create-checkout-session` 路径。
+- Upgrade 和 Manage subscription 按钮布局。
+- `billing.js` 的基本请求/跳转封装。
 
-## 配置与部署
+### 最小必要改动
 
-### 环境变量
+- 收到 `?billing=success` 后显示“Payment received. Activating Pro…”而不是“Subscription active”。
+- 轮询/重新拉取订阅状态，确认 `active` 或 `trialing` 后再显示激活成功。
+- 设置合理超时；超时提示用户稍后刷新，不重复创建 Checkout。
+- 对中英文文案同步更新。
+- 主方案下确认 Hosted Checkout 的成功和关闭行为；不能未经验证就假设 `?billing=cancel` 一定回跳。
 
-**删除（6 个 Stripe 变量）**：
+如果使用 Paddle.js 备选方案，再增加 `/pay/` 静态页和公开 client-side token；任何 API Key 或 Webhook secret 都不得进入前端。
+
+## 10. 配置
+
+### 10.1 双环境变量
+
+```text
+BILLING_PROVIDER=paddle
+PADDLE_ENVIRONMENT=sandbox              # sandbox | production
+PADDLE_API_KEY=
+PADDLE_WEBHOOK_SECRET=
+PADDLE_PRICE_ID=
+PADDLE_HOSTED_CHECKOUT_URL=             # 主方案
+PADDLE_DEFAULT_PAYMENT_LINK=            # 备选方案/回退
+PADDLE_CLIENT_TOKEN=                    # 仅 Paddle.js 页面使用，可公开
+PADDLE_SUCCESS_URL=https://.../?billing=success
+PADDLE_PORTAL_RETURN_URL=https://.../
 ```
-STRIPE_SECRET_KEY, STRIPE_WEBHOOK_SECRET, STRIPE_PRO_MONTHLY_PRICE_ID,
-STRIPE_SUCCESS_URL, STRIPE_CANCEL_URL, STRIPE_PORTAL_RETURN_URL
-```
 
-**新增（5 个 Paddle 变量）**：
-```
-PADDLE_API_KEY=               # API key
-PADDLE_WEBHOOK_SECRET=        # Webhook 签名密钥
-PADDLE_PRICE_ID=              # Pro 月订阅 price ID (pri_xxx)
-PADDLE_ENVIRONMENT=sandbox    # sandbox 或 production
-PADDLE_RETURN_URL=https://voicebridge-6kr.pages.dev/?billing=success
-```
+Sandbox 与 Production 的 API Key、Price ID、Webhook secret、client token 和 Checkout URL 完全分开。函数启动时必须 fail fast，避免 Sandbox key 配 Production price。
 
-### supabase/config.toml
+迁移窗口内保留全部 Stripe secrets，待 Paddle 稳定后再清理。
+
+### 10.2 Supabase 配置
 
 ```toml
-# 改动
-[functions.paddle-webhook]    # 替代 [functions.stripe-webhook]
+[functions.paddle-webhook]
 verify_jwt = false
 
-# 不变
 [functions.billing-create-checkout-session]
 verify_jwt = true
+
 [functions.billing-create-portal-session]
 verify_jwt = true
 ```
 
-### package.json
+### 10.3 SDK 与依赖
 
-```jsonc
-// 删除
-"stripe": "^22.2.0"
-// 新增（可选，仅本地类型提示）
-"@paddle/paddle-node-sdk": "^2.x"
+Edge Function 使用固定版本的官方 SDK和 Supabase 推荐的 `npm:` 导入方式，例如：
+
+```typescript
+import { Paddle } from "npm:@paddle/paddle-node-sdk@3.8.0";
 ```
 
-### src/server/config.js
+具体版本在实施时以已验证的最新稳定版本为准，但必须精确锁定，不使用 `^`、`@2` 或浮动 esm.sh URL。字段按 SDK 的 camelCase 类型使用。
 
-`loadConfig()` 中 Stripe 变量名 → Paddle 变量名。`buildPublicConfig()` 安全过滤逻辑不变（同样排除 Paddle 密钥）。
+如果根 Node 应用不直接调用 Paddle SDK，则不必在根 `package.json` 重复安装；Edge Function 依赖放入对应 `deno.json` / lockfile。上线前必须进行本地、Supabase preview 和生产构建兼容性验证。
 
-### .env.example
+## 11. Webhook 响应与恢复策略
 
-Stripe 部分 → Paddle 部分，附 sandbox/production 注释。
+- 验签失败：返回 400/401，记录不含敏感信息的安全日志。
+- 已处理事件：立即返回 200。
+- 不支持的事件：写为 `ignored`，返回 200。
+- 暂时性数据库/API 错误：记录失败并返回非 2xx，让 Paddle 重试。
+- 永久数据错误（未知 user、错误 price、环境不符）：写入 failed/ignored 并告警，避免无限重试风暴。
+- 定期运行对账任务，比较 Paddle Subscription 与本地当前权益，修复漏掉或长期失败的事件。
 
-### Supabase Secret 部署
+监控指标至少包括：
 
-```bash
-# 删除旧 Stripe secrets
-supabase secrets unset STRIPE_SECRET_KEY STRIPE_WEBHOOK_SECRET STRIPE_PRO_MONTHLY_PRICE_ID
+- Webhook 验签失败数。
+- 处理耗时和非 2xx 比例。
+- `failed` 事件数量及最老等待时间。
+- 未解析 user ID / customer 冲突数。
+- Checkout 创建失败和重复购买拦截数。
+- Paddle 与本地订阅状态不一致数。
 
-# 设置 Paddle secrets
-supabase secrets set PADDLE_API_KEY=... PADDLE_WEBHOOK_SECRET=... PADDLE_PRICE_ID=... PADDLE_RETURN_URL=...
-```
+## 12. 测试策略
 
-### Paddle Dashboard 配置
+### 12.1 数据库与迁移
 
-**Webhook endpoint**：
-```
-POST https://<supabase-project>.supabase.co/functions/v1/paddle-webhook
-```
+- `0016` 可在当前数据库顺序执行。
+- admin 哨兵记录迁移为 `provider = 'admin'`。
+- 同一用户的重复当前订阅被唯一约束阻止。
+- `reserve_and_get_plan` 在迁移前后输出一致。
+- 聚合迁移文件与增量迁移产生相同 schema。
 
-**订阅事件**：
-- `transaction.completed`
-- `transaction.payment_failed`
-- `subscription.created`
-- `subscription.updated`
-- `subscription.canceled`
+### 12.2 Checkout
 
-## 测试策略
+- 未登录返回 401。
+- Free 用户获得有效 Checkout URL。
+- active/trialing/admin/past_due 用户不会创建第二笔订阅。
+- 并发双击只产生一个有效购买流程，或第二个请求得到可恢复提示。
+- 错误 Price、环境不匹配、Paddle API 超时均安全失败。
+- 首次购买不要求本地 country/address。
 
-### 新增测试
+### 12.3 Webhook 签名
 
-1. **Webhook 签名验证测试**（`supabase/functions/_shared/paddle_webhook.test.js`）
-   - 有效签名 → 正确解析 event
-   - 无效签名 → 拒绝
-   - 过期 timestamp（>5 秒）→ 拒绝
-   - 缺少 `paddle-signature` header → 400
+- 有效签名通过。
+- 无效或缺失签名拒绝。
+- 原始 body 与重新序列化 body 的差异不会被忽略。
+- 超出 tolerance 的 timestamp 拒绝。
+- 多个 `h1` 中任一有效签名可通过。
 
-2. **Webhook 事件处理测试**（`supabase/functions/paddle-webhook/paddle_webhook.test.js`）
-   - `transaction.completed` → 解析 `custom_data.user_id`，更新 profiles + upsert subscription
-   - `subscription.updated` → upsert subscription，status 映射正确
-   - `subscription.canceled` → subscription status = canceled
-   - `transaction.payment_failed` → subscription status = past_due
-   - 重复 event_id → 幂等跳过
+### 12.4 Webhook 状态
 
-3. **Checkout Session 测试**（mock Paddle API）
-   - 已登录用户 → 返回 `{ ok: true, url }`
-   - 未登录 → 401
-   - 无 paddle_customer_id → 调用 `customers.create` + `addresses.create`
-   - 已有 paddle_customer_id → 跳过创建
+- created / updated / canceled 正确映射。
+- `transaction.payment_failed` 不直接修改订阅状态。
+- 重复 event ID 幂等跳过。
+- 相同事件并发投递只处理一次。
+- 新事件先到、旧事件后到时，旧事件标记 ignored，不覆盖新状态。
+- 处理失败保留 payload/error，重试后可成功。
+- 未知 user、错误 price、customer 冲突不会授予 Pro。
+- scheduled cancel、past_due、恢复、paused/resumed 均正确。
+- 管理员权益不会被 Paddle 事件覆盖。
+- 退款、拒付行为符合已确定的权益策略。
 
-### 现有测试
+### 12.5 Portal 与前端
 
-| 文件 | 状态 |
-|------|------|
-| `billing.test.js`（前端，× 2） | 不变 |
-| `planLimits.test.js` | 不变 |
-| `config.test.js` | 小改 — 密钥排除断言从 `STRIPE_*` 改为 `PADDLE_*` |
+- Portal Session 返回通用且未过期的 URL。
+- 非 Paddle 用户得到清晰提示。
+- `?billing=success` 先显示激活中，Webhook 同步后显示成功。
+- Webhook 延迟或失败时，前端超时提示正确且不重复扣费。
+- Hosted Checkout 的成功、关闭、返回行为在移动端和桌面端验证。
 
-### 端到端验证（手动）
+### 12.6 端到端
 
-1. Paddle Sandbox 创建 Pro 月订阅产品，获取 `price_id`
-2. 设置 Sandbox webhook → Edge Function URL
-3. 前端点击"升级" → Paddle hosted checkout 打开
-4. 用 Sandbox 测试卡支付
-5. 验证 webhook 触发 → `subscriptions` 表 plan=pro
-6. 验证配额生效（free 600s → pro 18000s）
-7. 验证"管理订阅" → 跳转 Paddle `management_urls`
+1. Sandbox 完成购买、续费模拟、付款失败、恢复、计划取消、立即取消和退款。
+2. 验证 subscriptions、billing_events 和 profiles 映射。
+3. 验证 free 600s → pro 18000s 的配额变化。
+4. 验证 Portal 更新付款方式和取消订阅。
+5. Production 使用真实小额交易完成一次完整闭环后再切换入口。
 
-## 文件改动总览
+## 13. 部署与切换
 
-```
-[删除]  supabase/functions/stripe-webhook/index.ts（整目录）
+采用扩展—切换—收缩流程：
+
+1. **扩展**：部署 `0016` 通用字段、事件表、Paddle Functions 和监控；保留 Stripe Functions/secrets。
+2. **Sandbox 验证**：完成完整 E2E 和乱序/重试测试。
+3. **Production 冒烟**：真实小额购买、Portal、取消和退款验证。
+4. **切换**：将 `BILLING_PROVIDER` 从 `stripe` 改为 `paddle`，只切换新 Checkout。
+5. **观察**：至少保留 Stripe Webhook 和 secrets 7～30 天，处理潜在旧事件和退款。
+6. **收缩**：确认无 Stripe 活跃订阅和待处理事件后，再删除 Stripe Functions、依赖和 secrets。
+
+不得在首次 Paddle 部署时执行 `supabase secrets unset STRIPE_*`，也不得同时删除 Stripe Webhook。
+
+## 14. 回滚方案
+
+迁移通过支付商开关回滚，不反向重命名数据库列：
+
+1. 将 `BILLING_PROVIDER=stripe`。
+2. 重新部署或启用保留的 Stripe Checkout/Portal Function 实现。
+3. Stripe Webhook 继续工作，通用 subscription 字段可以同时容纳 Stripe 数据。
+4. 暂停 Paddle 新购买，但继续处理已产生的 Paddle Webhook 和退款。
+5. 修复问题后再切回 Paddle。
+
+数据库通用字段和 `billing_events` 不需要回滚。即便重新启用 Stripe，也不得删除已经产生的 Paddle Customer、Transaction 或审计事件。
+
+## 15. 文件改动预估
+
+```text
 [新增]  supabase/functions/paddle-webhook/index.ts
 [新增]  supabase/functions/_shared/paddle.ts
-[新增]  supabase/migrations/0015_migrate_stripe_to_paddle.sql
+[新增]  supabase/migrations/0016_migrate_stripe_to_paddle.sql
+[新增]  Paddle Webhook / Checkout / migration 测试
+[可选]  pay/ 静态支付页（Hosted Checkout 未获批时）
 [重写]  supabase/functions/billing-create-checkout-session/index.ts
 [重写]  supabase/functions/billing-create-portal-session/index.ts
-[更新]  package.json
+[更新]  src/public/app.js 与 hosted-pwa 镜像（激活中/轮询）
+[更新]  i18n 中英文支付状态文案
 [更新]  .env.example
 [更新]  supabase/config.toml
-[更新]  src/server/config.js
-[更新]  src/server/config.test.js
-[不变]  前端全部文件（billing.js, app.js, billing.test.js, i18n, style.css）
+[更新]  Edge Function deno.json / lockfile
+[更新]  src/server/config.js 与测试（如仍由该层读取支付配置）
+[更新]  supabase/apply_all_migrations.sql（若继续使用）
+[暂留]  stripe-webhook 与 Stripe secrets（观察期后删除）
 [不变]  supabase/functions/transcribe/index.ts
-[不变]  supabase/functions/_shared/plan_limits.ts, contracts.ts, cors.ts
-[不变]  src/shared/planLimits.js
+[不变]  reserve_and_get_plan 与共享配额常量
 ```
 
-**总计**：3 个新增 + 2 个重写 + 5 个更新 + 1 个删除 = **11 个文件有改动**。其余 ~20 个文件完全不动。
+实施计划必须以实际代码引用搜索为准，不根据此清单直接假定每个配置文件都仍在使用。
 
-## Edge Runtime / Deno 兼容性
+## 16. 官方参考
 
-Edge Functions 运行在 Deno 中。Paddle Node SDK 通过 `https://esm.sh/@paddle/paddle-node-sdk@2?target=deno` 导入，与当前 Stripe 导入方式（`https://esm.sh/stripe@22.2.0?target=deno&no-dts`）一致。若 SDK 在 Deno 下不兼容，webhook 签名验证可退回手动 HMAC-SHA256 实现（Node `crypto` 模块的标准 API 在 Deno 中可用）。
-
-## 回滚方案
-
-如果 Paddle 迁移后出现阻塞性问题：
-1. 恢复 `stripe-webhook` Edge Function（git revert）
-2. 恢复 `billing-create-checkout-session` 和 `billing-create-portal-session` 的 Stripe 版本（git revert）
-3. 反向执行 migration 0015（`paddle_*` → `stripe_*` 字段名）
-4. 恢复 Stripe 环境变量
-
-由于内测期无真实付费用户，回滚风险极低。
+- [Paddle Create transaction API](https://developer.paddle.com/api-reference/transactions/create-transaction/)
+- [Create a transaction](https://developer.paddle.com/build/transactions/create-transaction/)
+- [Hosted Checkout](https://developer.paddle.com/paddle-js/about/hosted-checkout/)
+- [Default Payment Link](https://developer.paddle.com/build/transactions/default-payment-link/)
+- [Handle checkout success](https://developer.paddle.com/build/checkout/handle-success-post-checkout/)
+- [Verify webhook signatures](https://developer.paddle.com/webhooks/about/signature-verification/)
+- [Respond to webhooks](https://developer.paddle.com/webhooks/about/respond-to-webhooks/)
+- [Subscription API and management URLs](https://developer.paddle.com/api-reference/subscriptions/)
+- [Paddle Node SDK](https://developer.paddle.com/sdks/libraries/node/)
+- [Supabase Edge Function dependencies](https://supabase.com/docs/guides/functions/dependencies)
+- [Paddle supported countries](https://www.paddle.com/help/legal/sanctions/which-countries-are-supported-by-paddle)
+- [Paddle identity verification](https://www.paddle.com/help/start/account-verification/what-is-identity-verification)
+- [Paddle payouts](https://www.paddle.com/help/manage/get-paid/when-and-how-do-i-get-paid)

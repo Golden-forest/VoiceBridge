@@ -13,8 +13,8 @@
     </script>
 
     <!-- Primary Meta -->
-    <title>VoiceBridge - Speak on Your Phone, Type on Your Computer</title>
-    <meta name="description" content="Turn your phone into a voice input remote. One tap to record, cloud transcribes, text appears at your cursor. Connect one phone to multiple computers and switch freely." />
+    <title>VoiceBridge - Your Voice, Any Cursor</title>
+    <meta name="description" content="Use your phone as a voice input remote for macOS and Windows. Record once, choose a screen, and send text straight to the active cursor." />
     <link rel="canonical" href="https://voicebridge-6kr.pages.dev/" />
     <link rel="alternate" hreflang="en" href="https://voicebridge-6kr.pages.dev/" />
     <link rel="alternate" hreflang="zh-CN" href="https://voicebridge-6kr.pages.dev/zh-CN/" />
@@ -22,16 +22,16 @@
 
     <!-- Open Graph -->
     <meta property="og:type" content="website" />
-    <meta property="og:title" content="VoiceBridge - Speak on Your Phone, Type on Your Computer" />
-    <meta property="og:description" content="Turn your phone into a voice input remote. One tap to record, cloud transcribes, text appears at your cursor. Connect one phone to multiple computers and switch freely." />
+    <meta property="og:title" content="VoiceBridge - Your Voice, Any Cursor" />
+    <meta property="og:description" content="Use your phone as a voice input remote for macOS and Windows. Record once, choose a screen, and send text straight to the active cursor." />
     <meta property="og:url" content="https://voicebridge-6kr.pages.dev/" />
     <meta property="og:image" content="https://voicebridge-6kr.pages.dev/og-image-en.png" />
     <meta property="og:locale" content="en_US" />
 
     <!-- Twitter Card -->
     <meta name="twitter:card" content="summary_large_image" />
-    <meta name="twitter:title" content="VoiceBridge - Speak on Your Phone, Type on Your Computer" />
-    <meta name="twitter:description" content="Turn your phone into a voice input remote. One tap to record, cloud transcribes, text appears at your cursor. Connect one phone to multiple computers and switch freely." />
+    <meta name="twitter:title" content="VoiceBridge - Your Voice, Any Cursor" />
+    <meta name="twitter:description" content="Use your phone as a voice input remote for macOS and Windows. Record once, choose a screen, and send text straight to the active cursor." />
     <meta name="twitter:image" content="https://voicebridge-6kr.pages.dev/og-image-en.png" />
 
     <!-- Structured Data: SoftwareApplication -->
@@ -42,7 +42,7 @@
         "name": "VoiceBridge",
         "applicationCategory": "UtilitiesApplication",
         "operatingSystem": "macOS, Windows",
-        "description": "Turn your phone into a voice input remote. One tap to record, cloud transcribes, text appears at your cursor. Connect one phone to multiple computers and switch freely.",
+        "description": "Use your phone as a voice input remote for macOS and Windows. Record once, choose a screen, and send text straight to the active cursor.",
         "url": "https://voicebridge-6kr.pages.dev/"
       }
     </script>
@@ -106,12 +106,12 @@
         <div class="hero-inner">
           <div class="hero-content">
             <h1 class="hero-h1">
-              <span class="hero-h1-line">Speak on your phone.</span>
-              <span class="hero-h1-line hero-h1-accent">Type on your computer.</span>
+              <span class="hero-h1-line">Your voice.</span>
+              <span class="hero-h1-line hero-h1-accent">Any cursor.</span>
             </h1>
 
             <!-- Static text for screen readers -->
-            <span class="sr-only">VoiceBridge: one tap to record on your phone, cloud transcribes, text appears at your computer&#39;s cursor. Connect one phone to multiple computers and switch freely.</span>
+            <span class="sr-only">Speak on your phone and send the transcribed text straight to the active cursor on any connected computer.</span>
 
             <!-- Typewriter target ( visual only ) -->
             <div class="hero-typewriter"
@@ -123,7 +123,7 @@
             </div>
 
             <!-- JSON island for typewriter copy -->
-            <script type="application/json" id="typewriter-data">["One tap to record. Text appears at your cursor.","One phone, multiple computers. Switch freely.","Wrap long text into commands. Trigger with a phrase."]</script>
+            <script type="application/json" id="typewriter-data">["Speak on your phone. Text lands at your cursor.","One phone. Every connected screen.","Save long text. Send it again with one tap."]</script>
 
             <div class="hero-cta">
               <a class="hero-cta-primary"
@@ -138,26 +138,37 @@
           </div>
 
           <div class="hero-media">
-            <div class="hero-media-frame">
-              <!--
-                Video tag placeholder.
-                When source is ready: add <source src="..." type="video/webm" /> and <source src="..." type="video/mp4" />.
-                Until then poster + play button.
-              -->
-              <video class="hero-media-video"
-                     id="hero-video"
-                     muted
-                     loop
-                     playsinline
-                     preload="none"
-                     poster="/media/hero-poster.svg">
-              </video>
-              <div class="hero-media-placeholder" id="hero-media-placeholder">
-                <svg class="hero-media-play" viewBox="0 0 24 24" width="56" height="56" aria-hidden="true">
-                  <circle cx="12" cy="12" r="11" fill="rgba(249,115,22,0.15)" stroke="rgba(249,115,22,0.6)" stroke-width="1.5" />
-                  <polygon points="10,8 16,12 10,16" fill="#f97316" />
-                </svg>
-                <p class="hero-media-copy">Product demo coming soon</p>
+            <div class="hero-media-frame hero-carousel" id="hero-carousel">
+              <img class="hero-carousel-slide is-active"
+                   src="/media/voicebridge-hero-1072.webp"
+                   srcset="/media/voicebridge-hero-720.webp 720w, /media/voicebridge-hero-1072.webp 1072w"
+                   sizes="(min-width: 1080px) 560px, calc(100vw - 48px)"
+                   alt="VoiceBridge on a phone beside a laptop, with an orange voice stream flowing toward the active cursor."
+                   fetchpriority="high"
+                   decoding="async" />
+              <img class="hero-carousel-slide"
+                   src="/media/voicebridge-every-screen-1280.webp"
+                   srcset="/media/voicebridge-every-screen-800.webp 800w, /media/voicebridge-every-screen-1280.webp 1280w"
+                   sizes="(min-width: 1080px) 560px, calc(100vw - 48px)"
+                   alt="A phone sending voice input to active cursors across a browser, code editor, and document on multiple computers."
+                   decoding="async" />
+              <img class="hero-carousel-slide"
+                   src="/media/voicebridge-ideas-1440.webp"
+                   srcset="/media/voicebridge-ideas-800.webp 800w, /media/voicebridge-ideas-1440.webp 1440w"
+                   sizes="(min-width: 1080px) 560px, calc(100vw - 48px)"
+                   alt="Before and after scene showing VoiceBridge freeing a user from typing at the keyboard."
+                   decoding="async" />
+              <img class="hero-carousel-slide"
+                   src="/media/voicebridge-developer-1440.webp"
+                   srcset="/media/voicebridge-developer-800.webp 800w, /media/voicebridge-developer-1440.webp 1440w"
+                   sizes="(min-width: 1080px) 560px, calc(100vw - 48px)"
+                   alt="A developer dictates a rate limit change from a phone while VoiceBridge sends the text to the active cursor in a code editor."
+                   decoding="async" />
+              <div class="hero-carousel-dots" role="tablist" aria-label="Hero slides">
+                <button class="hero-carousel-dot is-active" type="button" role="tab" aria-label="Slide 1" data-slide="0"></button>
+                <button class="hero-carousel-dot" type="button" role="tab" aria-label="Slide 2" data-slide="1"></button>
+                <button class="hero-carousel-dot" type="button" role="tab" aria-label="Slide 3" data-slide="2"></button>
+                <button class="hero-carousel-dot" type="button" role="tab" aria-label="Slide 4" data-slide="3"></button>
               </div>
             </div>
           </div>
@@ -167,125 +178,67 @@
       <!-- SECTION 2: 核心能力 -->
       <section class="section section-product" id="product" data-section="product">
         <div class="section-inner">
-          <h2 class="section-h2">Core features</h2>
-          <p class="section-lead">Phone records. Cloud transcribes. Computer receives.</p>
+          <h2 class="section-h2">Speak once. Keep your flow.</h2>
+          <p class="section-lead">Record on your phone. VoiceBridge transcribes and sends text to the computer you choose.</p>
 
           <div class="product-grid">
             <!-- 主卡片: 核心流程 -->
             <article class="product-main">
               <div class="product-media-frame">
-                <!-- Phone mockup with real app UI ( code-rendered ) -->
-                <div class="phone-mockup phone-mockup-lg" aria-hidden="true">
-                  <div class="phone-screen">
-                    <!-- Header -->
-                    <div class="app-mockup-header">
-                      <span class="app-mockup-brand-mark">
-                        <img src="/icons/icon-192.png" alt="" />
-                      </span>
-                      <span class="app-mockup-brand">VoiceBridge</span>
-                      <span class="app-mockup-header-btn">
-                        <svg viewBox="0 0 24 24"><path d="M21 3v5h-5"/><path d="M21 8l-3.2-3.2a9 9 0 1 0 2.5 8.3"/></svg>
-                      </span>
-                    </div>
-                    <!-- Device pill -->
-                    <div class="app-mockup-device-pill">
-                      <span class="app-mockup-device-icon">
-                        <svg viewBox="0 0 24 24"><rect x="3" y="5" width="13" height="10" rx="2"/><rect x="8" y="9" width="13" height="10" rx="2"/></svg>
-                      </span>
-                      <span class="app-mockup-status-dot"></span>
-                      <span class="app-mockup-status-badge">Connected</span>
-                      <span class="app-mockup-toggle">
-                        <span class="app-mockup-toggle-track"></span>
-                        <span>Auto-paste</span>
-                      </span>
-                    </div>
-                    <!-- Input card -->
-                    <div class="app-mockup-input-card">
-                      <div class="app-mockup-text-input">Type text, or use voice recognition…</div>
-                      <div class="app-mockup-input-footer">0/2000</div>
-                    </div>
-                    <!-- Primary actions -->
-                    <div class="app-mockup-primary-actions">
-                      <div class="app-mockup-side-btn">
-                        <svg viewBox="0 0 24 24"><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><rect x="8" y="2" width="8" height="4" rx="1"/></svg>
-                        <span>Paste</span>
-                      </div>
-                      <div class="app-mockup-record-btn">
-                        <span class="app-mockup-record-icon">
-                          <svg viewBox="0 0 24 24"><rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 10a7 7 0 0014 0"/><line x1="12" y1="19" x2="12" y2="22"/></svg>
-                        </span>
-                        <span class="app-mockup-record-label">Record</span>
-                      </div>
-                      <div class="app-mockup-side-btn">
-                        <svg viewBox="0 0 24 24"><polyline points="9 10 4 15 9 20"/><path d="M20 4v7a4 4 0 0 1-4 4H4"/></svg>
-                        <span>Enter</span>
-                      </div>
-                    </div>
-                    <!-- Utility keys -->
-                    <div class="app-mockup-utility-keys">
-                      <div class="app-mockup-util-btn">
-                        <svg viewBox="0 0 24 24"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 9.9-1"/></svg>
-                        <span>Esc</span>
-                      </div>
-                      <div class="app-mockup-util-btn">
-                        <svg viewBox="0 0 24 24"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/></svg>
-                        <span>Delete</span>
-                      </div>
-                      <div class="app-mockup-util-btn">
-                        <svg viewBox="0 0 24 24"><path d="M3 7v6h6"/><path d="M21 17a9 9 0 0 0-9-9 9 9 0 0 0-6 2.3L3 13"/></svg>
-                        <span>Undo</span>
-                      </div>
-                    </div>
-                    <!-- Library panel -->
-                    <div class="app-mockup-library">
-                      <div class="app-mockup-library-tabs">
-                        <span class="app-mockup-tab active">Recent<span class="app-mockup-tab-count">3</span></span>
-                        <span class="app-mockup-tab">All<span class="app-mockup-tab-count">11+</span></span>
-                        <span class="app-mockup-tab">Custom</span>
-                      </div>
-                      <div class="app-mockup-cmd-grid">
-                        <span class="app-mockup-cmd-btn recent">Minimal changes</span>
-                        <span class="app-mockup-cmd-btn recent">Code review</span>
-                        <span class="app-mockup-cmd-btn recent">UI design</span>
-                        <span class="app-mockup-cmd-btn">Quick overview</span>
-                        <span class="app-mockup-cmd-btn">Reply confirm</span>
-                        <span class="app-mockup-cmd-btn">Meeting notes</span>
-                        <span class="app-mockup-cmd-btn slash">/help</span>
-                        <span class="app-mockup-cmd-btn">Weekly report</span>
-                        <span class="app-mockup-cmd-btn">Requirements</span>
-                      </div>
-                    </div>
-                  </div>
-                </div>
+                <img class="product-media-img"
+                     src="/media/voicebridge-every-screen-1280.webp"
+                     srcset="/media/voicebridge-every-screen-800.webp 800w, /media/voicebridge-every-screen-1280.webp 1280w"
+                     sizes="(min-width: 1024px) 640px, calc(100vw - 96px)"
+                     width="1280"
+                     height="720"
+                     alt="A phone sending voice input to active cursors across a browser, code editor, and document on multiple computers."
+                     loading="lazy"
+                     decoding="async" />
               </div>
-              <h3 class="product-card-title">One tap, straight to cursor</h3>
-              <p class="product-card-body">Tap to start recording, tap to stop. VoiceBridge transcribes in the cloud and delivers text directly to the active input field on your computer — no window switching.</p>
+              <h3 class="product-card-title">One phone. Every screen.</h3>
+              <p class="product-card-body">Choose the active computer, speak, and keep working. Your text arrives at the cursor without pulling you into another window.</p>
             </article>
 
             <div class="product-side">
               <!-- 辅助 1: 多设备 -->
               <article class="product-aux">
                 <span class="product-aux-eyebrow">Multi-device</span>
-                <h3 class="product-card-title">One phone, many computers</h3>
-                <p class="product-card-body">Sign in on multiple computers with the same account. Your phone auto-discovers all online devices — pick a target and send.</p>
+                <h3 class="product-card-title">Switch screens, not tools</h3>
+                <p class="product-card-body">Sign in on your computers with the same account. Your phone finds every online device, ready for you to choose and send.</p>
               </article>
 
               <!-- 辅助 2: 剪切板兜底 -->
               <article class="product-aux">
                 <span class="product-aux-eyebrow">Fallback</span>
                 <h3 class="product-card-title">Clipboard backup</h3>
-                <p class="product-card-body">When auto-paste isn&#39;t available, text is still copied to your computer&#39;s clipboard. Nothing is lost.</p>
+                <p class="product-card-body">If auto-paste is unavailable, your text still reaches the computer clipboard, ready to paste.</p>
               </article>
             </div>
           </div>
         </div>
       </section>
 
-      <!-- SECTION 3: 快捷指令 -->
+      <!-- SECTION 3: 场景叙事 -->
+      <section class="section-showcase" aria-label="Voice input without being tied to a keyboard">
+        <figure class="showcase-figure">
+          <img class="showcase-image"
+               src="/media/voicebridge-ideas-1440.webp"
+               srcset="/media/voicebridge-ideas-800.webp 800w, /media/voicebridge-ideas-1440.webp 1440w"
+               sizes="(min-width: 1240px) 1200px, calc(100vw - 48px)"
+               width="1440"
+               height="811"
+               alt="Before and after scene showing VoiceBridge freeing a user from typing at the keyboard. The image reads: Your ideas shouldn&#39;t be tied to a keyboard."
+               loading="lazy"
+               decoding="async" />
+          <figcaption class="showcase-caption">Capture the idea while it is fresh. Keep your computer focused on the work.</figcaption>
+        </figure>
+      </section>
+
+      <!-- SECTION 4: 快捷指令 -->
       <section class="section section-commands" id="commands" data-section="commands">
         <div class="section-inner">
-          <h2 class="section-h2">Long text, one phrase</h2>
-          <p class="section-lead">Save repetitive content as commands. Say a phrase and get the whole thing typed out.</p>
+          <h2 class="section-h2">Save it once. Send it in seconds.</h2>
+          <p class="section-lead">Turn repeatable text into commands, then send the full version to your active cursor with one tap.</p>
 
           <div class="commands-grid">
             <div class="commands-screenshot">
@@ -362,10 +315,26 @@
         </div>
       </section>
 
-      <!-- SECTION 4: 使用流程 -->
+      <!-- SECTION 5: 开发者场景 -->
+      <section class="section-developer" aria-label="VoiceBridge for developers">
+        <figure class="developer-figure">
+          <img class="developer-image"
+               src="/media/voicebridge-developer-1440.webp"
+               srcset="/media/voicebridge-developer-800.webp 800w, /media/voicebridge-developer-1440.webp 1440w"
+               sizes="(min-width: 1440px) 1440px, 100vw"
+               width="1440"
+               height="810"
+               alt="A developer dictates a rate limit change from a phone while VoiceBridge sends the text to the active cursor in a code editor. The image reads: Lean back. Keep coding."
+               loading="lazy"
+               decoding="async" />
+          <figcaption class="developer-caption">Developer flow, uninterrupted. Dictate prompts, review notes, and code changes while your editor stays active.</figcaption>
+        </figure>
+      </section>
+
+      <!-- SECTION 6: 使用流程 -->
       <section class="section section-how" id="how" data-section="how">
         <div class="section-inner">
-          <h2 class="section-h2">Get started in 3 steps</h2>
+          <h2 class="section-h2">Phone to cursor in 3 steps</h2>
 
           <ol class="how-steps">
             <li class="how-step">
@@ -387,11 +356,11 @@
         </div>
       </section>
 
-      <!-- SECTION 5: 下载 -->
+      <!-- SECTION 7: 下载 -->
       <section class="section section-download" id="download" data-section="download">
         <div class="section-inner">
-          <h2 class="section-h2">Choose your desktop app</h2>
-          <p class="section-lead">macOS and Windows. Install on multiple computers.</p>
+          <h2 class="section-h2">Bring VoiceBridge to your computer</h2>
+          <p class="section-lead">Available for macOS and Windows. Install it on every computer you use.</p>
 
           <!-- Platform buttons container: filled dynamically by landing.js from /downloads.json -->
           <div class="download-platforms"

@@ -3,16 +3,16 @@
     "lang": "zh-CN"
   },
   "meta": {
-    "title": "VoiceBridge - 手机说话，电脑输入",
-    "description": "把手机变成电脑的语音输入遥控器。一键录音，云端转写，文字直接出现在电脑光标处。一台手机连接多台电脑，随意切换。",
+    "title": "VoiceBridge - 你的声音，抵达每个光标",
+    "description": "把手机变成 macOS 和 Windows 的语音输入遥控器。录音、选择屏幕，转写文字直接抵达当前光标。",
     "canonical": "https://voicebridge-6kr.pages.dev/zh-CN/",
     "hreflang_en": "https://voicebridge-6kr.pages.dev/",
     "hreflang_zh_cn": "https://voicebridge-6kr.pages.dev/zh-CN/",
     "hreflang_default": "https://voicebridge-6kr.pages.dev/"
   },
   "og": {
-    "title": "VoiceBridge - 手机说话，电脑输入",
-    "description": "把手机变成电脑的语音输入遥控器。一键录音，云端转写，文字直接出现在电脑光标处。一台手机连接多台电脑，随意切换。",
+    "title": "VoiceBridge - 你的声音，抵达每个光标",
+    "description": "把手机变成 macOS 和 Windows 的语音输入遥控器。录音、选择屏幕，转写文字直接抵达当前光标。",
     "url": "https://voicebridge-6kr.pages.dev/zh-CN/",
     "image": "https://voicebridge-6kr.pages.dev/og-image-zh.png",
     "locale": "zh_CN"
@@ -33,34 +33,43 @@
     "menu_aria": "打开菜单"
   },
   "hero": {
-    "h1_line1": "手机说话，",
-    "h1_line2": "电脑输入。",
-    "sr_subtitle": "VoiceBridge：手机一键录音，云端转写，文字直接出现在电脑光标处。一台手机可连接多台电脑，随意切换。",
+    "h1_line1": "你的声音，",
+    "h1_line2": "任意光标。",
+    "sr_subtitle": "在手机上说话，转写文字直接抵达任意已连接电脑的当前光标。",
     "typewriter": [
-      "一键录音，文字自动出现在电脑光标处。",
-      "一台手机连接多台电脑，随意切换。",
-      "常用长文本封装成指令，一句话触发。"
+      "手机开口说，文字直达电脑光标。",
+      "一台手机，连接你的每一块屏幕。",
+      "长文本保存一次，以后一键发送。"
     ],
     "cta_primary": "下载桌面端",
     "cta_secondary": "打开网页版",
-    "video_poster": "/media/hero-poster.svg",
-    "video_coming": "产品演示即将上线"
+    "media_alt": "手机上的 VoiceBridge 与笔记本电脑并排，橙色语音流正向当前光标传递。",
+    "slide1_alt": "手机上的 VoiceBridge 与笔记本电脑并排，橙色语音流正向当前光标传递。",
+    "slide2_alt": "一台手机正在把语音输入发送到多台电脑上的浏览器、代码编辑器和文档光标。",
+    "slide3_alt": "使用 VoiceBridge 前后的对比场景，用户从埋头敲键盘变为靠在椅背上用手机说话。",
+    "slide4_alt": "开发者对着手机描述限流修改，VoiceBridge 把文字发送到代码编辑器的当前光标。"
   },
   "product": {
-    "title": "核心能力",
-    "lead": "手机录音，云端转写，电脑接收。",
-    "main_title": "一键录音，直达光标",
-    "main_body": "在手机上点击录音，再次点击停止，VoiceBridge 完成云端转写后，文字直接发送到电脑当前输入框，无需切换窗口。",
+    "title": "说一次，思路不断。",
+    "lead": "手机录音，VoiceBridge 完成转写，再把文字发送到你选择的电脑。",
+    "main_title": "一台手机，连接每块屏幕",
+    "main_body": "选中正在使用的电脑，开口说话，文字直接抵达当前光标，不必切换窗口。",
+    "media_alt": "一台手机正在把语音输入发送到多台电脑上的浏览器、代码编辑器和文档光标。",
     "aux1_eyebrow": "多设备",
-    "aux1_title": "一机多连",
-    "aux1_body": "同一账号在多台电脑上登录桌面端，手机自动发现所有在线设备，随意选择目标发送。",
+    "aux1_title": "换屏幕，不换工具",
+    "aux1_body": "多台电脑登录同一账号，手机自动发现在线设备，选中目标即可发送。",
     "aux2_eyebrow": "兜底",
     "aux2_title": "剪切板备份",
-    "aux2_body": "当自动粘贴不可用时，文字仍会复制到电脑剪切板，不会丢。"
+    "aux2_body": "自动粘贴不可用时，文字仍会到达电脑剪切板，随时可以粘贴。"
+  },
+  "showcase": {
+    "aria_label": "不受键盘束缚的语音输入",
+    "image_alt": "使用 VoiceBridge 前后的对比场景，用户从埋头敲键盘变为靠在椅背上用手机说话。图片英文写着：你的想法不该被键盘束缚。",
+    "caption": "灵感出现时立刻说出来，让电脑继续专注于眼前的工作。"
   },
   "commands": {
-    "title": "常用长文本，一句话触发",
-    "lead": "把重复性内容保存成指令，说一句话即可完整输出。",
+    "title": "保存一次，几秒发送。",
+    "lead": "把重复内容保存成指令，以后一键就能把完整文本发送到当前光标。",
     "item1_label": "最小化修改",
     "item1_source": "内置预设",
     "item2_label": "代码审查",
@@ -71,8 +80,13 @@
     "item4_source": "内置预设",
     "footnote": "内置 11 条预设，也可自定义。"
   },
+  "developer": {
+    "aria_label": "面向开发者的 VoiceBridge",
+    "image_alt": "开发者对着手机描述限流修改，VoiceBridge 把文字发送到代码编辑器的当前光标。图片英文写着：靠在椅背上，继续写代码。",
+    "caption": "让开发思路保持连贯。口述提示词、审查意见和代码修改，编辑器始终停留在当前工作。"
+  },
   "how": {
-    "title": "三步开始用",
+    "title": "三步，从手机直达光标",
     "step1_title": "手机打开网页版",
     "step1_body": "在手机浏览器访问，注册或登录。",
     "step2_title": "电脑装桌面端",
@@ -81,8 +95,8 @@
     "step3_body": "在手机上选目标电脑，一键录音，文字直达那台电脑的光标处。"
   },
   "download": {
-    "title": "选择你的桌面端",
-    "lead": "支持 macOS 和 Windows，可多台同时安装。",
+    "title": "把 VoiceBridge 装进你的电脑",
+    "lead": "支持 macOS 和 Windows，常用的电脑都可以安装。",
     "coming_label": "即将提供",
     "free_note": "免费方案可用，无需信用卡。"
   },
@@ -103,14 +117,6 @@
     "col_language_zh": "简体中文"
   },
   "phone_demo": {
-    "status": "已连接",
-    "auto_paste": "自动粘贴",
-    "input_placeholder": "输入文字，或语音识别…",
-    "paste": "粘贴",
-    "record": "录音",
-    "enter": "回车",
-    "delete": "删除",
-    "undo": "撤销",
     "tab_recent": "最近",
     "tab_all": "全部",
     "tab_custom": "自定义",
