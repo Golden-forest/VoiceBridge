@@ -10,6 +10,9 @@ verify_jwt = true
 [functions.billing-create-portal-session]
 verify_jwt = true
 
+[functions.billing-get-client-context]
+verify_jwt = true
+
 [functions.stripe-webhook]
 verify_jwt = false
 

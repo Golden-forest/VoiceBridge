@@ -4,7 +4,7 @@
 import { Paddle } from "npm:@paddle/paddle-node-sdk@3.8.0";
 
 export type BillingProvider = "stripe" | "paddle";
-export type PaddleEnvironment = "sandbox" | "production";
+export type PaddleEnvironment = "production";
 
 export interface BillingEnv {
   billingProvider: BillingProvider;
@@ -30,25 +30,26 @@ function optionalEnv(name: string, fallback = ""): string {
 }
 
 /**
- * 读取 Paddle 环境（sandbox / production）并校验枚举值。
+ * 读取 Paddle 环境并强制使用 production。
  * 不做 requireEnv 校验，可被非关键路径（如 account-delete）安全调用：
  * 即使 PADDLE_API_KEY 未配置也不会抛错。
  */
 export function getPaddleEnvironment(): PaddleEnvironment {
-  const env = optionalEnv("PADDLE_ENVIRONMENT", "sandbox") as PaddleEnvironment;
-  if (env !== "sandbox" && env !== "production") {
-    throw new Error(`PADDLE_ENVIRONMENT must be 'sandbox' or 'production', got: ${env}`);
+  const env = optionalEnv("PADDLE_ENVIRONMENT", "production");
+  if (env !== "production") {
+    throw new Error(`PADDLE_ENVIRONMENT must be 'production' in this build, got: ${env}`);
   }
-  return env;
+  return "production";
 }
 
 /**
  * Paddle API base URL，按环境路由。
  */
 export function paddleApiBaseUrl(environment: PaddleEnvironment): string {
-  return environment === "production"
-    ? "https://api.paddle.com"
-    : "https://sandbox-api.paddle.com";
+  if (environment !== "production") {
+    throw new Error(`Unsupported Paddle environment: ${environment}`);
+  }
+  return "https://api.paddle.com";
 }
 
 // ---------------------------------------------------------------------------

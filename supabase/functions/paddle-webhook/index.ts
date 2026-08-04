@@ -35,7 +35,7 @@ Deno.serve(async (req) => {
 
     // 0. IP allowlist —— 在签名验证之前做，拒绝任何非 Paddle 官方出口 IP 的请求。
     //    IP 列表动态从 api.paddle.com/ips 拉取，带 15 分钟 TTL 缓存。
-    //    如果拉取失败（Paddle API 故障），降级为只靠签名验证，不阻断正常业务。
+    //    如果拉取失败则返回 503，让 Paddle 稍后重试；不能对未知来源 fail-open。
     try {
       const isPaddle = await isPaddleWebhookSource(env.paddleEnvironment, req);
       if (!isPaddle) {
@@ -43,8 +43,11 @@ Deno.serve(async (req) => {
         return jsonResponse({ ok: false, message: "Forbidden" }, 403);
       }
     } catch (ipError) {
-      // Paddle /ips 端点不可用时不阻断（signature verification 仍是主要防线）
-      console.warn("Paddle webhook: IP allowlist check skipped:", ipError?.message);
+      console.error("Paddle webhook: IP allowlist unavailable:", ipError?.message);
+      return jsonResponse(
+        { ok: false, message: "Webhook source verification unavailable" },
+        503,
+      );
     }
 
     // 1. 读取原始请求体（验签必须在 JSON 解析前）
