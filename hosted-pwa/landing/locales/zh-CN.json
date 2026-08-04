@@ -99,7 +99,7 @@
     "title": "简单，按需付费",
     "lead": "免费开始，需要更多时再升级。",
     "free_name": "免费版",
-    "free_price": "¥0",
+    "free_price": "$0",
     "free_period": "/月",
     "free_feat1": "每月 10 分钟云端转写",
     "free_feat2": "单次录音最长 15 秒",
@@ -107,14 +107,14 @@
     "free_cta": "开始使用",
     "pro_name": "专业版",
     "pro_badge": "最受欢迎",
-    "pro_price": "¥39",
+    "pro_price": "$9",
     "pro_period": "/月",
     "pro_feat1": "每月 5 小时云端转写",
     "pro_feat2": "单次录音最长 60 秒",
     "pro_feat3": "每分钟 30 次请求",
     "pro_feat4": "邮件优先支持",
     "pro_cta": "升级专业版",
-    "footnote": "价格以人民币结算，可随时取消。"
+    "footnote": "价格以美元结算，可随时取消。结账时 Paddle 会按您的所在地自动换算税费。"
   },
   "download": {
     "title": "把 VoiceBridge 装进你的电脑",
@@ -135,6 +135,8 @@
     "col_legal_title": "法律",
     "col_legal_privacy": "隐私政策",
     "col_legal_terms": "用户协议",
+    "col_legal_refund": "退款政策",
+    "col_legal_contact": "联系我们",
     "col_language_title": "语言",
     "col_language_en": "English",
     "col_language_zh": "简体中文"
