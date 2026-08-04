@@ -1,4 +1,4 @@
-export async function createBillingSession({
+export async function invokeBillingFunction({
   supabase = globalThis.window?.VoiceBridgeAuth?.supabase,
   functionName,
   fetch: fetchImpl = globalThis.fetch
@@ -40,10 +40,14 @@ export async function createBillingSession({
   if (!response.ok || !payload?.ok) {
     throw new Error(payload?.message || payload?.error || "订阅请求失败，请稍后重试。");
   }
+  return payload;
+}
+
+export async function createBillingSession(options = {}) {
+  const payload = await invokeBillingFunction(options);
   if (typeof payload.url !== "string" || !payload.url) {
     throw new Error("订阅请求未返回可用链接。");
   }
-
   return payload;
 }
 

@@ -14,7 +14,23 @@ test("hosted PWA ships cloud config and pairing entrypoint", async () => {
 
   assert.match(config, /voicebridgeMode:\s*"cloud"/);
   assert.match(config, /gqxxknusznbunkiznnal\.supabase\.co/);
+  assert.match(config, /paddleEnvironment:\s*"production"/);
+  assert.match(config, /paddleClientToken:\s*"live_[a-z0-9]+"/);
   assert.match(pairing, /action:\s*"claim"/);
+});
+
+test("Paddle live initialization uses explicit environment and Retain customer context", async () => {
+  const app = await readFile(new URL("client/app.js", distRoot), "utf8");
+
+  assert.match(app, /__VB_CONFIG\?\.paddleEnvironment/);
+  assert.doesNotMatch(app, /Paddle\.Environment\.set\("sandbox"\)/);
+  assert.match(app, /Paddle\.Initialize\(options\)/);
+  assert.match(app, /billing-get-client-context/);
+  assert.match(app, /pwCustomer:\s*customerId\s*\?\s*\{\s*id:\s*customerId\s*\}\s*:\s*\{\}/);
+  assert.match(app, /\^ctm_\[a-z0-9\]\{26\}\$/);
+  assert.match(app, /get\("_ptxn"\)/);
+  assert.match(app, /\^txn_\[a-z0-9\]\{26\}\$/);
+  assert.doesNotMatch(app, /pwCustomer:\s*\{\s*id:\s*userId/);
 });
 
 // ---- Landing page: English root -------------------------------------------
@@ -64,14 +80,32 @@ test("PWA app.html retains manifest link and GitHub auth button", async () => {
 
 // ---- Worker HTML_ROUTES ----------------------------------------------------
 
-test("worker exposes HTML_ROUTES for /, /zh-CN and /app", async () => {
+test("worker exposes HTML_ROUTES for app and public legal pages", async () => {
   const worker = await readFile(new URL("server/index.js", distRoot), "utf8");
 
   assert.match(worker, /HTML_ROUTES/);
   assert.match(worker, /["']\/["']/);
   assert.match(worker, /["']\/zh-CN\/?["']/);
   assert.match(worker, /["']\/app["']/);
+  assert.match(worker, /["']\/terms["']/);
+  assert.match(worker, /["']\/privacy["']/);
+  assert.match(worker, /["']\/refund["']/);
+  assert.match(worker, /["']\/faq["']/);
   assert.match(worker, /env\.ASSETS\.fetch/);
+});
+
+test("legal pages are substantive and commercially consistent", async () => {
+  const [terms, privacy, refund] = await Promise.all([
+    readFile(new URL("client/terms.html", distRoot), "utf8"),
+    readFile(new URL("client/privacy.html", distRoot), "utf8"),
+    readFile(new URL("client/refund.html", distRoot), "utf8")
+  ]);
+
+  assert.match(terms, /Maximum 15 seconds per recording/);
+  assert.match(terms, /href="\/refund\.html"/);
+  assert.match(privacy, /Privacy Policy/);
+  assert.match(refund, /Refund &amp; Cancellation Policy/);
+  assert.match(refund, /7 days/);
 });
 
 // ---- downloads.json --------------------------------------------------------

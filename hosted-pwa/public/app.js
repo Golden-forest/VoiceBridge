@@ -1,5 +1,5 @@
 import { CloudRealtime, getPhoneDeviceId, isDesktopDeviceCandidate } from "./cloudRealtime.js";
-import { createBillingSession } from "./billing.js";
+import { createBillingSession, invokeBillingFunction } from "./billing.js";
 import { recordWavUntilStopped } from "./cloudRecorder.js";
 import { transcribeCloudAudio } from "./cloudTranscribe.js";
 import { commandStore } from "./commandStore.js";
@@ -549,6 +549,52 @@ async function openBillingSession(functionName, button) {
   }
 }
 
+// Resolve the signed-in user's Paddle customer ID for Paddle Retain.
+// Never pass our internal Supabase user ID to pwCustomer.
+async function getPaddleCustomerId() {
+  const supabase = window.VoiceBridgeAuth?.supabase;
+  if (!supabase || !window.VoiceBridgeAuth?.user?.id) return null;
+
+  try {
+    const payload = await invokeBillingFunction({
+      supabase,
+      functionName: "billing-get-client-context"
+    });
+    const customerId = payload.paddleCustomerId;
+    return typeof customerId === "string" && /^ctm_[a-z0-9]{26}$/.test(customerId)
+      ? customerId
+      : null;
+  } catch (error) {
+    console.warn("Unable to load Paddle customer context:", error.message);
+    return null;
+  }
+}
+
+async function initializePaddleForCurrentUser() {
+  const environment = window.__VB_CONFIG?.paddleEnvironment || "production";
+  const token = window.__VB_CONFIG?.paddleClientToken || "";
+
+  if (environment !== "production") {
+    throw new Error(`Paddle must use production in this build, got: ${environment}`);
+  }
+  if (!token.startsWith("live_")) {
+    throw new Error("Paddle client token must use the live_ prefix");
+  }
+
+  const customerId = await getPaddleCustomerId();
+  if (window.Paddle.Initialized) {
+    window.Paddle.Update({ pwCustomer: customerId ? { id: customerId } : {} });
+    return window.Paddle;
+  }
+
+  const options = {
+    token,
+    pwCustomer: customerId ? { id: customerId } : {}
+  };
+  window.Paddle.Initialize(options);
+  return window.Paddle;
+}
+
 // Lazy-load Paddle.js SDK. Environment is decided by config.paddleEnvironment,
 // NOT by hostname sniffing — pages.dev can be a production deployment target.
 let paddlePromise = null;
@@ -556,26 +602,29 @@ function loadPaddleJS() {
   if (paddlePromise) return paddlePromise;
   paddlePromise = new Promise((resolve, reject) => {
     if (window.Paddle) {
-      resolve(window.Paddle);
+      initializePaddleForCurrentUser().then(resolve, reject);
       return;
     }
     const script = document.createElement("script");
     script.src = "https://cdn.paddle.com/paddle/v2/paddle.js";
-    script.onload = () => {
-      const paddleEnv = window.__VB_CONFIG?.paddleEnvironment || "sandbox";
-      if (paddleEnv === "sandbox") {
-        window.Paddle.Environment.set("sandbox");
-      }
-      window.Paddle.Initialize({
-        token: window.__VB_CONFIG?.paddleClientToken || "",
-      });
-      resolve(window.Paddle);
-    };
+    script.onload = () => initializePaddleForCurrentUser().then(resolve, reject);
     script.onerror = () => reject(new Error("Failed to load Paddle.js"));
     document.head.appendChild(script);
   });
   return paddlePromise;
 }
+
+// Paddle composes transaction payment links by appending `_ptxn=txn_...` to
+// the configured default payment page. Load Paddle.js on those direct visits
+// so the SDK can detect the parameter and open the matching checkout.
+(function handlePaddleTransactionPaymentLink() {
+  const transactionId = new URLSearchParams(window.location.search).get("_ptxn");
+  if (!transactionId || !/^txn_[a-z0-9]{26}$/.test(transactionId)) return;
+  loadPaddleJS().catch((error) => {
+    console.error("Unable to open Paddle payment link:", error);
+    showToast(error.message || t('billing.subscriptionRequestFailed'), true);
+  });
+})();
 
 updateBillingControls(Boolean(window.VoiceBridgeAuth?.session));
 

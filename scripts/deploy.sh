@@ -45,6 +45,7 @@ EDGE_FUNCTIONS=(
   "device-pairing:false"
   "billing-create-checkout-session:true"
   "billing-create-portal-session:true"
+  "billing-get-client-context:true"
   "stripe-webhook:false"
   "paddle-webhook:false"
 )
@@ -110,9 +111,21 @@ deploy_frontend() {
   done
   ok "构建产物校验通过"
 
-  # 部署整个 dist 目录（包含 client/ + server/，Cloudflare Pages 需要 Worker 路由）
+  # Live Paddle builds must stay in staging until Paddle verification and
+  # checkout-domain approval are complete. Require an explicit final gate so a
+  # config-only change cannot accidentally start serving real checkout.
+  if grep -Eq 'paddleEnvironment:[[:space:]]*"production"' "${PWA_DIST}/client/config.js"; then
+    grep -Eq 'paddleClientToken:[[:space:]]*"live_' "${PWA_DIST}/client/config.js" \
+      || fail "Paddle production 配置必须使用 live_ 开头的 client-side token"
+    [[ "${PADDLE_LIVE_DEPLOY_APPROVED:-}" == "1" ]] \
+      || fail "Live Paddle 前端部署被安全门阻止。完成 Paddle 账户验证、域名审批和 staging 实付验证后，设置 PADDLE_LIVE_DEPLOY_APPROVED=1 再部署。"
+  fi
+
+  # Cloudflare Pages expects static files at the upload root. It natively maps
+  # app.html to /app (and the legal HTML files likewise), so Pages must receive
+  # dist/client without the separate Sites Worker in dist/server.
   info "部署到 Cloudflare Pages（${CF_PROJECT_NAME}）..."
-  npx wrangler pages deploy "${PWA_DIST}" \
+  npx wrangler pages deploy "${PWA_DIST}/client" \
     --project-name="${CF_PROJECT_NAME}" \
     --branch=main \
     --commit-dirty=true

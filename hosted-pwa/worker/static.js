@@ -4,6 +4,14 @@ const HTML_ROUTES = new Map([
   ["/zh-CN/", "/zh-CN/index.html"],
   ["/app", "/app.html"],
   ["/app/", "/app.html"],
+  ["/terms", "/terms.html"],
+  ["/terms/", "/terms.html"],
+  ["/privacy", "/privacy.html"],
+  ["/privacy/", "/privacy.html"],
+  ["/refund", "/refund.html"],
+  ["/refund/", "/refund.html"],
+  ["/faq", "/faq.html"],
+  ["/faq/", "/faq.html"],
 ]);
 
 export default {

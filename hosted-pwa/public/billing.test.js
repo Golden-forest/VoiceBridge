@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
-import { createBillingSession } from "./billing.js";
+import { createBillingSession, invokeBillingFunction } from "./billing.js";
 
 test("createBillingSession posts to a Supabase Edge Function with auth headers", async () => {
   const calls = [];
@@ -62,6 +62,22 @@ test("createBillingSession throws the function error message", async () => {
     }),
     /Stripe 未配置/
   );
+});
+
+test("invokeBillingFunction accepts a successful payload without a redirect URL", async () => {
+  const supabase = createSupabaseClient({
+    url: "https://project.supabase.co",
+    anonKey: "anon-key",
+    accessToken: "access-token"
+  });
+
+  const payload = await invokeBillingFunction({
+    supabase,
+    functionName: "billing-get-client-context",
+    fetch: async () => jsonResponse(200, { ok: true, paddleCustomerId: null })
+  });
+
+  assert.deepEqual(payload, { ok: true, paddleCustomerId: null });
 });
 
 function createSupabaseClient({ url, anonKey, accessToken }) {
