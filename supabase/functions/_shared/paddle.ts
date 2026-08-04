@@ -49,7 +49,7 @@ export function getBillingEnv(): BillingEnv {
     paddleApiKey: requireEnv("PADDLE_API_KEY"),
     paddleWebhookSecret: requireEnv("PADDLE_WEBHOOK_SECRET"),
     paddlePriceId: requireEnv("PADDLE_PRICE_ID"),
-    paddleHostedCheckoutUrl: requireEnv("PADDLE_HOSTED_CHECKOUT_URL"),
+    paddleHostedCheckoutUrl: optionalEnv("PADDLE_HOSTED_CHECKOUT_URL"),
     paddleDefaultPaymentLink: optionalEnv("PADDLE_DEFAULT_PAYMENT_LINK"),
     paddleSuccessUrl: optionalEnv(
       "PADDLE_SUCCESS_URL",

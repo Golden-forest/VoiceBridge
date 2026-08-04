@@ -6,7 +6,6 @@ import { corsHeaders, jsonResponse } from "../_shared/cors.ts";
 import {
   getBillingEnv,
   createPaddle,
-  buildCheckoutUrl,
   type BillingEnv,
 } from "../_shared/paddle.ts";
 
@@ -72,19 +71,21 @@ async function handlePaddleCheckout({
     { p_user_id: userId, p_provider: "paddle" }
   );
   if (attemptError) throw attemptError;
-  const attempt = attemptData?.[0];
+  // PostgREST may return a single object (OUT params) or an array (RETURNS TABLE)
+  const attempt = Array.isArray(attemptData) ? attemptData[0] : attemptData;
   if (!attempt) {
     return errorResponse("无法创建结账会话，请稍后重试。", 500);
   }
 
-  // 如果已有 open attempt，直接返回已有 URL
+  // 如果已有 open attempt，直接返回已有 transactionId + URL
   if (attempt.status === "open" && attempt.checkout_url) {
-    return jsonResponse({ ok: true, url: attempt.checkout_url });
+    return jsonResponse({
+      ok: true,
+      transactionId: attempt.provider_transaction_id || undefined,
+      url: attempt.checkout_url,
+    });
   }
-  // 如果仍在 creating（被其他并发请求持有），提示稍后重试
-  if (attempt.status === "creating" && !attempt.provider_transaction_id) {
-    return errorResponse("正在创建结账链接，请稍后重试。", 409);
-  }
+  // creating 状态（新创建或 lease 接管）→ 当前请求是拥有者，继续创建 Paddle Transaction
 
   // 当前请求是 attempt 的拥有者，调用 Paddle 创建 Transaction
   const paddle = createPaddle(env.paddleApiKey, env.paddleEnvironment);
@@ -94,6 +95,7 @@ async function handlePaddleCheckout({
       items: [{ priceId: env.paddlePriceId, quantity: 1 }],
       collectionMode: "automatic",
       customData: { user_id: userId },
+      checkout: { url: new URL(env.paddleSuccessUrl).origin },
     });
   } catch (err) {
     // 标记 attempt 失败
@@ -105,18 +107,28 @@ async function handlePaddleCheckout({
     throw err;
   }
 
-  const checkoutUrl = buildCheckoutUrl(env.paddleHostedCheckoutUrl, transaction.id);
+  const checkoutUrl = transaction?.checkout?.url;
+  const transactionId = transaction?.id;
+  if (!checkoutUrl || !transactionId) {
+    await serviceClient.rpc("update_checkout_attempt", {
+      p_id: attempt.id,
+      p_status: "failed",
+      p_last_error: "Paddle transaction did not return checkout URL",
+    });
+    return errorResponse("创建结账链接失败：Paddle 未返回 checkout URL。", 500);
+  }
 
   // 保存 Transaction ID 和 URL，标记为 open
   const { error: updateError } = await serviceClient.rpc("update_checkout_attempt", {
     p_id: attempt.id,
     p_status: "open",
-    p_provider_transaction_id: transaction.id,
+    p_provider_transaction_id: transactionId,
     p_checkout_url: checkoutUrl,
   });
   if (updateError) throw updateError;
 
-  return jsonResponse({ ok: true, url: checkoutUrl });
+  // 返回 transactionId 让前端用 Paddle.js overlay 打开 checkout
+  return jsonResponse({ ok: true, transactionId, url: checkoutUrl });
 }
 
 // ============================================================================
