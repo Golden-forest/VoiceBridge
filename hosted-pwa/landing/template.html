@@ -51,6 +51,9 @@
     <link rel="apple-touch-icon" sizes="180x180" href="/icons/apple-touch-icon.png" />
     <link rel="icon" type="image/png" href="/icons/icon-192.png" />
 
+    <!-- Preload hero image: avoid srcset layout delay, start download immediately -->
+    <link rel="preload" as="image" href="/media/voicebridge-hero-1072.webp" fetchpriority="high" />
+
     <!-- Styles -->
     <link rel="stylesheet" href="/landing.css" />
   </head>
@@ -66,6 +69,7 @@
           <a href="#product">{{ nav.link_product }}</a>
           <a href="#commands">{{ nav.link_commands }}</a>
           <a href="#how">{{ nav.link_how }}</a>
+          <a href="#pricing">{{ nav.link_pricing }}</a>
           <a href="#download">{{ nav.link_download }}</a>
         </nav>
         <div class="landing-nav-actions">
@@ -141,8 +145,6 @@
             <div class="hero-media-frame hero-carousel" id="hero-carousel">
               <img class="hero-carousel-slide is-active"
                    src="/media/voicebridge-hero-1072.webp"
-                   srcset="/media/voicebridge-hero-720.webp 720w, /media/voicebridge-hero-1072.webp 1072w"
-                   sizes="(min-width: 1080px) 560px, calc(100vw - 48px)"
                    alt="{{ hero.slide1_alt }}"
                    fetchpriority="high"
                    decoding="async" />
@@ -151,18 +153,21 @@
                    srcset="/media/voicebridge-every-screen-800.webp 800w, /media/voicebridge-every-screen-1280.webp 1280w"
                    sizes="(min-width: 1080px) 560px, calc(100vw - 48px)"
                    alt="{{ hero.slide2_alt }}"
+                   loading="lazy"
                    decoding="async" />
               <img class="hero-carousel-slide"
                    src="/media/voicebridge-ideas-1440.webp"
                    srcset="/media/voicebridge-ideas-800.webp 800w, /media/voicebridge-ideas-1440.webp 1440w"
                    sizes="(min-width: 1080px) 560px, calc(100vw - 48px)"
                    alt="{{ hero.slide3_alt }}"
+                   loading="lazy"
                    decoding="async" />
               <img class="hero-carousel-slide"
                    src="/media/voicebridge-developer-1440.webp"
                    srcset="/media/voicebridge-developer-800.webp 800w, /media/voicebridge-developer-1440.webp 1440w"
                    sizes="(min-width: 1080px) 560px, calc(100vw - 48px)"
                    alt="{{ hero.slide4_alt }}"
+                   loading="lazy"
                    decoding="async" />
               <div class="hero-carousel-dots" role="tablist" aria-label="Hero slides">
                 <button class="hero-carousel-dot is-active" type="button" role="tab" aria-label="Slide 1" data-slide="0"></button>
@@ -356,7 +361,45 @@
         </div>
       </section>
 
-      <!-- SECTION 7: 下载 -->
+      <!-- SECTION 7: PRICING -->
+      <section class="section section-pricing" id="pricing" data-section="pricing">
+        <div class="section-inner">
+          <h2 class="section-h2">{{ pricing.title }}</h2>
+          <p class="section-lead">{{ pricing.lead }}</p>
+
+          <div class="pricing-grid">
+            <!-- Free -->
+            <article class="pricing-card">
+              <h3 class="pricing-card-name">{{ pricing.free_name }}</h3>
+              <p class="pricing-card-price">{{ pricing.free_price }}<span class="pricing-card-period">{{ pricing.free_period }}</span></p>
+              <ul class="pricing-card-features">
+                <li>{{ pricing.free_feat1 }}</li>
+                <li>{{ pricing.free_feat2 }}</li>
+                <li>{{ pricing.free_feat3 }}</li>
+              </ul>
+              <a class="pricing-card-cta" href="/app" data-event="landing_pricing_free" data-section="pricing">{{ pricing.free_cta }}</a>
+            </article>
+
+            <!-- Pro -->
+            <article class="pricing-card pricing-card-featured">
+              <span class="pricing-card-badge">{{ pricing.pro_badge }}</span>
+              <h3 class="pricing-card-name">{{ pricing.pro_name }}</h3>
+              <p class="pricing-card-price">{{ pricing.pro_price }}<span class="pricing-card-period">{{ pricing.pro_period }}</span></p>
+              <ul class="pricing-card-features">
+                <li>{{ pricing.pro_feat1 }}</li>
+                <li>{{ pricing.pro_feat2 }}</li>
+                <li>{{ pricing.pro_feat3 }}</li>
+                <li>{{ pricing.pro_feat4 }}</li>
+              </ul>
+              <a class="pricing-card-cta pricing-card-cta-primary" href="/app" data-event="landing_pricing_pro" data-section="pricing">{{ pricing.pro_cta }}</a>
+            </article>
+          </div>
+
+          <p class="pricing-footnote">{{ pricing.footnote }}</p>
+        </div>
+      </section>
+
+      <!-- SECTION 8: 下载 -->
       <section class="section section-download" id="download" data-section="download">
         <div class="section-inner">
           <h2 class="section-h2">{{ download.title }}</h2>
@@ -388,6 +431,7 @@
             <li><a href="/app">{{ footer.col_product_open }}</a></li>
             <li><a href="#download">{{ footer.col_product_download }}</a></li>
             <li><a href="#commands">{{ footer.col_product_commands }}</a></li>
+            <li><a href="#pricing">{{ footer.col_product_pricing }}</a></li>
           </ul>
         </div>
         <div class="footer-col">

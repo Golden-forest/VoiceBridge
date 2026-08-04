@@ -51,6 +51,9 @@
     <link rel="apple-touch-icon" sizes="180x180" href="/icons/apple-touch-icon.png" />
     <link rel="icon" type="image/png" href="/icons/icon-192.png" />
 
+    <!-- Preload hero image: avoid srcset layout delay, start download immediately -->
+    <link rel="preload" as="image" href="/media/voicebridge-hero-1072.webp" fetchpriority="high" />
+
     <!-- Styles -->
     <link rel="stylesheet" href="/landing.css" />
   </head>
@@ -66,6 +69,7 @@
           <a href="#product">Product</a>
           <a href="#commands">Commands</a>
           <a href="#how">How it works</a>
+          <a href="#pricing">Pricing</a>
           <a href="#download">Download</a>
         </nav>
         <div class="landing-nav-actions">
@@ -141,8 +145,6 @@
             <div class="hero-media-frame hero-carousel" id="hero-carousel">
               <img class="hero-carousel-slide is-active"
                    src="/media/voicebridge-hero-1072.webp"
-                   srcset="/media/voicebridge-hero-720.webp 720w, /media/voicebridge-hero-1072.webp 1072w"
-                   sizes="(min-width: 1080px) 560px, calc(100vw - 48px)"
                    alt="VoiceBridge on a phone beside a laptop, with an orange voice stream flowing toward the active cursor."
                    fetchpriority="high"
                    decoding="async" />
@@ -151,18 +153,21 @@
                    srcset="/media/voicebridge-every-screen-800.webp 800w, /media/voicebridge-every-screen-1280.webp 1280w"
                    sizes="(min-width: 1080px) 560px, calc(100vw - 48px)"
                    alt="A phone sending voice input to active cursors across a browser, code editor, and document on multiple computers."
+                   loading="lazy"
                    decoding="async" />
               <img class="hero-carousel-slide"
                    src="/media/voicebridge-ideas-1440.webp"
                    srcset="/media/voicebridge-ideas-800.webp 800w, /media/voicebridge-ideas-1440.webp 1440w"
                    sizes="(min-width: 1080px) 560px, calc(100vw - 48px)"
                    alt="Before and after scene showing VoiceBridge freeing a user from typing at the keyboard."
+                   loading="lazy"
                    decoding="async" />
               <img class="hero-carousel-slide"
                    src="/media/voicebridge-developer-1440.webp"
                    srcset="/media/voicebridge-developer-800.webp 800w, /media/voicebridge-developer-1440.webp 1440w"
                    sizes="(min-width: 1080px) 560px, calc(100vw - 48px)"
                    alt="A developer dictates a rate limit change from a phone while VoiceBridge sends the text to the active cursor in a code editor."
+                   loading="lazy"
                    decoding="async" />
               <div class="hero-carousel-dots" role="tablist" aria-label="Hero slides">
                 <button class="hero-carousel-dot is-active" type="button" role="tab" aria-label="Slide 1" data-slide="0"></button>
@@ -356,7 +361,45 @@
         </div>
       </section>
 
-      <!-- SECTION 7: 下载 -->
+      <!-- SECTION 7: PRICING -->
+      <section class="section section-pricing" id="pricing" data-section="pricing">
+        <div class="section-inner">
+          <h2 class="section-h2">Simple, usage-based pricing</h2>
+          <p class="section-lead">Start free. Upgrade when you need more.</p>
+
+          <div class="pricing-grid">
+            <!-- Free -->
+            <article class="pricing-card">
+              <h3 class="pricing-card-name">Free</h3>
+              <p class="pricing-card-price">$0<span class="pricing-card-period">/month</span></p>
+              <ul class="pricing-card-features">
+                <li>10 minutes/month of cloud transcription</li>
+                <li>Up to 15 seconds per recording</li>
+                <li>All devices and commands included</li>
+              </ul>
+              <a class="pricing-card-cta" href="/app" data-event="landing_pricing_free" data-section="pricing">Get started</a>
+            </article>
+
+            <!-- Pro -->
+            <article class="pricing-card pricing-card-featured">
+              <span class="pricing-card-badge">Most popular</span>
+              <h3 class="pricing-card-name">Pro</h3>
+              <p class="pricing-card-price">$9<span class="pricing-card-period">/month</span></p>
+              <ul class="pricing-card-features">
+                <li>5 hours/month of cloud transcription</li>
+                <li>Up to 60 seconds per recording</li>
+                <li>30 requests/minute rate limit</li>
+                <li>Priority email support</li>
+              </ul>
+              <a class="pricing-card-cta pricing-card-cta-primary" href="/app" data-event="landing_pricing_pro" data-section="pricing">Upgrade to Pro</a>
+            </article>
+          </div>
+
+          <p class="pricing-footnote">Prices in USD. Cancel anytime.</p>
+        </div>
+      </section>
+
+      <!-- SECTION 8: 下载 -->
       <section class="section section-download" id="download" data-section="download">
         <div class="section-inner">
           <h2 class="section-h2">Bring VoiceBridge to your computer</h2>
@@ -388,6 +431,7 @@
             <li><a href="/app">Open app</a></li>
             <li><a href="#download">Download</a></li>
             <li><a href="#commands">Commands</a></li>
+            <li><a href="#pricing">Pricing</a></li>
           </ul>
         </div>
         <div class="footer-col">

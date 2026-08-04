@@ -51,6 +51,9 @@
     <link rel="apple-touch-icon" sizes="180x180" href="/icons/apple-touch-icon.png" />
     <link rel="icon" type="image/png" href="/icons/icon-192.png" />
 
+    <!-- Preload hero image: avoid srcset layout delay, start download immediately -->
+    <link rel="preload" as="image" href="/media/voicebridge-hero-1072.webp" fetchpriority="high" />
+
     <!-- Styles -->
     <link rel="stylesheet" href="/landing.css" />
   </head>
@@ -66,6 +69,7 @@
           <a href="#product">产品</a>
           <a href="#commands">指令</a>
           <a href="#how">工作原理</a>
+          <a href="#pricing">价格</a>
           <a href="#download">下载</a>
         </nav>
         <div class="landing-nav-actions">
@@ -141,8 +145,6 @@
             <div class="hero-media-frame hero-carousel" id="hero-carousel">
               <img class="hero-carousel-slide is-active"
                    src="/media/voicebridge-hero-1072.webp"
-                   srcset="/media/voicebridge-hero-720.webp 720w, /media/voicebridge-hero-1072.webp 1072w"
-                   sizes="(min-width: 1080px) 560px, calc(100vw - 48px)"
                    alt="手机上的 VoiceBridge 与笔记本电脑并排，橙色语音流正向当前光标传递。"
                    fetchpriority="high"
                    decoding="async" />
@@ -151,18 +153,21 @@
                    srcset="/media/voicebridge-every-screen-800.webp 800w, /media/voicebridge-every-screen-1280.webp 1280w"
                    sizes="(min-width: 1080px) 560px, calc(100vw - 48px)"
                    alt="一台手机正在把语音输入发送到多台电脑上的浏览器、代码编辑器和文档光标。"
+                   loading="lazy"
                    decoding="async" />
               <img class="hero-carousel-slide"
                    src="/media/voicebridge-ideas-1440.webp"
                    srcset="/media/voicebridge-ideas-800.webp 800w, /media/voicebridge-ideas-1440.webp 1440w"
                    sizes="(min-width: 1080px) 560px, calc(100vw - 48px)"
                    alt="使用 VoiceBridge 前后的对比场景，用户从埋头敲键盘变为靠在椅背上用手机说话。"
+                   loading="lazy"
                    decoding="async" />
               <img class="hero-carousel-slide"
                    src="/media/voicebridge-developer-1440.webp"
                    srcset="/media/voicebridge-developer-800.webp 800w, /media/voicebridge-developer-1440.webp 1440w"
                    sizes="(min-width: 1080px) 560px, calc(100vw - 48px)"
                    alt="开发者对着手机描述限流修改，VoiceBridge 把文字发送到代码编辑器的当前光标。"
+                   loading="lazy"
                    decoding="async" />
               <div class="hero-carousel-dots" role="tablist" aria-label="Hero slides">
                 <button class="hero-carousel-dot is-active" type="button" role="tab" aria-label="Slide 1" data-slide="0"></button>
@@ -356,7 +361,45 @@
         </div>
       </section>
 
-      <!-- SECTION 7: 下载 -->
+      <!-- SECTION 7: PRICING -->
+      <section class="section section-pricing" id="pricing" data-section="pricing">
+        <div class="section-inner">
+          <h2 class="section-h2">简单，按需付费</h2>
+          <p class="section-lead">免费开始，需要更多时再升级。</p>
+
+          <div class="pricing-grid">
+            <!-- Free -->
+            <article class="pricing-card">
+              <h3 class="pricing-card-name">免费版</h3>
+              <p class="pricing-card-price">¥0<span class="pricing-card-period">/月</span></p>
+              <ul class="pricing-card-features">
+                <li>每月 10 分钟云端转写</li>
+                <li>单次录音最长 15 秒</li>
+                <li>包含全部设备和指令功能</li>
+              </ul>
+              <a class="pricing-card-cta" href="/app" data-event="landing_pricing_free" data-section="pricing">开始使用</a>
+            </article>
+
+            <!-- Pro -->
+            <article class="pricing-card pricing-card-featured">
+              <span class="pricing-card-badge">最受欢迎</span>
+              <h3 class="pricing-card-name">专业版</h3>
+              <p class="pricing-card-price">¥39<span class="pricing-card-period">/月</span></p>
+              <ul class="pricing-card-features">
+                <li>每月 5 小时云端转写</li>
+                <li>单次录音最长 60 秒</li>
+                <li>每分钟 30 次请求</li>
+                <li>邮件优先支持</li>
+              </ul>
+              <a class="pricing-card-cta pricing-card-cta-primary" href="/app" data-event="landing_pricing_pro" data-section="pricing">升级专业版</a>
+            </article>
+          </div>
+
+          <p class="pricing-footnote">价格以人民币结算，可随时取消。</p>
+        </div>
+      </section>
+
+      <!-- SECTION 8: 下载 -->
       <section class="section section-download" id="download" data-section="download">
         <div class="section-inner">
           <h2 class="section-h2">把 VoiceBridge 装进你的电脑</h2>
@@ -388,6 +431,7 @@
             <li><a href="/app">打开网页版</a></li>
             <li><a href="#download">下载</a></li>
             <li><a href="#commands">指令</a></li>
+            <li><a href="#pricing">价格</a></li>
           </ul>
         </div>
         <div class="footer-col">
