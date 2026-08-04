@@ -11,6 +11,7 @@ import {
   mapPaddleStatus,
   validatePaddlePrice,
   resolveUserId,
+  isPaddleWebhookSource,
   type BillingEnv,
 } from "../_shared/paddle.ts";
 
@@ -31,6 +32,20 @@ Deno.serve(async (req) => {
     const env = getBillingEnv();
     serviceClient = createClient(env.supabaseUrl, env.supabaseServiceRoleKey);
     const paddle = createPaddle(env.paddleApiKey, env.paddleEnvironment);
+
+    // 0. IP allowlist —— 在签名验证之前做，拒绝任何非 Paddle 官方出口 IP 的请求。
+    //    IP 列表动态从 api.paddle.com/ips 拉取，带 15 分钟 TTL 缓存。
+    //    如果拉取失败（Paddle API 故障），降级为只靠签名验证，不阻断正常业务。
+    try {
+      const isPaddle = await isPaddleWebhookSource(env.paddleEnvironment, req);
+      if (!isPaddle) {
+        console.warn("Paddle webhook: source IP not in allowlist");
+        return jsonResponse({ ok: false, message: "Forbidden" }, 403);
+      }
+    } catch (ipError) {
+      // Paddle /ips 端点不可用时不阻断（signature verification 仍是主要防线）
+      console.warn("Paddle webhook: IP allowlist check skipped:", ipError?.message);
+    }
 
     // 1. 读取原始请求体（验签必须在 JSON 解析前）
     const rawBody = await req.text();
