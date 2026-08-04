@@ -26,3 +26,10 @@ hosted-pwa/.vinext/
 hosted-pwa/.next/
 hosted-pwa/outputs/
 hosted-pwa/work/
+
+# Temp/debug artifacts
+supabase/.temp/
+*.bak.webp
+preview-*.png
+paddle-overlay-*.png
+paddle-checkout-*.png

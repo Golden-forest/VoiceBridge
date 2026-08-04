@@ -1,0 +1,40 @@
+{
+  "version": "5",
+  "redirects": {
+    "https://esm.sh/@supabase/phoenix@^0.4.2?target=denonext": "https://esm.sh/@supabase/phoenix@0.4.5?target=denonext",
+    "https://esm.sh/@supabase/supabase-js@2": "https://esm.sh/@supabase/supabase-js@2.106.2",
+    "https://esm.sh/iceberg-js@^0.8.1?target=denonext": "https://esm.sh/iceberg-js@0.8.1?target=denonext"
+  },
+  "remote": {
+    "https://esm.sh/@supabase/auth-js@2.106.2/denonext/auth-js.mjs": "dc247e041938bfe9c60311e3bebcc6a44dd20d78a9df06a220288ea789f8f16f",
+    "https://esm.sh/@supabase/functions-js@2.106.2/denonext/functions-js.mjs": "173872b062968b3401529b3a19feb146af8d07054c1fdca6203fade015bc573d",
+    "https://esm.sh/@supabase/phoenix@0.4.5/denonext/phoenix.mjs": "40bd2a70829cd847848baac58e635bacd83fd62188f6624b44e2c295341004eb",
+    "https://esm.sh/@supabase/phoenix@0.4.5?target=denonext": "28b2760cf24e1117ed0644a665bfab1c60d132872fa95bcae4cc3fecc7499ee2",
+    "https://esm.sh/@supabase/postgrest-js@2.106.2/denonext/postgrest-js.mjs": "a6fe1697f4d14ad41de2670cc8994db57d0954425b5df499e05763d08201d0f6",
+    "https://esm.sh/@supabase/realtime-js@2.106.2/denonext/realtime-js.mjs": "164f4b19152835049e3de1c58c7128b952c7f3c8098f31a1be02763317b164bb",
+    "https://esm.sh/@supabase/storage-js@2.106.2/denonext/storage-js.mjs": "402b0c204731d24fba10c1c91afec1153666e783767c3c7c6fc1dac409c43eeb",
+    "https://esm.sh/@supabase/supabase-js@2.106.2": "239a7bd494d2521e29f1b25f00b2dfb595a6b8eb4694543db239073eaecf8d32",
+    "https://esm.sh/@supabase/supabase-js@2.106.2/denonext/supabase-js.mjs": "5643043a27dc30648d96b3f9f9d9221dd4b12f9a646a58fc593d104b48d3f9da",
+    "https://esm.sh/iceberg-js@0.8.1/denonext/iceberg-js.mjs": "d839d81a2e3966500ca2cdd0c1cb458e9608bacfc91f7bb67a69b2e878dcdb4f",
+    "https://esm.sh/iceberg-js@0.8.1?target=denonext": "58c849d7fe2bf4eca4a84eb501e83c161a7d8c34ca1bec15a962b3bec3062633",
+    "https://esm.sh/tslib@2.8.1/denonext/tslib.mjs": "c38da5dd6da6281964435002ce204cd586634fe3bdfb24a0ee116f48cf3292e9"
+  },
+  "workspace": {
+    "packageJson": {
+      "dependencies": [
+        "npm:@electron-forge/cli@^7.11.2",
+        "npm:@electron-forge/maker-zip@^7.11.2",
+        "npm:@supabase/supabase-js@^2.110.8",
+        "npm:clipboardy@4",
+        "npm:dotenv@^16.4.7",
+        "npm:electron@^42.3.0",
+        "npm:express@^4.21.2",
+        "npm:multer@^2.0.2",
+        "npm:qrcode-terminal@0.12",
+        "npm:qrcode@^1.5.4",
+        "npm:stripe@^22.2.0",
+        "npm:ws@^8.18.0"
+      ]
+    }
+  }
+}
