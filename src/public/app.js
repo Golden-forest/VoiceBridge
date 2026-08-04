@@ -549,7 +549,8 @@ async function openBillingSession(functionName, button) {
   }
 }
 
-// Lazy-load Paddle.js SDK (sandbox or production based on hostname)
+// Lazy-load Paddle.js SDK. Environment is decided by config.paddleEnvironment,
+// NOT by hostname sniffing — pages.dev can be a production deployment target.
 let paddlePromise = null;
 function loadPaddleJS() {
   if (paddlePromise) return paddlePromise;
@@ -561,10 +562,8 @@ function loadPaddleJS() {
     const script = document.createElement("script");
     script.src = "https://cdn.paddle.com/paddle/v2/paddle.js";
     script.onload = () => {
-      const isSandbox = location.hostname.includes("pages.dev") ||
-                        location.hostname === "localhost" ||
-                        location.hostname === "127.0.0.1";
-      if (isSandbox) {
+      const paddleEnv = window.__VB_CONFIG?.paddleEnvironment || "sandbox";
+      if (paddleEnv === "sandbox") {
         window.Paddle.Environment.set("sandbox");
       }
       window.Paddle.Initialize({

@@ -30,6 +30,87 @@ function optionalEnv(name: string, fallback = ""): string {
 }
 
 /**
+ * 读取 Paddle 环境（sandbox / production）并校验枚举值。
+ * 不做 requireEnv 校验，可被非关键路径（如 account-delete）安全调用：
+ * 即使 PADDLE_API_KEY 未配置也不会抛错。
+ */
+export function getPaddleEnvironment(): PaddleEnvironment {
+  const env = optionalEnv("PADDLE_ENVIRONMENT", "sandbox") as PaddleEnvironment;
+  if (env !== "sandbox" && env !== "production") {
+    throw new Error(`PADDLE_ENVIRONMENT must be 'sandbox' or 'production', got: ${env}`);
+  }
+  return env;
+}
+
+/**
+ * Paddle API base URL，按环境路由。
+ */
+export function paddleApiBaseUrl(environment: PaddleEnvironment): string {
+  return environment === "production"
+    ? "https://api.paddle.com"
+    : "https://sandbox-api.paddle.com";
+}
+
+// ---------------------------------------------------------------------------
+// Paddle webhook IP allowlist
+// ---------------------------------------------------------------------------
+// 官方安全建议：动态拉取 https://api.paddle.com/ips 并 allowlist 这些来源，
+// 拒绝其它任何 IP 的 webhook 投递。列表会变化，不能硬编码。
+// 参考文档：https://developer.paddle.com/webhooks/5279353-1-validate-events-and-secure-your-webhook-endpoint
+
+const PADDLE_IP_CACHE_TTL_MS = 15 * 60 * 1000; // 15 分钟
+let cachedPaddleIps: string[] | null = null;
+let cachedPaddleIpsExpiresAt = 0;
+
+/**
+ * 拉取当前环境的 Paddle webhook 出口 IP 列表（CIDR /32 形式）。
+ * 带 TTL 缓存避免每次 webhook 请求都打 Paddle API。
+ */
+export async function fetchPaddleWebhookIps(
+  environment: PaddleEnvironment,
+): Promise<string[]> {
+  const now = Date.now();
+  if (cachedPaddleIps && now < cachedPaddleIpsExpiresAt) {
+    return cachedPaddleIps;
+  }
+
+  const baseUrl = paddleApiBaseUrl(environment);
+  const resp = await fetch(`${baseUrl}/ips`);
+  if (!resp.ok) {
+    throw new Error(`Failed to fetch Paddle IPs: ${resp.status} ${await resp.text()}`);
+  }
+  const body = await resp.json();
+  const ips: string[] = (body?.data?.ipv4_cidrs ?? []).map((c: string) => c.split("/")[0]);
+
+  if (ips.length === 0) {
+    throw new Error("Paddle IP list is empty");
+  }
+
+  cachedPaddleIps = ips;
+  cachedPaddleIpsExpiresAt = now + PADDLE_IP_CACHE_TTL_MS;
+  return ips;
+}
+
+/**
+ * 判断请求来源 IP 是否在 Paddle 的 allowlist 内。
+ * Supabase Edge Functions 的真实客户端 IP 由平台注入（CF-Connecting-IP / X-Forwarded-For）。
+ */
+export async function isPaddleWebhookSource(
+  environment: PaddleEnvironment,
+  req: Request,
+): Promise<boolean> {
+  // Supabase 使用 Cloudflare，真实 IP 优先从 CF-Connecting-IP 取
+  const directIp =
+    req.headers.get("CF-Connecting-IP") ||
+    (req.headers.get("X-Forwarded-For") || "").split(",")[0].trim();
+
+  if (!directIp) return false;
+
+  const allowlist = await fetchPaddleWebhookIps(environment);
+  return allowlist.includes(directIp);
+}
+
+/**
  * 读取 billing 配置并在启动时 fail fast 校验。
  */
 export function getBillingEnv(): BillingEnv {
@@ -38,10 +119,8 @@ export function getBillingEnv(): BillingEnv {
     throw new Error(`BILLING_PROVIDER must be 'stripe' or 'paddle', got: ${billingProvider}`);
   }
 
-  const paddleEnvironment = optionalEnv("PADDLE_ENVIRONMENT", "sandbox") as PaddleEnvironment;
-  if (paddleEnvironment !== "sandbox" && paddleEnvironment !== "production") {
-    throw new Error(`PADDLE_ENVIRONMENT must be 'sandbox' or 'production', got: ${paddleEnvironment}`);
-  }
+  // 复用单一真相源，避免环境判断散落多处。
+  const paddleEnvironment = getPaddleEnvironment();
 
   return {
     billingProvider,
@@ -51,10 +130,7 @@ export function getBillingEnv(): BillingEnv {
     paddlePriceId: requireEnv("PADDLE_PRICE_ID"),
     paddleHostedCheckoutUrl: optionalEnv("PADDLE_HOSTED_CHECKOUT_URL"),
     paddleDefaultPaymentLink: optionalEnv("PADDLE_DEFAULT_PAYMENT_LINK"),
-    paddleSuccessUrl: optionalEnv(
-      "PADDLE_SUCCESS_URL",
-      "https://voicebridge-6kr.pages.dev/?billing=success"
-    ),
+    paddleSuccessUrl: requireEnv("PADDLE_SUCCESS_URL"),
     supabaseUrl: requireEnv("SUPABASE_URL"),
     supabaseServiceRoleKey: requireEnv("SUPABASE_SERVICE_ROLE_KEY"),
   };

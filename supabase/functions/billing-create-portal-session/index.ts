@@ -133,8 +133,8 @@ async function handleStripePortal({
   const stripeSecretKey = Deno.env.get("STRIPE_SECRET_KEY");
   if (!stripeSecretKey) throw new Error("STRIPE_SECRET_KEY 未配置");
   const returnUrl = Deno.env.get("STRIPE_PORTAL_RETURN_URL")
-    || Deno.env.get("STRIPE_SUCCESS_URL")
-    || "https://voicebridge-6kr.pages.dev/";
+    || Deno.env.get("STRIPE_SUCCESS_URL");
+  if (!returnUrl) throw new Error("STRIPE_PORTAL_RETURN_URL 或 STRIPE_SUCCESS_URL 未配置");
 
   const stripe = createStripe(stripeSecretKey);
   const session = await stripe.billingPortal.sessions.create({

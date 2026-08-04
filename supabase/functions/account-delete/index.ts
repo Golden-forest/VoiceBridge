@@ -1,6 +1,7 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 import { corsHeaders, jsonResponse } from "../_shared/cors.ts";
+import { getPaddleEnvironment, paddleApiBaseUrl } from "../_shared/paddle.ts";
 
 type SupabaseClientLike = ReturnType<typeof createClient<any, "public", any>>;
 
@@ -95,10 +96,7 @@ async function cancelExternalSubscriptions(
     if (provider === "paddle") {
       const paddleApiKey = Deno.env.get("PADDLE_API_KEY");
       if (!paddleApiKey) return;
-      const paddleEnvironment = Deno.env.get("PADDLE_ENVIRONMENT") || "sandbox";
-      const baseUrl = paddleEnvironment === "production"
-        ? "https://api.paddle.com"
-        : "https://sandbox-api.paddle.com";
+      const baseUrl = paddleApiBaseUrl(getPaddleEnvironment());
       await fetch(`${baseUrl}/subscriptions/${subscriptionId}`, {
         method: "POST",
         headers: {
