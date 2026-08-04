@@ -20,9 +20,10 @@
 /* === Design Tokens === */
 :root {
   /* Fonts: SF Pro Rounded first (Apple system rounded), Nunito fallback (non-Apple),
-     then system fallbacks. */
-  --font-sans: "SF Pro Rounded", "Nunito", -apple-system, BlinkMacSystemFont,
-               "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
+     then system fallbacks. CJK 圆润回退与 landing.css 保持一致。 */
+  --font-sans: "SF Pro Rounded", "Nunito", "MiSans", "PingFang SC",
+               "Microsoft YaHei UI", "Noto Sans SC", -apple-system,
+               BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
   --font-mono: "JetBrains Mono", "SF Mono", Menlo, Consolas, monospace;
   --bg-page: #fffbf5;
   --bg-card: #ffffff;

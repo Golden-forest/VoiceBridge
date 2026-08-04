@@ -213,7 +213,9 @@ async function sendTextToDesktop(text, { localSuccessMessage = t('status.sentToD
       const sendPromise = cloudRealtime.sendText({
         targetDeviceId: selectedCloudDeviceId,
         text,
-        autoPaste: autoPasteEl.checked,
+        // 手动点"发送"按钮的意图是把文本输入到光标处，不是只入剪贴板。
+        // 所以无论 autoPaste 开关状态如何，都强制为 true。
+        autoPaste: true,
         targetWindowId: windowSelector.targetWindow?.windowId
       });
       showToast(t('status.sending'));
@@ -527,11 +529,53 @@ async function openBillingSession(functionName, button) {
       supabase: window.VoiceBridgeAuth?.supabase,
       functionName
     });
-    location.href = payload.url;
+    // If backend returned a transactionId, use Paddle.js overlay checkout
+    if (payload.transactionId) {
+      const paddle = await loadPaddleJS();
+      paddle.Checkout.open({
+        transactionId: payload.transactionId,
+        settings: {
+          successUrl: window.location.origin + "/app?billing=success",
+          theme: "light",
+        },
+      });
+      button.disabled = false;
+    } else {
+      location.href = payload.url;
+    }
   } catch (error) {
     showToast(error.message || t('billing.subscriptionRequestFailed'), true);
     button.disabled = false;
   }
+}
+
+// Lazy-load Paddle.js SDK (sandbox or production based on hostname)
+let paddlePromise = null;
+function loadPaddleJS() {
+  if (paddlePromise) return paddlePromise;
+  paddlePromise = new Promise((resolve, reject) => {
+    if (window.Paddle) {
+      resolve(window.Paddle);
+      return;
+    }
+    const script = document.createElement("script");
+    script.src = "https://cdn.paddle.com/paddle/v2/paddle.js";
+    script.onload = () => {
+      const isSandbox = location.hostname.includes("pages.dev") ||
+                        location.hostname === "localhost" ||
+                        location.hostname === "127.0.0.1";
+      if (isSandbox) {
+        window.Paddle.Environment.set("sandbox");
+      }
+      window.Paddle.Initialize({
+        token: window.__VB_CONFIG?.paddleClientToken || "",
+      });
+      resolve(window.Paddle);
+    };
+    script.onerror = () => reject(new Error("Failed to load Paddle.js"));
+    document.head.appendChild(script);
+  });
+  return paddlePromise;
 }
 
 updateBillingControls(Boolean(window.VoiceBridgeAuth?.session));
@@ -2264,7 +2308,140 @@ class AccountDrawer {
     });
     section.appendChild(logoutBtn);
 
+    // 删除账号按钮
+    const deleteBtn = document.createElement("button");
+    deleteBtn.className = "account-action-btn danger";
+    deleteBtn.type = "button";
+    deleteBtn.textContent = t('account.deleteAccount');
+    deleteBtn.style.marginTop = "4px";
+    deleteBtn.style.borderColor = "#dc2626";
+    deleteBtn.style.color = "#dc2626";
+    deleteBtn.addEventListener("click", () => {
+      this._openDeleteAccountDialog(deleteBtn);
+    });
+    section.appendChild(deleteBtn);
+
     return section;
+  }
+
+  /**
+   * 删除账号对话框：输入"删除"二次确认 → 调用 account-delete Edge Function
+   */
+  _openDeleteAccountDialog(triggerBtn) {
+    const confirmWord = getCurrentLocale() === 'zh-CN' ? '删除' : 'DELETE';
+
+    // overlay
+    const overlay = document.createElement("div");
+    overlay.className = "modal-overlay";
+    overlay.style.cssText = "position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:9999;display:flex;align-items:center;justify-content:center;padding:24px;";
+
+    const dialog = document.createElement("div");
+    dialog.style.cssText = "background:var(--bg-card,#fff);border-radius:16px;max-width:400px;width:100%;padding:28px 24px;box-shadow:0 20px 60px rgba(0,0,0,.3);";
+
+    const title = document.createElement("p");
+    title.style.cssText = "font-size:18px;font-weight:800;margin:0 0 12px;color:#dc2626;";
+    title.textContent = t('account.deleteAccount');
+    dialog.appendChild(title);
+
+    const hint = document.createElement("p");
+    hint.style.cssText = "font-size:13px;color:var(--text-secondary,#666);margin:0 0 16px;line-height:1.6;";
+    hint.textContent = t('account.deleteAccountHint');
+    dialog.appendChild(hint);
+
+    const confirmLabel = document.createElement("p");
+    confirmLabel.style.cssText = "font-size:13px;color:var(--text,#1c1917);margin:0 0 6px;";
+    confirmLabel.textContent = t('account.deleteAccountTypeConfirm');
+    dialog.appendChild(confirmLabel);
+
+    const input = document.createElement("input");
+    input.type = "text";
+    input.placeholder = confirmWord;
+    input.style.cssText = "width:100%;padding:10px 14px;border:1.5px solid var(--border,#ddd);border-radius:10px;font-size:15px;margin-bottom:16px;box-sizing:border-box;";
+    dialog.appendChild(input);
+
+    const actions = document.createElement("div");
+    actions.style.cssText = "display:flex;gap:10px;";
+
+    const cancelBtn = document.createElement("button");
+    cancelBtn.type = "button";
+    cancelBtn.textContent = getCurrentLocale() === 'zh-CN' ? '取消' : 'Cancel';
+    cancelBtn.style.cssText = "flex:1;padding:10px;border:1.5px solid var(--border,#ddd);border-radius:999px;background:transparent;font-size:14px;font-weight:600;cursor:pointer;";
+    cancelBtn.addEventListener("click", () => overlay.remove());
+
+    const confirmBtn = document.createElement("button");
+    confirmBtn.type = "button";
+    confirmBtn.textContent = t('account.deleteAccount');
+    confirmBtn.style.cssText = "flex:1;padding:10px;border:none;border-radius:999px;background:#dc2626;color:#fff;font-size:14px;font-weight:700;cursor:pointer;";
+    confirmBtn.disabled = true;
+    confirmBtn.style.opacity = "0.4";
+
+    input.addEventListener("input", () => {
+      const matched = input.value.trim() === confirmWord;
+      confirmBtn.disabled = !matched;
+      confirmBtn.style.opacity = matched ? "1" : "0.4";
+    });
+    input.addEventListener("keydown", (e) => {
+      if (e.key === "Enter" && !confirmBtn.disabled) confirmBtn.click();
+      if (e.key === "Escape") overlay.remove();
+    });
+
+    confirmBtn.addEventListener("click", async () => {
+      confirmBtn.disabled = true;
+      confirmBtn.textContent = t('account.deleteAccountProgress');
+      cancelBtn.disabled = true;
+
+      const supabase = window.VoiceBridgeAuth?.supabase;
+      if (!supabase) {
+        overlay.remove();
+        return;
+      }
+      try {
+        const { data: session } = await supabase.auth.getSession();
+        const resp = await fetch(
+          `${window.__VB_CONFIG.supabaseUrl}/functions/v1/account-delete`,
+          {
+            method: "POST",
+            headers: {
+              "Authorization": `Bearer ${session.session?.access_token || ""}`,
+              "Content-Type": "application/json"
+            }
+          }
+        );
+        const body = await resp.json();
+        if (!resp.ok || !body.ok) {
+          const msg = body?.code === "admin_protected"
+            ? t('account.deleteAccountAdminProtected')
+            : body?.message || t('account.deleteAccountFailed');
+          showToast(msg, true);
+          overlay.remove();
+          triggerBtn.disabled = false;
+          return;
+        }
+        overlay.remove();
+        this.close();
+        showToast(t('account.deleteAccountSuccess'));
+        // 登出并刷新
+        await window.VoiceBridgeAuth?.signOut();
+        setTimeout(() => location.reload(), 800);
+      } catch (error) {
+        showToast(error?.message || t('account.deleteAccountFailed'), true);
+        overlay.remove();
+        triggerBtn.disabled = false;
+      }
+    });
+
+    actions.appendChild(cancelBtn);
+    actions.appendChild(confirmBtn);
+    dialog.appendChild(actions);
+    overlay.appendChild(dialog);
+
+    // 点击遮罩关闭
+    overlay.addEventListener("click", (e) => {
+      if (e.target === overlay) overlay.remove();
+    });
+
+    document.body.appendChild(overlay);
+    setTimeout(() => input.focus(), 50);
   }
   _renderDevices(data) {
     const section = document.createElement("div");

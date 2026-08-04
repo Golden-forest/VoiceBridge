@@ -254,6 +254,16 @@ export default {
     // 退出登录
     logout: '退出登录',
 
+    // 删除账号
+    deleteAccount: '删除账号',
+    deleteAccountConfirm: '确定要删除账号吗？所有数据将被永久清除，此操作不可撤销。',
+    deleteAccountTypeConfirm: '请输入"删除"以确认',
+    deleteAccountHint: '账号删除后将无法恢复，所有指令、设备、用量记录将被清除。如已有订阅将自动取消。',
+    deleteAccountProgress: '正在删除账号…',
+    deleteAccountSuccess: '账号已删除',
+    deleteAccountFailed: '删除账号失败，请稍后重试',
+    deleteAccountAdminProtected: '管理员账号无法删除',
+
     // 语言（自引用 - 自身切换）
     languageTitle: '语言',
     languageZhCN: '简体中文',

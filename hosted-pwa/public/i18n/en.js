@@ -247,6 +247,16 @@ export default {
 
     logout: 'Sign out',
 
+    // Delete account
+    deleteAccount: 'Delete account',
+    deleteAccountConfirm: 'Are you sure you want to delete your account? All data will be permanently removed. This cannot be undone.',
+    deleteAccountTypeConfirm: 'Type "DELETE" to confirm',
+    deleteAccountHint: 'Account deletion is irreversible. All commands, devices, and usage records will be purged. Active subscriptions will be canceled.',
+    deleteAccountProgress: 'Deleting account…',
+    deleteAccountSuccess: 'Account deleted',
+    deleteAccountFailed: 'Failed to delete account, please try again later',
+    deleteAccountAdminProtected: 'Admin accounts cannot be deleted',
+
     languageTitle: 'Language',
     languageZhCN: '简体中文',
     languageEn: 'English',
