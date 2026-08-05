@@ -26,7 +26,11 @@ test("FlashRecognition signs the dedicated raw-audio endpoint", async () => {
   assert.match(request.url, /^https:\/\/asr\.cloud\.tencent\.com\/asr\/flash\/v1\/123456\?/);
   assert.match(request.url, /engine_type=16k_zh/);
   assert.equal(request.headers["Content-Type"], "application/octet-stream");
-  assert.equal(request.headers["Content-Length"], "3");
+  // Content-Length is intentionally not set by the application code: Deno's
+  // fetch() in the Edge Runtime computes and injects it from the body. Setting
+  // it manually caused a signed-request mismatch in production. The signature
+  // is computed over the canonical string which does not include Content-Length.
+  assert.equal(request.headers["Content-Length"], undefined);
   assert.ok(request.headers.Authorization);
 });
 
