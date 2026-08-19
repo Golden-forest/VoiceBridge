@@ -97,3 +97,43 @@ test("createLanServer rejects when a fixed port is already taken", async () => {
 test("createLanServer requires rootDir", async () => {
   await assert.rejects(createLanServer({}), /rootDir/);
 });
+
+test("createLanServer closes the HTTPS server when the HTTP port is taken", async () => {
+  const rootDir = await fs.mkdtemp(path.join(os.tmpdir(), "voicebridge-lan-"));
+  const blocker = http.createServer();
+  await new Promise((resolve) => blocker.listen(0, "0.0.0.0", resolve));
+  const httpsPort = await new Promise((resolve) => {
+    const probe = http.createServer();
+    probe.listen(0, "0.0.0.0", () => { const p = probe.address().port; probe.close(() => resolve(p)); });
+  });
+
+  await assert.rejects(
+    createLanServer({ rootDir, port: httpsPort, httpPort: blocker.address().port, config: {} }),
+    /EADDRINUSE/
+  );
+
+  // 部分绑定泄漏：HTTPS 端口必须已被释放，而不是继续监听。
+  assert.equal(await portClosed(httpsPort), true, "https port should be released after http bind failure");
+
+  await new Promise((resolve) => blocker.close(resolve));
+});
+
+test("createLanServer honors separate writable certsDir and tmpDir", async () => {
+  const rootDir = await fs.mkdtemp(path.join(os.tmpdir(), "voicebridge-lan-"));
+  const writableDir = await fs.mkdtemp(path.join(os.tmpdir(), "voicebridge-lan-writable-"));
+
+  const lan = await createLanServer({
+    rootDir,
+    config: {},
+    certsDir: path.join(writableDir, "certs"),
+    tmpDir: path.join(writableDir, "tmp")
+  });
+
+  await lan.close();
+
+  const certsEntries = await fs.readdir(path.join(writableDir, "certs"));
+  assert.ok(certsEntries.includes("key.pem") && certsEntries.includes("cert.pem"));
+  // 只读 rootDir 下不应再生成 certs / tmp。
+  await assert.rejects(fs.readdir(path.join(rootDir, "certs")), /ENOENT/);
+  await assert.rejects(fs.readdir(path.join(rootDir, "tmp")), /ENOENT/);
+});

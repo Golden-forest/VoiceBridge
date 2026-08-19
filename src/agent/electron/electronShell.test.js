@@ -26,7 +26,10 @@ test('package exposes Electron Forge scripts without replacing the web start scr
   assert.ok(packageJson.config.forge.packagerConfig.ignore.includes('^/out($|/)'));
   assert.ok(packageJson.config.forge.packagerConfig.ignore.includes('^/hosted-pwa($|/)'));
   assert.ok(packageJson.config.forge.packagerConfig.ignore.includes('^/\\.env($|\\.)'));
-  assert.ok(packageJson.config.forge.packagerConfig.ignore.includes('^/src/public($|/)'));
+  // src/server 与 src/public 必须随包发布：main.js 动态 import LAN 服务，
+  // LAN 静态资源也来自 src/public（详见 src/server/forge-packaging.test.js）。
+  assert.ok(!packageJson.config.forge.packagerConfig.ignore.includes('^/src/public($|/)'));
+  assert.ok(!packageJson.config.forge.packagerConfig.ignore.includes('^/src/server($|/)'));
 });
 
 test('Electron main process uses a safe BrowserWindow shell', () => {

@@ -19,10 +19,12 @@ import { listWindows } from "./input/windowManager.js";
  * Electron 云模式桌面端（内嵌）共用。
  *
  * @param {object} [options]
- * @param {string} options.rootDir 项目根目录（certs / public / shared 相对此目录）
+ * @param {string} options.rootDir 项目根目录（public / shared 静态资源相对此目录，可为 asar 内只读路径）
  * @param {object} [options.config] 已加载的配置（默认 loadConfig()）
  * @param {number} [options.port] HTTPS 端口（默认 config.port；0 = 随机分配）
  * @param {number} [options.httpPort] HTTP 探测/重定向端口（默认 HTTPS 端口 + 1）
+ * @param {string} [options.certsDir] 证书目录（可写路径；默认 rootDir/certs。Electron 打包后必须传 userData 下的目录）
+ * @param {string} [options.tmpDir] 上传临时目录（可写路径；默认 rootDir/tmp。Electron 打包后必须传 userData 下的目录）
  * @param {object} [options.logger] 错误日志输出（默认 console）
  * @returns {Promise<{port: number, httpPort: number, close: () => Promise<void>, getEndpoints: () => Array<{host: string, port: number, httpPort: number}>}>}
  */
@@ -31,6 +33,8 @@ export async function createLanServer({
   config = loadConfig(),
   port,
   httpPort,
+  certsDir,
+  tmpDir,
   logger = console
 } = {}) {
   if (!rootDir) {
@@ -38,11 +42,11 @@ export async function createLanServer({
   }
 
   const publicDir = path.join(rootDir, "src/public");
-  const tmpDir = path.join(rootDir, "tmp");
-  await fs.mkdir(tmpDir, { recursive: true });
+  const uploadTmpDir = tmpDir ?? path.join(rootDir, "tmp");
+  await fs.mkdir(uploadTmpDir, { recursive: true });
 
   const localIp = getLocalIp();
-  const { key, cert } = await ensureCertificates(rootDir, { localIp });
+  const { key, cert } = await ensureCertificates(rootDir, { localIp, certsDir });
 
   // ---- HTTPS 主服务 ----
   const app = express();
@@ -86,7 +90,12 @@ export async function createLanServer({
     res.json({ ok: true, app: "VoiceBridge", lan: true });
   });
   redirectApp.use((req, res) => {
-    const allowedHosts = [`localhost:${resolvedPort}`, `127.0.0.1:${resolvedPort}`, `${getLocalIp()}:${resolvedPort}`];
+    const allowedHosts = [
+      "localhost",
+      "127.0.0.1",
+      getLocalIp(),
+      ...listLocalIps()
+    ].map((host) => `${host}:${resolvedPort}`);
     const host = req.headers.host;
     const safeHost = allowedHosts.includes(host) ? host : `localhost:${resolvedPort}`;
     const safePath = req.url.replace(/^\/+/, "/");
@@ -103,20 +112,32 @@ export async function createLanServer({
       });
     });
 
-  const requestedPort = port ?? config.port;
-  const resolvedPort = await listen(tlsServer, requestedPort);
-  // 注意：WS hub 必须在 TLS listen 成功之后再挂载；端口冲突时提前挂载会让
-  // ws 触发第二次未被捕获的 EADDRINUSE（见 createLanServer.test.js）。
-  const wsHub = createWebSocketHub(tlsServer);
-  app.use("/api", createUploadRouter({ config, wsHub, tmpDir }));
-  const resolvedHttpPort = await listen(redirectServer, httpPort ?? resolvedPort + 1);
-
   const closeServer = (server) =>
     new Promise((resolve) => {
       server.close(() => resolve());
       // close() 只等待 keep-alive 连接排空；强制销毁以避免悬挂。
       server.closeAllConnections?.();
     });
+
+  const requestedPort = port ?? config.port;
+  const resolvedPort = await listen(tlsServer, requestedPort);
+  // 注意：WS hub 必须在 TLS listen 成功之后再挂载；端口冲突时提前挂载会让
+  // ws 触发第二次未被捕获的 EADDRINUSE（见 createLanServer.test.js）。
+  const wsHub = createWebSocketHub(tlsServer);
+  app.use("/api", createUploadRouter({ config, wsHub, tmpDir: uploadTmpDir }));
+  let resolvedHttpPort;
+  try {
+    resolvedHttpPort = await listen(redirectServer, httpPort ?? resolvedPort + 1);
+  } catch (error) {
+    // HTTP 端口被占用时不能留下已绑定的 TLS 服务和 WS hub —— 先关干净再抛出。
+    try {
+      wsHub.close();
+    } catch (closeError) {
+      logger.error?.("LAN WebSocket hub close failed during abort:", closeError?.message || closeError);
+    }
+    await closeServer(tlsServer);
+    throw error;
+  }
 
   return {
     port: resolvedPort,

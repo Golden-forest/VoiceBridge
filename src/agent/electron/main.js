@@ -7,7 +7,6 @@ import { createFileAuthStorage } from '../authStorage.js';
 import { createAgentLogger } from './agentLogger.js';
 import { loadOrCreateDevice } from '../deviceStore.js';
 import { createAgentClient, startRealtimeAgent } from '../realtimeAgent.js';
-import { createLanServer } from '../../server/createLanServer.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const bundledSupabaseUrl = 'https://gqxxknusznbunkiznnal.supabase.co';
@@ -50,13 +49,29 @@ function saveDesktopSettings(settings) {
 }
 
 // 云模式下内嵌 LAN 服务：启动失败只记录日志并静默降级，绝不影响云链路。
+// createLanServer 通过动态 import 加载：即使打包时 LAN 模块缺失（或加载失败），
+// 也只降级为 LAN 不可用，不会让主进程崩溃。
 async function startLanServer() {
   if (lanServer) return lanServer;
   const settings = loadDesktopSettings();
   if (!settings.lanMode) return null;
   try {
-    const rootDir = app.isPackaged ? app.getPath('userData') : join(__dirname, '..', '..', '..');
-    lanServer = await createLanServer({ rootDir });
+    let createLanServer;
+    try {
+      ({ createLanServer } = await import('../../server/createLanServer.js'));
+    } catch (error) {
+      log('lan-module-unavailable', { error: error instanceof Error ? error.message : String(error) });
+      return null;
+    }
+    // 静态资源（src/public 等）从 asar 内的应用根目录读取；
+    // 证书和上传临时目录必须写到可写的 userData（asar 只读）。
+    const rootDir = app.isPackaged ? app.getAppPath() : join(__dirname, '..', '..', '..');
+    const userData = app.getPath('userData');
+    lanServer = await createLanServer({
+      rootDir,
+      certsDir: join(userData, 'certs'),
+      tmpDir: join(userData, 'tmp')
+    });
     log('lan-started', { port: lanServer.port, httpPort: lanServer.httpPort, endpoints: lanServer.getEndpoints() });
     return lanServer;
   } catch (error) {
@@ -305,7 +320,12 @@ async function goOnline({ supabase, userId, device }) {
   if (settings.lanMode && !lanServer) {
     await startLanServer();
   }
-  await runtime.setLanEndpoints?.(lanServer ? lanServer.getEndpoints() : []);
+  // LAN 端点上报失败绝不能拖垮云模式上线。
+  try {
+    await runtime.setLanEndpoints?.(lanServer ? lanServer.getEndpoints() : []);
+  } catch (error) {
+    log('lan-endpoints-track-failed', { error: error instanceof Error ? error.message : String(error) });
+  }
   activeAgent = { supabase, runtime, device, userId };
   return sendDesktopState({
     mode: 'online',

@@ -11,13 +11,15 @@ const CERT_FILE = "cert.pem";
 
 /**
  * 确保自签名 TLS 证书存在（若不存在则用 openssl 自动生成）。
- * @param {string} rootDir 项目根目录
+ * @param {string} rootDir 项目根目录（默认证书目录的父目录）
  * @param {object} [opts]
  * @param {string} [opts.localIp] 局域网 IP，写入 SAN 以便手机访问
+ * @param {string} [opts.certsDir] 证书目录（必须是可写路径；打包后的 asar 只读，
+ *   Electron 端应传 userData 下的目录）
  * @returns {Promise<{ key: string, cert: string }>} PEM 格式的密钥和证书内容
  */
-export async function ensureCertificates(rootDir, { localIp } = {}) {
-  const certDir = path.join(rootDir, CERT_DIR);
+export async function ensureCertificates(rootDir, { localIp, certsDir } = {}) {
+  const certDir = certsDir ?? path.join(rootDir, CERT_DIR);
   await fs.mkdir(certDir, { recursive: true });
 
   const keyPath = path.join(certDir, KEY_FILE);
