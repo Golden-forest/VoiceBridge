@@ -30,3 +30,18 @@
 - **需要部署**：Edge Function（transcribe）与 PWA（Cloudflare Pages）需部署后打点才可见。
 - **桌面端手动矩阵**（需真机）：睡眠 5 分钟唤醒 / Wi-Fi↔热点切换 / 断网 5 分钟恢复 / 服务端 close 通道 → 全部应在 10s 内自愈，`logs/agent-*.log` 可证。
 - Phase 2（音频压缩、服务端并行化、DB 锁消除）与 Phase 3（流式 ASR）未开始，见 plan.md。
+
+## Phase 2（2026-08-19，subagent-driven 执行完毕）
+
+工作包 A：手机直连腾讯
+- 新增 Edge Functions `issue-asr-request` / `report-asr-result`（082abb5）：本地 JWT 验签 → reserve_and_get_plan → 签发一次性 Flash 签名 URL；report 幂等闭环 usage_events。
+- 手机端 `cloudTranscribe.js`（33f6a7b + 672f785）：issue → 直连腾讯 Flash（10s 超时）→ 成功 fire-and-forget report；任何失败静默回退新加坡中转路径。密钥绝不下发。
+
+工作包 B：LAN 页面模式（浏览器安全限制：安全页面无法 fetch 内网 HTTP/自签名 HTTPS，用户已批准"LAN 页面模式"）
+- 桌面端（4a08d37 + 47c10ac）：src/server 抽出 `createLanServer` 嵌入 Electron（默认开启、失败静默降级、打包可存活）；presence 上报 `lanEndpoints`；明文 httpPort 探测口 /api/health。
+- 手机端（0dc08e2 + f19371e）：presence 驱动"局域网可用"角标（探测仅增强）；一键跳转桌面自服务页面（首次需信任自签名证书一次）；6 位配对码（轮换 + 每 IP 指数退避）门禁 upload/ws/commands/windows；失联自动回云端页。
+- LAN 识别（ca30a02）：本地 server 逐次向 Edge 请求签名直连腾讯——腾讯密钥永不出 Edge，桌面安装包无任何凭证。
+
+验证：npm test 291/291 全绿；hosted-pwa 镜像门通过；最终全分支评审 APPROVE（无 Critical/Important）。
+已部署：issue-asr-request、report-asr-result（gqxxknusznbunkiznnal）。
+待办：PWA 需 `npx wrangler login` 后 `bash scripts/deploy.sh`；桌面端需重新打包；真机验证（直连延迟、LAN 配对、证书信任、混合内容探测实际行为）；配对码桌面 UI（现仅 stdout/日志）。
