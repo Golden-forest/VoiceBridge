@@ -1,7 +1,11 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
-import { transcribeCloudAudio, __clearAccessTokenCacheForTests } from "./cloudTranscribe.js";
+import {
+  transcribeCloudAudio,
+  __clearAccessTokenCacheForTests,
+  __waitForPendingAsrReportsForTests
+} from "./cloudTranscribe.js";
 
 const BASE = "https://project.supabase.co";
 const TENCENT_URL = "https://asr.cloud.tencent.com/asr/flash/v1/123?signed=1";
@@ -88,6 +92,8 @@ test("transcribeCloudAudio direct path: issue → Tencent POST → success repor
   // 语气词清理与 Edge 端 removeFillerWords 一致：“你好，嗯世界。” → “你好，世界。”
   assert.equal(result.text, "你好，世界。");
 
+  // 成功路径的上报是 fire-and-forget：等它落地后再断言请求体。
+  await __waitForPendingAsrReportsForTests();
   const report = calls.find((c) => c.url.includes("report-asr-result"));
   assert.ok(report, "report-asr-result must be called");
   assert.deepEqual(JSON.parse(report.options.body), {
@@ -238,6 +244,41 @@ test("transcribeCloudAudio direct result survives a failed report-asr-result sen
 
   assert.equal(result.text, "直接成功");
   assert.equal(result.request_id, "req-5");
+});
+
+test("transcribeCloudAudio reports failed and falls back on an invalid issue payload with ok:true", async () => {
+  __clearAccessTokenCacheForTests();
+  const calls = [];
+  const supabase = createSupabaseClient({ url: BASE, anonKey: "anon-key", accessToken: "access-token" });
+
+  const result = await transcribeCloudAudio({
+    supabase,
+    audio: new Blob(["wav"], { type: "audio/wav" }),
+    durationMs: 1000,
+    fetch: async (url, options) => {
+      calls.push({ url, options });
+      if (url.includes("issue-asr-request")) {
+        // ok:true 但缺少签名 URL：必须上报 failed 再回退，避免服务端预留悬挂。
+        return jsonResponse(200, { ok: true, request_id: "req-invalid", headers: { Authorization: "TC3" } });
+      }
+      if (url.includes("report-asr-result")) {
+        return jsonResponse(200, { ok: true });
+      }
+      return jsonResponse(200, { ok: true, text: "relay ok" });
+    }
+  });
+
+  assert.equal(result.text, "relay ok");
+  const report = calls.find((c) => c.url.includes("report-asr-result"));
+  assert.ok(report, "report-asr-result must be called for an invalid issue payload");
+  assert.deepEqual(JSON.parse(report.options.body), {
+    request_id: "req-invalid",
+    status: "failed",
+    error_code: "invalid_issue_response"
+  });
+  assert.equal(calls.some((c) => c.url.endsWith("/transcribe")), true, "relay fallback must run");
+  assert.equal(calls.some((c) => c.url.startsWith("https://asr.cloud.tencent.com/")), false,
+    "Tencent must not be called without a signed URL");
 });
 
 test("transcribeCloudAudio falls back to relay when the issue call itself throws", async () => {

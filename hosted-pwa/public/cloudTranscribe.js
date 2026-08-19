@@ -100,6 +100,8 @@ async function tryDirectAsr({ baseUrl, anonKey, accessToken, audio, durationMs, 
   });
 
   if (typeof issue?.url !== "string" || !issue.url || !issue?.headers || !Number.isFinite(issue.expires_at)) {
+    // ok:true 但签名载荷不完整：尽力上报失败，避免服务端预留额度悬挂。
+    await report("failed", { error_code: "invalid_issue_response" });
     return null;
   }
   // 签名已过期（Edge 时钟与手机时钟偏差等）：视为失败，回退中转通道。
@@ -131,7 +133,8 @@ async function tryDirectAsr({ baseUrl, anonKey, accessToken, audio, durationMs, 
       logDirectTiming(t0, issueMs, Date.now() - directStart);
       return null;
     }
-    await report("success", { text_length: text.length });
+    // 成功路径 fire-and-forget：上报慢/挂起不得拖延把文字交还给用户。
+    report("success", { text_length: text.length });
     const directAsrMs = Date.now() - directStart;
     logDirectTiming(t0, issueMs, directAsrMs);
     return { ok: true, request_id: issue.request_id, text };
@@ -152,27 +155,36 @@ function logDirectTiming(t0, issueMs, directAsrMs) {
 }
 
 // 结果上报：尽力而为（keepalive + 自身超时 + 吞掉所有错误），绝不影响识别结果或 UI。
-async function reportAsrResult({ baseUrl, anonKey, accessToken, fetchImpl, requestId, status, error_code: errorCode, text_length: textLength }) {
-  if (!requestId) return;
-  try {
-    await fetchWithTimeout(fetchImpl, `${baseUrl}/functions/v1/report-asr-result`, {
-      method: "POST",
-      headers: {
-        apikey: anonKey,
-        Authorization: `Bearer ${accessToken}`,
-        "Content-Type": "application/json"
-      },
-      body: JSON.stringify({
-        request_id: requestId,
-        status,
-        ...(errorCode ? { error_code: errorCode } : {}),
-        ...(Number.isFinite(textLength) ? { text_length: textLength } : {})
-      }),
-      keepalive: true
-    }, DIRECT_REPORT_TIMEOUT_MS);
-  } catch {
+// 返回的 promise 被记录到 pendingReports，仅供测试确定性等待；生产成功路径不 await。
+const pendingReports = new Set();
+
+function reportAsrResult({ baseUrl, anonKey, accessToken, fetchImpl, requestId, status, error_code: errorCode, text_length: textLength }) {
+  if (!requestId) return Promise.resolve();
+  const promise = fetchWithTimeout(fetchImpl, `${baseUrl}/functions/v1/report-asr-result`, {
+    method: "POST",
+    headers: {
+      apikey: anonKey,
+      Authorization: `Bearer ${accessToken}`,
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({
+      request_id: requestId,
+      status,
+      ...(errorCode ? { error_code: errorCode } : {}),
+      ...(Number.isFinite(textLength) ? { text_length: textLength } : {})
+    }),
+    keepalive: true
+  }, DIRECT_REPORT_TIMEOUT_MS).catch(() => {
     // 上报失败不影响主流程。
-  }
+  });
+  pendingReports.add(promise);
+  promise.then(() => pendingReports.delete(promise));
+  return promise;
+}
+
+// 测试专用：等待所有进行中的上报 promise。生产代码不应调用。
+export async function __waitForPendingAsrReportsForTests() {
+  await Promise.allSettled([...pendingReports]);
 }
 
 // === Edge 中转通道（原路径，行为不变） ===
@@ -270,8 +282,9 @@ function removeFillerWords(text) {
   if (!text) return text;
 
   let r = text;
-  r = r.replace(FILLER_BEFORE_BOUNDARY, "$1");
+  // 与 Edge 端 tencent_asr.ts 保持相同顺序：先处理后置语气词，再处理前置语气词。
   r = r.replace(FILLER_AFTER_BOUNDARY, "$1");
+  r = r.replace(FILLER_BEFORE_BOUNDARY, "$1");
   if (ALL_FILLER.test(r.trim())) return "";
   r = r.replace(LEADING_FILLER_3PLUS, "");
   r = r.replace(TRAILING_FILLER_3PLUS, "");
