@@ -269,3 +269,73 @@ test("loadOrCreateDevice rejects malformed device JSON", async () => {
     SyntaxError
   );
 });
+
+test("startRealtimeAgent rebuilds channels when CLOSED arrives and recovers health", async () => {
+  const createdTopics = [];
+  const statuses = [];
+  let closedOnce = false;
+  let messageSubscribers = [];
+  let presenceSubscribers = [];
+  const channelStore = new Map();
+
+  const makeChannel = (topic) => ({
+    topic,
+    removed: false,
+    on() { return this; },
+    async subscribe(callback) {
+      if (topic.endsWith("desktop-1")) messageSubscribers.push(callback);
+      if (topic.endsWith("presence")) presenceSubscribers.push(callback);
+      await callback?.("SUBSCRIBED");
+      return "ok";
+    },
+    async track() { return "ok"; },
+    async send() { return "ok"; },
+    async unsubscribe() { return "ok"; }
+  });
+
+  const supabase = {
+    channel(topic) {
+      createdTopics.push(topic);
+      if (!channelStore.has(topic) || channelStore.get(topic).removed) {
+        channelStore.set(topic, makeChannel(topic));
+      }
+      return channelStore.get(topic);
+    },
+    async removeChannel(channel) {
+      channel.removed = true;
+      channelStore.delete(channel.topic);
+    }
+  };
+
+  const agent = await startRealtimeAgent({
+    supabase,
+    userId: "user-1",
+    device: { id: "desktop-1", name: "Desk", platform: "darwin" },
+    listWindows: async () => [],
+    output: async () => ({ copied: true, pasted: true, pasteError: null }),
+    onStatus: (status) => statuses.push(status)
+  });
+
+  assert.equal(agent.getHealth().online, true);
+
+  // 模拟服务端 close 主通道：旧实现里这会永久死亡。
+  const originalMessageSubscribers = [...messageSubscribers];
+  originalMessageSubscribers.at(-1)("CLOSED");
+  assert.equal(agent.getHealth().online, false);
+  assert.ok(statuses.some((s) => s.startsWith("reconnect:scheduled")));
+
+  // 退避 1s 后重建——测试里直接等待重建完成。
+  await new Promise((resolve) => setTimeout(resolve, 1300));
+
+  assert.equal(agent.getHealth().online, true, "watchdog should have rebuilt and recovered");
+  assert.ok(statuses.includes("reconnect:recovered"));
+  assert.ok(
+    createdTopics.filter((topic) => topic === "device:user-1:desktop-1").length >= 2,
+    "message channel must be recreated after close"
+  );
+  closedOnce = true;
+  assert.ok(closedOnce);
+
+  await agent.stop();
+  assert.equal(agent.getHealth().online, false);
+});

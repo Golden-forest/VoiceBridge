@@ -1,9 +1,10 @@
-import { app, BrowserWindow, ipcMain } from 'electron';
+import { app, BrowserWindow, ipcMain, powerMonitor } from 'electron';
 import { readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import QRCode from 'qrcode';
 import { createFileAuthStorage } from '../authStorage.js';
+import { createAgentLogger } from './agentLogger.js';
 import { loadOrCreateDevice } from '../deviceStore.js';
 import { createAgentClient, startRealtimeAgent } from '../realtimeAgent.js';
 
@@ -17,6 +18,11 @@ let desktopClient = null;
 let activeAgent = null;
 let pairingPollTimer = null;
 let initializing = null;
+let agentLogger = null;
+
+function log(event, detail) {
+  agentLogger?.log(event, detail);
+}
 
 function loadDesktopSettings() {
   try {
@@ -66,6 +72,7 @@ function loadBundledDesktopConfig() {
 }
 
 function sendAgentStatus(status) {
+  log('agent-status', status);
   mainWindow?.webContents.send('voicebridge:agent-status', status);
 }
 
@@ -85,14 +92,55 @@ async function getOrCreateDesktopClient() {
     supabaseAnonKey: config.supabaseAnonKey,
     storage: createFileAuthStorage()
   });
+  watchAuthLifecycle(desktopClient);
   const { data: sessionData } = await desktopClient.auth.getSession();
-  if (!sessionData.session) {
+  if (sessionData.session) {
+    // 会话可能已失效（匿名刷新令牌吊销后不可恢复）。提前探测并清掉坏会话，
+    // 否则 getUser 抛错会把应用锁死在"初始化失败"，用户无法自救。
+    const { data: userData, error: userError } = await desktopClient.auth.getUser();
+    if (userError || !userData.user) {
+      log('auth-stale-session', { error: userError?.message });
+      await desktopClient.auth.signOut();
+    }
+  }
+  const { data: refreshed } = await desktopClient.auth.getSession();
+  if (!refreshed.session) {
     const { error } = await desktopClient.auth.signInAnonymously();
     if (error) {
       throw new Error(`无法创建电脑配对会话：${error.message}`);
     }
   }
   return desktopClient;
+}
+
+// 匿名会话的刷新令牌一旦死亡（断网跨过期、吊销、用户被删），私有通道 join 会
+// 永远 403，桌面端表现为"掉线直到重启"。这里监听 SIGNED_OUT，自动重新匿名
+// 登录并走重配对流程，让链路自愈。
+function watchAuthLifecycle(supabase) {
+  supabase.auth.onAuthStateChange((event, session) => {
+    log('auth-event', { event, userId: session?.user?.id ?? null });
+    if (event === 'SIGNED_OUT' && activeAgent) {
+      log('auth-signed-out-recovery', { previousUserId: activeAgent.userId });
+      void recoverAfterSignOut().catch((error) => {
+        log('auth-recovery-failed', { error: String(error) });
+      });
+    }
+  });
+}
+
+async function recoverAfterSignOut() {
+  clearPairingPoll();
+  await stopRealtimeOnly();
+  const config = getDesktopPublicConfig();
+  if (!desktopClient) return;
+  const { error } = await desktopClient.auth.signInAnonymously();
+  if (error) throw new Error(`无法重建电脑配对会话：${error.message}`);
+  // 设备记录绑定的是旧 runtime 用户，重新匿名登录后必须走配对。
+  const device = await loadOrCreateDevice();
+  const { data: userData } = await desktopClient.auth.getUser();
+  const runtimeUserId = userData.user?.id;
+  if (!runtimeUserId) throw new Error('重建配对会话失败。');
+  await startPairing({ supabase: desktopClient, runtimeUserId, device });
 }
 
 async function initializeDesktop() {
@@ -291,11 +339,24 @@ ipcMain.handle('voicebridge:update-settings', async (_event, updates) => {
 });
 
 app.whenReady().then(() => {
+  agentLogger = createAgentLogger({ userDataPath: app.getPath('userData') });
+  log('app-start', { version: app.getVersion(), platform: process.platform });
   createWindow();
+  wireLifecycleEvents();
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();
   });
 });
+
+// macOS 睡眠唤醒后，realtime socket 要等 25–50s 心跳超时才发现链路已死。
+// 监听电源/网络事件，唤醒和恢复联网时立即主动重连，把盲区压到秒级。
+function wireLifecycleEvents() {
+  powerMonitor.on('resume', () => {
+    log('power-resume');
+    activeAgent?.runtime?.forceReconnect?.('power-resume');
+  });
+  powerMonitor.on('lock-screen', () => log('power-lock'));
+}
 
 app.on('window-all-closed', () => {
   clearPairingPoll();

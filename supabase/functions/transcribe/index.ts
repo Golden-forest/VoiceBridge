@@ -24,6 +24,7 @@ Deno.serve(async (req) => {
   }
 
   const requestId = crypto.randomUUID();
+  const timing = { start: Date.now(), authAt: 0, formDataAt: 0, reservedAt: 0, asrAt: 0 };
   let userId = "";
   let durationMs: number | null = null;
   let audioSizeBytes = 0;
@@ -53,6 +54,7 @@ Deno.serve(async (req) => {
       return errorResponse("unauthorized", "请先登录后再使用云端语音识别。", 401);
     }
     userId = subject;
+    timing.authAt = Date.now();
 
     const formData = await req.formData();
     const audio = formData.get("audio");
@@ -79,6 +81,7 @@ Deno.serve(async (req) => {
       return errorResponse("invalid_duration", "无法确认音频时长，请重新录音后再试。", 400);
     }
     durationMs = resolvedDurationMs;
+    timing.formDataAt = Date.now();
 
     const cachedPlan = getCachedPlan(userId);
 
@@ -111,6 +114,7 @@ Deno.serve(async (req) => {
       return errorResponse(reservationError, message, 429);
     }
     usageReserved = true;
+    timing.reservedAt = Date.now();
 
     const tencentEnv = getTencentEnv();
     const text = await transcribeTencentWav({
@@ -123,6 +127,16 @@ Deno.serve(async (req) => {
         region: tencentEnv.region,
         engServiceType: tencentEnv.engServiceType
       }
+    });
+    timing.asrAt = Date.now();
+    console.info("Transcribe stage timing", {
+      request_id: requestId,
+      auth_ms: timing.authAt - timing.start,
+      form_data_ms: timing.formDataAt - timing.authAt,
+      reserve_rpc_ms: timing.reservedAt - timing.formDataAt,
+      asr_ms: timing.asrAt - timing.reservedAt,
+      audio_size_bytes: audioSizeBytes,
+      duration_ms: durationMs
     });
 
     EdgeRuntime.waitUntil(updateReservedUsage(serviceClient, {

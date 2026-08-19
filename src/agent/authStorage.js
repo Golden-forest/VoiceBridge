@@ -38,8 +38,12 @@ async function readValues(filePath) {
 
 async function writeValues(filePath, values) {
   await fs.mkdir(path.dirname(filePath), { recursive: true });
-  await fs.writeFile(filePath, `${JSON.stringify(values)}\n`, {
+  // 原子写：先写临时文件再 rename，避免并发写（token 刷新 + session 保存）
+  // 把文件截断成非法 JSON，导致匿名身份丢失、配对孤儿化。
+  const tmpPath = `${filePath}.${process.pid}.tmp`;
+  await fs.writeFile(tmpPath, `${JSON.stringify(values)}\n`, {
     encoding: "utf8",
     mode: 0o600
   });
+  await fs.rename(tmpPath, filePath);
 }

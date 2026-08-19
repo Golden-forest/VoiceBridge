@@ -16,6 +16,16 @@ const SENTENCE_MIN_TIMEOUT_MS = 1_000;
 // Error message substrings that indicate Flash is explicitly unavailable;
 // these fall back immediately without consuming deadline budget.
 const FLASH_UNAVAILABLE_PATTERNS = ["4003", "not enabled", "not activated", "service not"];
+// 实测：Supabase Edge（海外 region，如 ap-southeast-1）解析到的腾讯国际节点
+// 不提供 /asr/flash/ 路径（nginx 404），而国内节点正常。Flash 一旦以 HTTP
+// 层错误失败，短期内必然继续失败——熔断 10 分钟，避免每个请求白烧 ~1s。
+const FLASH_CIRCUIT_BREAK_MS = 10 * 60_000;
+let flashCircuitOpenUntil = 0;
+
+// 测试专用：重置熔断状态。生产代码不应调用。
+export function __resetFlashCircuitForTests() {
+  flashCircuitOpenUntil = 0;
+}
 
 const FILLER_CLASS = "[嗯呃唔噢欸诶哼嘖啧]";
 const BOUNDARY = "[\\s，,。.!！？?、；;：:]";
@@ -69,7 +79,7 @@ export async function transcribeTencentWav({
    */
   deadlineStart?: number;
 }) {
-  if (config.appId) {
+  if (config.appId && Date.now() >= flashCircuitOpenUntil) {
     const flashStart = Date.now();
     try {
       const flashRequest = await createTencentFlashRecognitionRequest({
@@ -99,6 +109,16 @@ export async function transcribeTencentWav({
       const remaining = TOTAL_DEADLINE_MS - elapsed;
       const message = String((error as Error)?.message || error);
       const isServiceUnavailable = FLASH_UNAVAILABLE_PATTERNS.some((p) => message.toLowerCase().includes(p));
+      // Flash 成功到达但没识别到语音（code 0 空文本）不算故障，不熔断。
+      const isNoSpeech = /empty text/i.test(message);
+      const isHttpLevelFailure = /^HTTP \d+/.test(message);
+      if (!isNoSpeech && (isHttpLevelFailure || isServiceUnavailable)) {
+        flashCircuitOpenUntil = Date.now() + FLASH_CIRCUIT_BREAK_MS;
+        console.warn("Tencent FlashRecognition circuit opened", {
+          duration_ms: FLASH_CIRCUIT_BREAK_MS,
+          error_message: message
+        });
+      }
       const fallbackReason = isServiceUnavailable
         ? "service_unavailable"
         : (error as Error)?.name === "AbortError" || /abort/i.test(message)
@@ -109,12 +129,14 @@ export async function transcribeTencentWav({
         // Immediate fallback — does not consume deadline budget.
         console.warn("Tencent FlashRecognition unavailable; falling back to SentenceRecognition", {
           fallback_reason: fallbackReason,
+          error_message: message,
           elapsed_ms: elapsed
         });
       } else if (remaining >= FALLBACK_MIN_BUDGET_MS) {
         // Timeout / network / unknown error — only fall back if we still have ≥3s.
         console.warn("Tencent FlashRecognition failed; falling back to SentenceRecognition", {
           fallback_reason: fallbackReason,
+          error_message: message,
           elapsed_ms: elapsed,
           remaining_ms: remaining
         });
@@ -124,6 +146,7 @@ export async function transcribeTencentWav({
         // be aborted by the overall Edge function timeout.
         console.error("Tencent FlashRecognition failed and deadline budget exhausted", {
           fallback_reason: fallbackReason,
+          error_message: message,
           elapsed_ms: elapsed,
           remaining_ms: remaining
         });

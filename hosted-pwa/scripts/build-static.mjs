@@ -93,16 +93,28 @@ async function verifyMirroredSources() {
   //    it sits next to src/shared at authoring time), but the published cloud copy
   //    lives at public/<file> and must import `./shared/<x>.js`. Normalize before
   //    comparing so the build gate fails only on real drift.
-  const cloudFiles = ["app.js", "cloudRealtime.js"];
+  // Gate EVERY .js file present in both trees so a one-sided edit (like the
+  // cloudRecorder.js auto-stop fix that never shipped) fails the build loudly.
+  const cloudFiles = [];
+  for (const name of await readdir(path.join(projectRoot, "src", "public"))) {
+    if (!name.endsWith(".js")) continue;
+    try {
+      await access(path.join(publicDir, name));
+      cloudFiles.push(name);
+    } catch {
+      // only gate files that also exist in the published tree
+    }
+  }
   for (const relativePath of cloudFiles) {
     const [localSource, cloudSource] = await Promise.all([
       readFile(path.join(projectRoot, "src", "public", relativePath), "utf8"),
       readFile(path.join(publicDir, relativePath), "utf8")
     ]);
-    const normalizedLocalSource = localSource.replaceAll(
-      /"\.\.\/shared\/([^"]+\.js)"/g,
-      '"./shared/$1"'
-    );
+    const normalizedLocalSource = localSource
+      .replaceAll(/"\.\.\/shared\/([^"]+\.js)"/g, '"./shared/$1"')
+      // src/public/index.html is the PWA; in the hosted tree the landing page
+      // owns index.html and the PWA lives at app.html.
+      .replaceAll('"./index.html"', '"./app.html"');
     if (normalizedLocalSource !== cloudSource) {
       throw new Error(`Cloud source drift detected: ${relativePath}`);
     }

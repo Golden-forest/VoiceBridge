@@ -1,12 +1,14 @@
 import { encodeWav16Mono } from "./wavEncoder.js";
 
-export async function recordWavUntilStopped({ onStopReady }) {
+export async function recordWavUntilStopped({ onStopReady, maxDurationMs, onMaxDurationReached }) {
   let stream = null;
   let audioContext = null;
   let source = null;
   let processor = null;
   const chunks = [];
   let stopped = false;
+  let totalSamples = 0;
+  let autoStopTriggered = false;
 
   try {
     stream = await navigator.mediaDevices.getUserMedia({ audio: true });
@@ -20,7 +22,23 @@ export async function recordWavUntilStopped({ onStopReady }) {
     processor = audioContext.createScriptProcessor(4096, 1, 1);
 
     processor.onaudioprocess = (event) => {
-      chunks.push(new Float32Array(event.inputBuffer.getChannelData(0)));
+      const channel = new Float32Array(event.inputBuffer.getChannelData(0));
+      chunks.push(channel);
+      totalSamples += channel.length;
+      if (
+        typeof maxDurationMs === "number" &&
+        maxDurationMs > 0 &&
+        !autoStopTriggered &&
+        typeof onMaxDurationReached === "function" &&
+        (totalSamples / audioContext.sampleRate) * 1000 >= maxDurationMs
+      ) {
+        autoStopTriggered = true;
+        try {
+          onMaxDurationReached();
+        } catch (callbackError) {
+          console.error("onMaxDurationReached threw:", callbackError);
+        }
+      }
     };
 
     source.connect(processor);

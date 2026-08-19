@@ -4,7 +4,8 @@ import test from "node:test";
 
 const authJs = await readFile(new URL("./auth.js", import.meta.url), "utf8");
 const appJs = await readFile(new URL("./app.js", import.meta.url), "utf8");
-const indexHtml = await readFile(new URL("./index.html", import.meta.url), "utf8");
+const indexHtml = await readFile(new URL("./app.html", import.meta.url), "utf8");
+const pairingJs = await readFile(new URL("./pairing.js", import.meta.url), "utf8");
 
 test("auth overlay is disabled for local mode fallback", () => {
   assert.match(authJs, /const isCloudMode = config\.voicebridgeMode === "cloud"/);
@@ -16,6 +17,28 @@ test("cloud auth exposes account logout and app starts from an existing session"
   assert.match(appJs, /window\.VoiceBridgeAuth\?\.signOut\(\)/);
   assert.match(authJs, /signOut:\s*async \(\) => supabase\?\.auth\.signOut\(\)/);
   assert.match(appJs, /void handleAuthState\(\{\s*detail:/);
+});
+
+test("cloud auth supports GitHub registration and login", () => {
+  assert.match(indexHtml, /id="authGithubBtn"/);
+  assert.match(indexHtml, /data-i18n="auth\.githubButton"/);
+  assert.match(authJs, /signInWithOAuth\(\{/);
+  assert.match(authJs, /provider:\s*"github"/);
+  assert.match(authJs, /options:\s*\{\s*redirectTo\s*\}/);
+});
+
+test("GitHub users can set a desktop password from account settings", () => {
+  assert.match(appJs, /usesGithubWithoutEmailPassword/);
+  assert.match(appJs, /account\.setPassword/);
+  assert.match(appJs, /auth\.updateUser\(\{ password: newPwd \}\)/);
+});
+
+test("phone can claim a QR pairing after authentication", () => {
+  assert.match(indexHtml, /id="pairingOverlay"/);
+  assert.match(indexHtml, /src="\/pairing\.js"/);
+  assert.match(pairingJs, /action:\s*"claim"/);
+  assert.match(pairingJs, /pairing_token/);
+  assert.match(pairingJs, /Authorization:\s*`Bearer \$\{accessToken\}`/);
 });
 
 test("account drawer button and plan badge are shown for signed-in cloud users", () => {

@@ -1,12 +1,17 @@
 import assert from "node:assert/strict";
-import test from "node:test";
+import test, { beforeEach } from "node:test";
 
 import {
+  __resetFlashCircuitForTests,
   createTencentFlashRecognitionRequest,
   createTencentSentenceRecognitionRequest,
   removeFillerWords,
   transcribeTencentWav
 } from "./tencent_asr.ts";
+
+beforeEach(() => {
+  __resetFlashCircuitForTests();
+});
 
 const config = {
   secretId: "secret-id",

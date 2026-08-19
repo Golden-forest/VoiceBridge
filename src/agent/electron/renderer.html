@@ -290,7 +290,18 @@
       });
       window.voicebridge?.onDesktopState(renderState);
       window.voicebridge?.onAgentStatus((status) => {
-        if (String(status).includes('SUBSCRIBED')) setStatus('已上线');
+        const text = String(status);
+        // 只有双通道健康才显示在线；通道异常立即降级，不再"见过一次
+        // SUBSCRIBED 就永远显示已上线"。
+        if (text === 'health:online') {
+          setStatus('已上线');
+        } else if (text === 'health:degraded' || text.includes('CHANNEL_ERROR') || text.includes('CLOSED')) {
+          setStatus('连接中断，正在重连…');
+        } else if (text.startsWith('reconnect:')) {
+          setStatus('连接中断，正在重连…');
+        } else if (text.startsWith('auth-')) {
+          setStatus('登录状态恢复中…');
+        }
       });
 
       refreshButton.addEventListener('click', async () => {

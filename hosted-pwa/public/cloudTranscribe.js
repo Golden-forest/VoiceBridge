@@ -1,6 +1,7 @@
 let cachedAccessToken = null;
 let cachedAccessTokenExpiresAt = 0;
 const ACCESS_TOKEN_TTL_MS = 50_000;
+const TRANSCRIBE_TIMEOUT_MS = 30_000;
 
 // 测试专用：清理 token 缓存。生产代码不应调用。
 export function __clearAccessTokenCacheForTests() {
@@ -43,7 +44,9 @@ export async function transcribeCloudAudio({
     throw new Error("当前浏览器无法发起云端语音识别请求。");
   }
 
+  const timing = { t0: Date.now(), tokenReadyAt: 0, uploadDoneAt: 0 };
   const accessToken = await getAccessToken(supabase);
+  timing.tokenReadyAt = Date.now();
 
   const supabaseUrl = supabase.supabaseUrl || supabase.rest?.url?.replace(/\/rest\/v1\/?$/, "");
   const anonKey = supabase.supabaseKey || supabase.headers?.apikey;
@@ -57,15 +60,36 @@ export async function transcribeCloudAudio({
     formData.append("duration_ms", String(Math.round(durationMs)));
   }
 
-  const response = await fetchImpl(`${supabaseUrl.replace(/\/$/, "")}/functions/v1/transcribe`, {
-    method: "POST",
-    headers: {
-      apikey: anonKey,
-      Authorization: `Bearer ${accessToken}`
-    },
-    body: formData
-  });
+  const controller = typeof AbortController !== "undefined" ? new AbortController() : null;
+  const timeoutId = controller
+    ? setTimeout(() => controller.abort(), TRANSCRIBE_TIMEOUT_MS)
+    : null;
+  let response;
+  try {
+    response = await fetchImpl(`${supabaseUrl.replace(/\/$/, "")}/functions/v1/transcribe`, {
+      method: "POST",
+      headers: {
+        apikey: anonKey,
+        Authorization: `Bearer ${accessToken}`
+      },
+      body: formData,
+      ...(controller ? { signal: controller.signal } : {})
+    });
+  } catch (error) {
+    if (controller && controller.signal.aborted) {
+      throw new Error("云端识别超时，请检查网络后重试。");
+    }
+    throw error;
+  } finally {
+    if (timeoutId) clearTimeout(timeoutId);
+  }
+  timing.uploadDoneAt = Date.now();
   const payload = await parseJson(response);
+  console.info("[vb-timing] cloudTranscribe", {
+    token_ms: timing.tokenReadyAt - timing.t0,
+    server_ms: timing.uploadDoneAt - timing.tokenReadyAt,
+    total_ms: Date.now() - timing.t0
+  });
 
   if (!response.ok || !payload?.ok) {
     throw new Error(payload?.message || payload?.error || "云端语音识别失败，请稍后重试。");

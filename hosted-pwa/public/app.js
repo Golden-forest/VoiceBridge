@@ -219,7 +219,9 @@ async function sendTextToDesktop(text, { localSuccessMessage = t('status.sentToD
         targetWindowId: windowSelector.targetWindow?.windowId
       });
       showToast(t('status.sending'));
+      const sendStartedAt = performance.now();
       await sendPromise;
+      console.info("[vb-timing] send→ack", { ms: Math.round(performance.now() - sendStartedAt) });
       return true;
     } catch (error) {
       showToast(error.message || t('connection.sendFailed'), true);
@@ -1565,6 +1567,7 @@ let maxRecordTimer = null;
 let timerInterval = null;
 let recordSeconds = 0;
 let recordingStartedAt = 0;
+let stopStartedAt = 0;
 let currentRecordingDurationMs = null;
 let isUploading = false;
 let ws = null;
@@ -1695,6 +1698,7 @@ async function stopRecording() {
   if (!isRecording || !recorder) return;
   isRecording = false;
   isUploading = true;
+  stopStartedAt = performance.now();
   currentRecordingDurationMs = getCurrentRecordingDurationMs();
   clearTimeout(maxRecordTimer);
   clearInterval(timerInterval);
@@ -1720,11 +1724,13 @@ async function uploadAudio(blob, extension) {
     if (!blob.size) { showToast(t('record.noVoice'), true); finishUpload(); return; }
     showToast(t('record.recognizing'));
     if (isCloudMode) {
+      console.info("[vb-timing] stop→encode+upload-ready", { ms: Math.round(performance.now() - stopStartedAt), bytes: blob.size });
       const payload = await transcribeCloudAudio({
         audio: blob,
         filename: `voicebridge.${extension}`,
         durationMs: currentRecordingDurationMs
       });
+      console.info("[vb-timing] stop→transcribed", { ms: Math.round(performance.now() - stopStartedAt) });
       const text = (payload.text || "").trim();
       if (!text) throw new Error(t('record.noTranscriptText'));
       // 识别结果先放入文本框（与 Lan 版本对齐：可见、可编辑、可收藏）

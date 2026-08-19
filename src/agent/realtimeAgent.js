@@ -126,6 +126,12 @@ export function createAgentClient({ supabaseUrl, supabaseAnonKey, storage }) {
   });
 }
 
+// realtime-js 的 channel 一旦进入 CLOSED 状态永不 rejoin；errored 状态下
+// subscribe() 是 no-op 且 supabase.channel(topic) 会返回缓存里的死对象。
+// 所以通道死亡时必须 removeChannel 后整体重建，否则桌面端"掉线直到重启"。
+const RECONNECT_BACKOFF_MS = [1000, 2000, 5000, 10000];
+const FATAL_CHANNEL_STATUSES = ["CHANNEL_ERROR", "CLOSED"];
+
 export async function startRealtimeAgent({
   supabase,
   userId,
@@ -138,16 +144,80 @@ export async function startRealtimeAgent({
   listWindows = listCloudWindows
 }) {
   const ackChannels = new Map();
-  const messageChannel = supabase.channel(deviceChannel(userId, device.id), {
+  let messageChannel = supabase.channel(deviceChannel(userId, device.id), {
     config: { private: true }
   });
-  const presence = supabase.channel(presenceChannel(userId), {
+  let presence = supabase.channel(presenceChannel(userId), {
     config: { private: true }
   });
   let presenceTimer = null;
   let stopped = false;
+  let reconnectTimer = null;
+  let reconnectAttempt = 0;
+  let reconnectGeneration = 0;
+  let messageHealthy = false;
+  let presenceHealthy = false;
   let includeWindowTitles = Boolean(reportWindowTitles);
   let lastWindowsJson = "";
+
+  const purgeChannel = async (channel) => {
+    try {
+      await channel?.unsubscribe();
+    } catch {
+      // Channel already dead.
+    }
+    try {
+      await supabase.removeChannel?.(channel);
+    } catch {
+      // removeChannel unavailable (test doubles) or already removed.
+    }
+  };
+
+  const scheduleReconnect = (reason) => {
+    if (stopped) return;
+    if (reconnectTimer) return;
+    const generation = ++reconnectGeneration;
+    const delay = RECONNECT_BACKOFF_MS[Math.min(reconnectAttempt, RECONNECT_BACKOFF_MS.length - 1)];
+    reconnectAttempt += 1;
+    onStatus(`reconnect:scheduled:${reason}:${delay}ms`);
+    reconnectTimer = setTimeout(() => {
+      reconnectTimer = null;
+      void reconnect(generation);
+    }, delay);
+  };
+
+  const reconnect = async (generation) => {
+    if (stopped || generation !== reconnectGeneration) return;
+    messageHealthy = false;
+    presenceHealthy = false;
+    clearTimeout(presenceTimer);
+    presenceTimer = null;
+    await Promise.all([...ackChannels.keys()].map((targetId) => {
+      const entry = ackChannels.get(targetId);
+      ackChannels.delete(targetId);
+      return purgeChannel(entry?.channel);
+    }));
+    await purgeChannel(messageChannel);
+    await purgeChannel(presence);
+    messageChannel = supabase.channel(deviceChannel(userId, device.id), {
+      config: { private: true }
+    });
+    presence = supabase.channel(presenceChannel(userId), {
+      config: { private: true }
+    });
+    bindCoreChannels();
+    await subscribeCoreChannels();
+  };
+
+  const noteChannelHealth = () => {
+    if (messageHealthy && presenceHealthy && reconnectAttempt > 0) {
+      onStatus("reconnect:recovered");
+    }
+    if (messageHealthy && presenceHealthy) {
+      reconnectAttempt = 0;
+    }
+    onStatus(`health:${messageHealthy && presenceHealthy ? "online" : "degraded"}`);
+  };
 
   const trackPresence = async (force = false) => {
     const windows = await listWindows({ includeTitles: includeWindowTitles });
@@ -195,7 +265,7 @@ export async function startRealtimeAgent({
           if (ackChannels.get(targetDeviceId) === entry) {
             ackChannels.delete(targetDeviceId);
           }
-          await channel.unsubscribe();
+          await purgeChannel(channel);
           throw error;
         })
     };
@@ -210,43 +280,77 @@ export async function startRealtimeAgent({
     });
   };
 
-  messageChannel.on("broadcast", { event: "command" }, async ({ payload }) => {
-    const ackChannelPromise = (
-      isInsertTextMessage(payload, device.id) || isKeyMessage(payload, device.id)
-    )
-      ? getAckChannel(payload.source_device_id)
-      : null;
-    const result = await handleDesktopMessage({ payload, myDeviceId: device.id, output });
-    if (result.ack) {
-      const targetDeviceId = result.ack.target_device_id;
-      const ackChannel = await (ackChannelPromise || getAckChannel(targetDeviceId));
-      const sendStatus = await ackChannel.send({
-        type: "broadcast",
-        event: "ack",
-        payload: result.ack
-      });
-      if (sendStatus !== "ok") {
-        onStatus(`ack:${targetDeviceId}:${sendStatus}`);
+  const bindCoreChannels = () => {
+    messageChannel.on("broadcast", { event: "command" }, async ({ payload }) => {
+      const ackChannelPromise = (
+        isInsertTextMessage(payload, device.id) || isKeyMessage(payload, device.id)
+      )
+        ? getAckChannel(payload.source_device_id)
+        : null;
+      const result = await handleDesktopMessage({ payload, myDeviceId: device.id, output });
+      if (result.ack) {
+        const targetDeviceId = result.ack.target_device_id;
+        try {
+          const ackChannel = await (ackChannelPromise || getAckChannel(targetDeviceId));
+          const sendStatus = await ackChannel.send({
+            type: "broadcast",
+            event: "ack",
+            payload: result.ack
+          });
+          if (sendStatus !== "ok") {
+            onStatus(`ack:${targetDeviceId}:${sendStatus}`);
+          }
+        } catch (error) {
+          // 命令已执行（文本已粘贴），只是回执发不出去。绝不能让这个
+          // rejection 沉默地炸掉 broadcast 回调——那会让手机端误报失败。
+          onStatus(`ack:${targetDeviceId}:${error instanceof Error ? error.message : String(error)}`);
+        }
       }
-    }
-  });
+    });
 
-  presence.on("presence", { event: "join" }, ({ key }) => {
-    if (key && key !== device.id) {
-      warmupAckChannel(key);
-    }
-  });
+    presence.on("presence", { event: "join" }, ({ key }) => {
+      if (key && key !== device.id) {
+        warmupAckChannel(key);
+      }
+    });
+  };
 
-  await messageChannel.subscribe((status) => onStatus(`message:${status}`));
-  await presence.subscribe(async (status) => {
-    onStatus(`presence:${status}`);
-    if (status === "SUBSCRIBED") {
-      await trackPresence(true);
-      schedulePresenceRefresh();
-    }
-  });
+  const subscribeCoreChannels = async () => {
+    await messageChannel.subscribe((status) => {
+      onStatus(`message:${status}`);
+      if (status === "SUBSCRIBED") {
+        messageHealthy = true;
+        noteChannelHealth();
+      } else if (FATAL_CHANNEL_STATUSES.includes(status)) {
+        messageHealthy = false;
+        scheduleReconnect(`message:${status}`);
+      }
+    });
+    await presence.subscribe(async (status) => {
+      onStatus(`presence:${status}`);
+      if (status === "SUBSCRIBED") {
+        presenceHealthy = true;
+        noteChannelHealth();
+        await trackPresence(true);
+        schedulePresenceRefresh();
+      } else if (FATAL_CHANNEL_STATUSES.includes(status)) {
+        presenceHealthy = false;
+        noteChannelHealth();
+        scheduleReconnect(`presence:${status}`);
+      }
+    });
+  };
+
+  bindCoreChannels();
+  await subscribeCoreChannels();
 
   return {
+    getHealth() {
+      return { online: messageHealthy && presenceHealthy && !stopped };
+    },
+    forceReconnect(reason = "manual") {
+      scheduleReconnect(reason);
+    },
     async setReportWindowTitles(enabled) {
       includeWindowTitles = Boolean(enabled);
       lastWindowsJson = "";
@@ -254,13 +358,16 @@ export async function startRealtimeAgent({
     },
     async stop() {
       stopped = true;
+      reconnectGeneration += 1;
       clearTimeout(presenceTimer);
+      clearTimeout(reconnectTimer);
       presenceTimer = null;
-      await messageChannel.unsubscribe();
-      await presence.unsubscribe();
-      await Promise.all(
-        [...ackChannels.values()].map(({ channel }) => channel.unsubscribe())
-      );
+      reconnectTimer = null;
+      await Promise.all([
+        purgeChannel(messageChannel),
+        purgeChannel(presence),
+        ...[...ackChannels.values()].map(({ channel }) => purgeChannel(channel))
+      ]);
       ackChannels.clear();
     }
   };
