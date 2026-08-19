@@ -9,7 +9,7 @@ import { transcribeAudio } from "../asr/transcriber.js";
 import { createAsrTextOutputBuffer } from "../input/asrTextOutputBuffer.js";
 import { resolveAutoPaste } from "./uploadOptions.js";
 
-export function createUploadRouter({ config, wsHub, tmpDir }) {
+export function createUploadRouter({ config, wsHub, tmpDir, edgeAsr }) {
   const router = express.Router();
   const asrOutputBuffer = createAsrTextOutputBuffer({
     onFlush: ({ text, output }) => {
@@ -71,7 +71,7 @@ export function createUploadRouter({ config, wsHub, tmpDir }) {
         message: "正在识别..."
       });
 
-      const rawText = await transcribeAudio({ filePath, tmpDir }, config);
+      const rawText = await transcribeAudio({ filePath, tmpDir }, config, edgeAsr);
       const bufferResult = await asrOutputBuffer.handleText(rawText, {
         autoPaste,
         targetWindow,

@@ -26,6 +26,11 @@ import { listWindows } from "./input/windowManager.js";
  * @param {number} [options.httpPort] HTTP 探测/重定向端口（默认 HTTPS 端口 + 1）
  * @param {string} [options.certsDir] 证书目录（可写路径；默认 rootDir/certs。Electron 打包后必须传 userData 下的目录）
  * @param {string} [options.tmpDir] 上传临时目录（可写路径；默认 rootDir/tmp。Electron 打包后必须传 userData 下的目录）
+ * @param {() => Promise<string|null>} [options.getAccessToken] Supabase 会话 access token 提供者
+ *   （Electron 内嵌时来自 agent 匿名会话）。提供后，本地缺少腾讯云凭证时上传识别
+ *   改走 Edge 逐次签名直连通道（密钥永不出云端）。
+ * @param {string} [options.supabaseUrl] Edge 所在 Supabase URL（默认 config.supabaseUrl）
+ * @param {string} [options.supabaseAnonKey] Supabase anon key（默认 config.supabaseAnonKey）
  * @param {object} [options.logger] 错误日志输出（默认 console）
  * @returns {Promise<{port: number, httpPort: number, close: () => Promise<void>, getEndpoints: () => Array<{host: string, port: number, httpPort: number}>}>}
  */
@@ -36,11 +41,23 @@ export async function createLanServer({
   httpPort,
   certsDir,
   tmpDir,
+  getAccessToken,
+  supabaseUrl,
+  supabaseAnonKey,
   logger = console
 } = {}) {
   if (!rootDir) {
     throw new Error("createLanServer requires rootDir");
   }
+
+  // Edge 直连识别上下文（Task 5）：只在本地缺少腾讯云凭证时由 transcriber 启用。
+  const edgeAsr = (typeof getAccessToken === "function" && (supabaseUrl ?? config.supabaseUrl))
+    ? {
+      getAccessToken,
+      supabaseUrl: supabaseUrl ?? config.supabaseUrl,
+      supabaseAnonKey: supabaseAnonKey ?? config.supabaseAnonKey
+    }
+    : null;
 
   const publicDir = path.join(rootDir, "src/public");
   const uploadTmpDir = tmpDir ?? path.join(rootDir, "tmp");
@@ -152,7 +169,7 @@ export async function createLanServer({
   const wsHub = createWebSocketHub(tlsServer, {
     authorize: (req) => pairing.isAuthorizedRequest(req)
   });
-  app.use("/api", createUploadRouter({ config, wsHub, tmpDir: uploadTmpDir }));
+  app.use("/api", createUploadRouter({ config, wsHub, tmpDir: uploadTmpDir, edgeAsr }));
   let resolvedHttpPort;
   try {
     resolvedHttpPort = await listen(redirectServer, httpPort ?? resolvedPort + 1);

@@ -67,10 +67,24 @@ async function startLanServer() {
     // 证书和上传临时目录必须写到可写的 userData（asar 只读）。
     const rootDir = app.isPackaged ? app.getAppPath() : join(__dirname, '..', '..', '..');
     const userData = app.getPath('userData');
+    // Edge 逐次签名直连识别（Task 5）：LAN 上传识别通过桌面端匿名会话向
+    // Edge 申请一次性腾讯云签名，密钥永不出云端，也不打包进桌面安装包。
+    const desktopConfig = getDesktopPublicConfig();
     lanServer = await createLanServer({
       rootDir,
       certsDir: join(userData, 'certs'),
-      tmpDir: join(userData, 'tmp')
+      tmpDir: join(userData, 'tmp'),
+      supabaseUrl: desktopConfig.supabaseUrl,
+      supabaseAnonKey: desktopConfig.supabaseAnonKey,
+      getAccessToken: async () => {
+        try {
+          const supabase = desktopClient || await getOrCreateDesktopClient();
+          const { data } = await supabase.auth.getSession();
+          return data?.session?.access_token || null;
+        } catch {
+          return null;
+        }
+      }
     });
     log('lan-started', { port: lanServer.port, httpPort: lanServer.httpPort, endpoints: lanServer.getEndpoints() });
     console.log(`VoiceBridge LAN pairing code: ${lanServer.pairingCode}`);

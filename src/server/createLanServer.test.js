@@ -202,3 +202,166 @@ test("createLanServer honors separate writable certsDir and tmpDir", async () =>
   await assert.rejects(fs.readdir(path.join(rootDir, "certs")), /ENOENT/);
   await assert.rejects(fs.readdir(path.join(rootDir, "tmp")), /ENOENT/);
 });
+
+// --- Task 5: Edge 签名直连识别通过 createLanServer 选项打通 ---
+
+import { execFile } from "node:child_process";
+import { promisify } from "node:util";
+import { spawn } from "node:child_process";
+
+const execFileAsync = promisify(execFile);
+
+async function hasFfmpeg() {
+  try {
+    await execFileAsync("ffmpeg", ["-version"], { timeout: 5000 });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function startStubEdgeServer() {
+  const seen = { issue: null, report: null, tencentBody: null };
+  let tencentUrl = "";
+  const server = http.createServer((req, res) => {
+    const chunks = [];
+    req.on("data", (chunk) => chunks.push(chunk));
+    req.on("end", () => {
+      const raw = Buffer.concat(chunks);
+      if (req.url === "/functions/v1/issue-asr-request") {
+        seen.issue = { headers: req.headers, body: JSON.parse(raw.toString("utf8")) };
+        res.setHeader("Content-Type", "application/json");
+        res.end(JSON.stringify({
+          ok: true,
+          request_id: "req-lan-1",
+          url: `${tencentUrl}/asr`,
+          headers: { "X-TC-Test": "signed" },
+          expires_at: Math.floor(Date.now() / 1000) + 300
+        }));
+        return;
+      }
+      if (req.url === "/functions/v1/report-asr-result") {
+        seen.report = JSON.parse(raw.toString("utf8"));
+        res.setHeader("Content-Type", "application/json");
+        res.end(JSON.stringify({ ok: true }));
+        return;
+      }
+      if (req.url === "/asr") {
+        seen.tencentBody = raw;
+        res.setHeader("Content-Type", "application/json");
+        res.end(JSON.stringify({ code: 0, flash_result: [{ text: "嗯，你好局域网" }] }));
+        return;
+      }
+      res.statusCode = 404;
+      res.end("{}");
+    });
+  });
+  return {
+    server,
+    seen,
+    setTencentUrl: (url) => { tencentUrl = url; },
+    listen: () => new Promise((resolve) => server.listen(0, "127.0.0.1", () => resolve(server.address().port)))
+  };
+}
+
+function makeSilenceWav() {
+  // 16kHz / 16bit / mono 静音 WAV（ffmpeg 可直接读取）。
+  const sampleRate = 16000;
+  const samples = 1600;
+  const data = Buffer.alloc(samples * 2);
+  const header = Buffer.alloc(44);
+  header.write("RIFF", 0);
+  header.writeUInt32LE(36 + data.length, 4);
+  header.write("WAVE", 8);
+  header.write("fmt ", 12);
+  header.writeUInt32LE(16, 16);
+  header.writeUInt16LE(1, 20);
+  header.writeUInt16LE(1, 22);
+  header.writeUInt32LE(sampleRate, 24);
+  header.writeUInt32LE(sampleRate * 2, 28);
+  header.writeUInt16LE(2, 32);
+  header.writeUInt16LE(16, 34);
+  header.write("data", 36);
+  header.writeUInt32LE(data.length, 40);
+  return Buffer.concat([header, data]);
+}
+
+function httpsPostMultipart(port, pathname, fieldName, filename, contentType, fileBuffer) {
+  const boundary = `----vb${Date.now()}`;
+  const parts = [
+    `--${boundary}\r\nContent-Disposition: form-data; name="${fieldName}"; filename="${filename}"\r\nContent-Type: ${contentType}\r\n\r\n`,
+    fileBuffer,
+    `\r\n--${boundary}--\r\n`
+  ];
+  const body = Buffer.concat(parts.map((part) => (Buffer.isBuffer(part) ? part : Buffer.from(part))));
+  return new Promise((resolve, reject) => {
+    const req = https.request(
+      {
+        host: "127.0.0.1",
+        port,
+        path: pathname,
+        method: "POST",
+        headers: {
+          "Content-Type": `multipart/form-data; boundary=${boundary}`,
+          "Content-Length": body.length
+        },
+        rejectUnauthorized: false
+      },
+      (res) => {
+        let data = "";
+        res.on("data", (chunk) => { data += chunk; });
+        res.on("end", () => {
+          let parsed = null;
+          try { parsed = JSON.parse(data); } catch { /* ignore */ }
+          resolve({ status: res.statusCode, body: parsed });
+        });
+      }
+    );
+    req.on("error", reject);
+    req.end(body);
+  });
+}
+
+test("createLanServer routes uploads through the edge-signed channel when local tencent credentials are absent", { skip: !(await hasFfmpeg()) }, async () => {
+  const rootDir = await fs.mkdtemp(path.join(os.tmpdir(), "voicebridge-lan-edge-"));
+  const stub = startStubEdgeServer();
+  const stubPort = await stub.listen();
+  stub.setTencentUrl(`http://127.0.0.1:${stubPort}`);
+  let tokenCalls = 0;
+
+  const lan = await createLanServer({
+    rootDir,
+    port: 0,
+    config: { asrProvider: "tencent", tencentSecretId: "", tencentSecretKey: "" },
+    supabaseUrl: `http://127.0.0.1:${stubPort}`,
+    supabaseAnonKey: "anon-test",
+    getAccessToken: async () => {
+      tokenCalls += 1;
+      return "lan-token";
+    }
+  });
+
+  try {
+    const wav = makeSilenceWav();
+    const result = await httpsPostMultipart(lan.port, "/api/upload", "audio", "voice.wav", "audio/wav", wav);
+
+    assert.equal(result.status, 200, JSON.stringify(result.body));
+    assert.equal(result.body.ok, true);
+    // 语气词清理与 Edge/客户端版本一致
+    assert.equal(result.body.text, "你好局域网");
+
+    assert.equal(tokenCalls, 1, "token provider is plumbed through createLanServer options");
+    assert.equal(stub.seen.issue.headers.authorization, "Bearer lan-token");
+    assert.equal(stub.seen.issue.headers.apikey, "anon-test");
+    assert.ok(stub.seen.issue.body.duration_ms > 0);
+    assert.ok(stub.seen.tencentBody && stub.seen.tencentBody.length > 44, "converted wav posted to signed tencent url");
+    assert.deepEqual(stub.seen.report, {
+      request_id: "req-lan-1",
+      status: "success",
+      text_length: "你好局域网".length
+    });
+  } finally {
+    await lan.close();
+    await new Promise((resolve) => stub.server.close(resolve));
+  }
+});
