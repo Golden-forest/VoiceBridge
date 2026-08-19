@@ -7,6 +7,7 @@ import { createFileAuthStorage } from '../authStorage.js';
 import { createAgentLogger } from './agentLogger.js';
 import { loadOrCreateDevice } from '../deviceStore.js';
 import { createAgentClient, startRealtimeAgent } from '../realtimeAgent.js';
+import { buildLanState, createLanCodeWatcher } from './lanState.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const bundledSupabaseUrl = 'https://gqxxknusznbunkiznnal.supabase.co';
@@ -20,6 +21,7 @@ let pairingPollTimer = null;
 let initializing = null;
 let agentLogger = null;
 let lanServer = null;
+let lanWatcher = null;
 
 function log(event, detail) {
   agentLogger?.log(event, detail);
@@ -88,6 +90,8 @@ async function startLanServer() {
     });
     log('lan-started', { port: lanServer.port, httpPort: lanServer.httpPort, endpoints: lanServer.getEndpoints() });
     console.log(`VoiceBridge LAN pairing code: ${lanServer.pairingCode}`);
+    startLanWatcher();
+    sendLanState();
     return lanServer;
   } catch (error) {
     lanServer = null;
@@ -100,6 +104,9 @@ async function stopLanServer() {
   if (!lanServer) return;
   const server = lanServer;
   lanServer = null;
+  lanWatcher?.stop();
+  lanWatcher = null;
+  sendLanState();
   try {
     await server.close();
     log('lan-stopped');
@@ -146,6 +153,22 @@ function sendAgentStatus(status) {
 function sendDesktopState(state) {
   mainWindow?.webContents.send('voicebridge:desktop-state', state);
   return state;
+}
+
+// LAN 配对码会轮换（每 10 分钟 TTL + 成功配对后一次性重置），渲染窗口需要
+// 跟随展示。轮询 lanServer.pairingCode，仅在变化时推送；服务未运行时推
+// running:false 让渲染端隐藏局域网区块。
+function sendLanState() {
+  mainWindow?.webContents.send('voicebridge:lan-state', buildLanState(lanServer));
+}
+
+function startLanWatcher() {
+  if (lanWatcher) return;
+  lanWatcher = createLanCodeWatcher({
+    getState: () => buildLanState(lanServer),
+    send: sendLanState,
+    intervalMs: 3000
+  });
 }
 
 async function getOrCreateDesktopClient() {
@@ -401,6 +424,7 @@ ipcMain.handle('voicebridge:public-config', () => {
     hasSupabaseAnonKey: Boolean(config.supabaseAnonKey)
   };
 });
+ipcMain.handle('voicebridge:lan-state', () => buildLanState(lanServer));
 ipcMain.handle('voicebridge:initialize', () => initializeDesktop());
 ipcMain.handle('voicebridge:refresh-pairing', () => initializeDesktopInternal());
 ipcMain.handle('voicebridge:unpair', () => unpairDesktop());

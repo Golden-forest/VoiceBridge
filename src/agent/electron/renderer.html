@@ -158,6 +158,21 @@
         width: 100%;
         margin-top: 2px;
       }
+      .lan-block {
+        display: grid;
+        justify-items: center;
+        gap: 6px;
+        width: 100%;
+        border-top: 1px solid #eee9ef;
+        padding-top: 12px;
+      }
+      .lan-block[hidden] { display: none; }
+      .lan-block .lan-code {
+        color: #201b24;
+        font-size: 30px;
+        font-weight: 800;
+        letter-spacing: .18em;
+      }
       .privacy-setting {
         display: flex;
         width: 100%;
@@ -222,6 +237,11 @@
         <h2>电脑端已上线</h2>
         <p class="device-name" id="onlineDeviceName"></p>
         <p class="hint">现在可以在手机端录音。转写完成后会自动发送并粘贴到这台电脑。</p>
+        <div id="lanSection" class="lan-block" hidden>
+          <p class="eyebrow">局域网输入</p>
+          <p class="device-name lan-code" id="lanPairingCode"></p>
+          <p class="hint">手机访问同一 Wi-Fi 下的电脑页面，输入上面的 6 位配对码即可使用。配对码会自动更换。</p>
+        </div>
         <label class="privacy-setting">
           <span>向手机显示完整窗口标题</span>
           <input id="reportWindowTitles" type="checkbox">
@@ -255,6 +275,13 @@
       const reportWindowTitles = document.querySelector('#reportWindowTitles');
       const phoneUrl = document.querySelector('#phoneUrl');
       const messageEl = document.querySelector('#message');
+      const lanSection = document.querySelector('#lanSection');
+      const lanPairingCode = document.querySelector('#lanPairingCode');
+
+      function renderLanState(state) {
+        lanSection.hidden = !state?.running;
+        lanPairingCode.textContent = state?.pairingCode || '';
+      }
 
       function setStatus(message, isError = false) {
         statusEl.textContent = message;
@@ -289,6 +316,8 @@
         phoneUrl.href = config.webAppUrl;
       });
       window.voicebridge?.onDesktopState(renderState);
+      window.voicebridge?.onLanState(renderLanState);
+      window.voicebridge?.lanState().then(renderLanState).catch(() => {});
       window.voicebridge?.onAgentStatus((status) => {
         const text = String(status);
         // 只有双通道健康才显示在线；通道异常立即降级，不再"见过一次

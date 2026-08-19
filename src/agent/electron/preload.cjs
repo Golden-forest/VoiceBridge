@@ -7,6 +7,7 @@ contextBridge.exposeInMainWorld('voicebridge', {
   refreshPairing: () => ipcRenderer.invoke('voicebridge:refresh-pairing'),
   unpair: () => ipcRenderer.invoke('voicebridge:unpair'),
   updateSettings: (settings) => ipcRenderer.invoke('voicebridge:update-settings', settings),
+  lanState: () => ipcRenderer.invoke('voicebridge:lan-state'),
   onAgentStatus: (callback) => {
     const listener = (_event, status) => callback(status);
     ipcRenderer.on('voicebridge:agent-status', listener);
@@ -16,5 +17,10 @@ contextBridge.exposeInMainWorld('voicebridge', {
     const listener = (_event, state) => callback(state);
     ipcRenderer.on('voicebridge:desktop-state', listener);
     return () => ipcRenderer.removeListener('voicebridge:desktop-state', listener);
+  },
+  onLanState: (callback) => {
+    const listener = (_event, state) => callback(state);
+    ipcRenderer.on('voicebridge:lan-state', listener);
+    return () => ipcRenderer.removeListener('voicebridge:lan-state', listener);
   }
 });

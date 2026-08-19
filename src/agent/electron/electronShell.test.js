@@ -49,6 +49,13 @@ test('Electron main process uses a safe BrowserWindow shell', () => {
   assert.match(mainJs, /window-all-closed/);
 });
 
+test('Electron main process surfaces LAN pairing state to the renderer', () => {
+  assert.match(mainJs, /buildLanState/);
+  assert.match(mainJs, /createLanCodeWatcher/);
+  assert.match(mainJs, /'voicebridge:lan-state'/);
+  assert.match(mainJs, /lanWatcher\?\.stop\(\)/);
+});
+
 test('preload exposes a minimal VoiceBridge bridge API', () => {
   assert.match(preloadJs, /require\('electron'\)/);
   assert.doesNotMatch(preloadJs, /from 'electron'/);
@@ -58,6 +65,8 @@ test('preload exposes a minimal VoiceBridge bridge API', () => {
   assert.match(preloadJs, /refreshPairing/);
   assert.match(preloadJs, /unpair/);
   assert.match(preloadJs, /onAgentStatus/);
+  assert.match(preloadJs, /lanState:\s*\(\)\s*=>\s*ipcRenderer\.invoke\('voicebridge:lan-state'\)/);
+  assert.match(preloadJs, /onLanState/);
 });
 
 test('renderer is a Chinese QR pairing and status shell with a content security policy', () => {
@@ -66,6 +75,10 @@ test('renderer is a Chinese QR pairing and status shell with a content security 
   assert.match(rendererHtml, /连接状态/);
   assert.match(rendererHtml, /刷新二维码/);
   assert.match(rendererHtml, /voicebridge\?\.initialize/);
+  assert.match(rendererHtml, /局域网输入/);
+  assert.match(rendererHtml, /id="lanPairingCode"/);
+  assert.match(rendererHtml, /lanSection\.hidden\s*=\s*!state\?\.running/);
+  assert.match(rendererHtml, /onLanState\(renderLanState\)/);
 });
 
 test('Electron packaging writes a bundled public Supabase config', () => {
