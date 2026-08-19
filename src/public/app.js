@@ -1789,6 +1789,9 @@ function setRecordProcessing() {
 }
 
 function currentMaxAudioMs() {
+  // LAN 页面没有云端登录态，不查 plan；本地服务器只限制 25MB 文件大小，
+  // 固定使用与付费档一致的 60 秒上限。
+  if (!isCloudMode) return PLAN_LIMITS.pro.maxAudioMs;
   return getPlanLimit(currentUserPlan).maxAudioMs;
 }
 

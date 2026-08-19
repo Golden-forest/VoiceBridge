@@ -213,6 +213,64 @@ test("startRealtimeAgent reuses ack channels and cleans them up", async () => {
   ].sort());
 });
 
+test("startRealtimeAgent warms ack channel by deviceId, not presence key", async () => {
+  const channels = new Map();
+  const createdTopics = [];
+  let joinHandler;
+
+  const supabase = {
+    channel(topic) {
+      createdTopics.push(topic);
+      if (!channels.has(topic)) {
+        channels.set(topic, {
+          topic,
+          on(eventType, filter, handler) {
+            if (eventType === "presence" && filter.event === "join") {
+              joinHandler = handler;
+            }
+            return this;
+          },
+          async subscribe(callback) {
+            await callback?.("SUBSCRIBED");
+            return "ok";
+          },
+          async track() {
+            return "ok";
+          },
+          async send() {
+            return "ok";
+          },
+          async unsubscribe() {
+            return "ok";
+          }
+        });
+      }
+      return channels.get(topic);
+    }
+  };
+
+  const agent = await startRealtimeAgent({
+    supabase,
+    userId: "user-1",
+    device: { id: "desktop-1", name: "Desk", platform: "darwin" },
+    listWindows: async () => [],
+    output: async () => ({ copied: true, pasted: true, pasteError: null })
+  });
+
+  // 手机重连后 presence key 每次都是新的随机值，但 payload 里的 deviceId 稳定。
+  joinHandler({ key: "random-key-1", newPresences: [{ deviceId: "phone-1" }] });
+  await new Promise((resolve) => setImmediate(resolve));
+  joinHandler({ key: "random-key-2", newPresences: [{ deviceId: "phone-1" }] });
+  await new Promise((resolve) => setImmediate(resolve));
+
+  try {
+    const phoneTopics = createdTopics.filter((topic) => topic === "device:user-1:phone-1");
+    assert.equal(phoneTopics.length, 1, `expected one warmup channel, got ${createdTopics.join(", ")}`);
+  } finally {
+    await agent.stop();
+  }
+});
+
 test("startRealtimeAgent never overlaps window presence scans", async () => {
   let activeScans = 0;
   let maxActiveScans = 0;

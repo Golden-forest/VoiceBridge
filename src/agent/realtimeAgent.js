@@ -314,9 +314,16 @@ export async function startRealtimeAgent({
       }
     });
 
-    presence.on("presence", { event: "join" }, ({ key }) => {
-      if (key && key !== device.id) {
-        warmupAckChannel(key);
+    // join 事件的 key 是 Realtime 随机生成的 presence key，每次重连都会变；
+    // 真正稳定的对端 ID 在 payload 的 deviceId 里。用 key 预热会在每次
+    // 对端重连时创建一个指向不存在设备的新通道，channel join 频率超标后
+    // 服务器会断开整个连接，形成每秒重连的死循环。
+    presence.on("presence", { event: "join" }, ({ newPresences }) => {
+      for (const entry of newPresences ?? []) {
+        const deviceId = entry?.deviceId;
+        if (deviceId && deviceId !== device.id) {
+          warmupAckChannel(deviceId);
+        }
       }
     });
   };
