@@ -7,6 +7,7 @@ import { createFileAuthStorage } from '../authStorage.js';
 import { createAgentLogger } from './agentLogger.js';
 import { loadOrCreateDevice } from '../deviceStore.js';
 import { createAgentClient, startRealtimeAgent } from '../realtimeAgent.js';
+import { createLanServer } from '../../server/createLanServer.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const bundledSupabaseUrl = 'https://gqxxknusznbunkiznnal.supabase.co';
@@ -19,6 +20,7 @@ let activeAgent = null;
 let pairingPollTimer = null;
 let initializing = null;
 let agentLogger = null;
+let lanServer = null;
 
 function log(event, detail) {
   agentLogger?.log(event, detail);
@@ -27,18 +29,53 @@ function log(event, detail) {
 function loadDesktopSettings() {
   try {
     const parsed = JSON.parse(readFileSync(join(app.getPath('userData'), 'settings.json'), 'utf8'));
-    return { reportWindowTitles: Boolean(parsed.reportWindowTitles) };
+    return {
+      reportWindowTitles: Boolean(parsed.reportWindowTitles),
+      lanMode: parsed.lanMode !== false
+    };
   } catch {
-    return { reportWindowTitles: false };
+    return { reportWindowTitles: false, lanMode: true };
   }
 }
 
 function saveDesktopSettings(settings) {
   writeFileSync(
     join(app.getPath('userData'), 'settings.json'),
-    JSON.stringify({ reportWindowTitles: Boolean(settings.reportWindowTitles) }, null, 2),
+    JSON.stringify({
+      reportWindowTitles: Boolean(settings.reportWindowTitles),
+      lanMode: settings.lanMode !== false
+    }, null, 2),
     'utf8'
   );
+}
+
+// 云模式下内嵌 LAN 服务：启动失败只记录日志并静默降级，绝不影响云链路。
+async function startLanServer() {
+  if (lanServer) return lanServer;
+  const settings = loadDesktopSettings();
+  if (!settings.lanMode) return null;
+  try {
+    const rootDir = app.isPackaged ? app.getPath('userData') : join(__dirname, '..', '..', '..');
+    lanServer = await createLanServer({ rootDir });
+    log('lan-started', { port: lanServer.port, httpPort: lanServer.httpPort, endpoints: lanServer.getEndpoints() });
+    return lanServer;
+  } catch (error) {
+    lanServer = null;
+    log('lan-start-failed', { error: error instanceof Error ? error.message : String(error) });
+    return null;
+  }
+}
+
+async function stopLanServer() {
+  if (!lanServer) return;
+  const server = lanServer;
+  lanServer = null;
+  try {
+    await server.close();
+    log('lan-stopped');
+  } catch (error) {
+    log('lan-stop-failed', { error: error instanceof Error ? error.message : String(error) });
+  }
 }
 
 function getDesktopPublicConfig() {
@@ -265,6 +302,10 @@ async function goOnline({ supabase, userId, device }) {
     reportWindowTitles: settings.reportWindowTitles,
     onStatus: sendAgentStatus
   });
+  if (settings.lanMode && !lanServer) {
+    await startLanServer();
+  }
+  await runtime.setLanEndpoints?.(lanServer ? lanServer.getEndpoints() : []);
   activeAgent = { supabase, runtime, device, userId };
   return sendDesktopState({
     mode: 'online',
@@ -343,6 +384,7 @@ app.whenReady().then(() => {
   log('app-start', { version: app.getVersion(), platform: process.platform });
   createWindow();
   wireLifecycleEvents();
+  void startLanServer();
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();
   });
@@ -362,4 +404,8 @@ app.on('window-all-closed', () => {
   clearPairingPoll();
   void stopRealtimeOnly();
   if (process.platform !== 'darwin') app.quit();
+});
+
+app.on('will-quit', () => {
+  void stopLanServer();
 });

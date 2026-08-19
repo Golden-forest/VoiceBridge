@@ -1,0 +1,140 @@
+import http from "node:http";
+import https from "node:https";
+import path from "node:path";
+import fs from "node:fs/promises";
+
+import express from "express";
+
+import { buildPublicConfig, loadConfig } from "./config.js";
+import { listLocalIps, getLocalIp } from "./network/getLocalIp.js";
+import { createUploadRouter } from "./routes/upload.js";
+import { createCommandsRouter } from "./routes/commands.js";
+import { createWebSocketHub } from "./ws.js";
+import { ensureCertificates } from "./certs.js";
+import { listWindows } from "./input/windowManager.js";
+
+/**
+ * 可嵌入的 LAN 服务工厂：构建 HTTPS 主服务（自签名证书）+ WS hub +
+ * HTTP 探测/重定向服务。供 `node src/server/index.js`（独立运行）和
+ * Electron 云模式桌面端（内嵌）共用。
+ *
+ * @param {object} [options]
+ * @param {string} options.rootDir 项目根目录（certs / public / shared 相对此目录）
+ * @param {object} [options.config] 已加载的配置（默认 loadConfig()）
+ * @param {number} [options.port] HTTPS 端口（默认 config.port；0 = 随机分配）
+ * @param {number} [options.httpPort] HTTP 探测/重定向端口（默认 HTTPS 端口 + 1）
+ * @param {object} [options.logger] 错误日志输出（默认 console）
+ * @returns {Promise<{port: number, httpPort: number, close: () => Promise<void>, getEndpoints: () => Array<{host: string, port: number, httpPort: number}>}>}
+ */
+export async function createLanServer({
+  rootDir,
+  config = loadConfig(),
+  port,
+  httpPort,
+  logger = console
+} = {}) {
+  if (!rootDir) {
+    throw new Error("createLanServer requires rootDir");
+  }
+
+  const publicDir = path.join(rootDir, "src/public");
+  const tmpDir = path.join(rootDir, "tmp");
+  await fs.mkdir(tmpDir, { recursive: true });
+
+  const localIp = getLocalIp();
+  const { key, cert } = await ensureCertificates(rootDir, { localIp });
+
+  // ---- HTTPS 主服务 ----
+  const app = express();
+  const tlsServer = https.createServer({ key, cert }, app);
+
+  app.use(express.json());
+  app.use(express.static(publicDir, { maxAge: "7d", etag: true }));
+  app.use("/shared", express.static(path.join(rootDir, "src/shared")));
+
+  app.get("/config.js", (_req, res) => {
+    res.type("application/javascript");
+    res.set("Cache-Control", "no-store");
+    res.send(`window.__VB_CONFIG = ${JSON.stringify(buildPublicConfig(config))};`);
+  });
+
+  app.get("/api/health", (_req, res) => {
+    res.json({
+      ok: true,
+      app: "VoiceBridge",
+      autoPaste: config.autoPaste,
+      asrProvider: config.asrProvider,
+      tencentAsrEngServiceType: config.tencentAsrEngServiceType,
+      hasTencentCredentials: Boolean(config.tencentSecretId && config.tencentSecretKey)
+    });
+  });
+  app.get("/api/windows", async (_req, res) => {
+    try {
+      const windows = await listWindows();
+      res.json({ ok: true, windows });
+    } catch {
+      res.json({ ok: true, windows: [] });
+    }
+  });
+  app.use("/api", createCommandsRouter());
+
+  // ---- HTTP 探测 / 重定向服务 ----
+  // 云模式 PWA（https 页面）无法 fetch 自签名 HTTPS，但可以探测这个
+  // 明文 HTTP 端口：/api/health 返回 200 证明桌面端可达。
+  const redirectApp = express();
+  redirectApp.get("/api/health", (_req, res) => {
+    res.json({ ok: true, app: "VoiceBridge", lan: true });
+  });
+  redirectApp.use((req, res) => {
+    const allowedHosts = [`localhost:${resolvedPort}`, `127.0.0.1:${resolvedPort}`, `${getLocalIp()}:${resolvedPort}`];
+    const host = req.headers.host;
+    const safeHost = allowedHosts.includes(host) ? host : `localhost:${resolvedPort}`;
+    const safePath = req.url.replace(/^\/+/, "/");
+    res.redirect(301, `https://${safeHost}${safePath}`);
+  });
+  const redirectServer = http.createServer(redirectApp);
+
+  const listen = (server, listenPort) =>
+    new Promise((resolve, reject) => {
+      server.once("error", reject);
+      server.listen(listenPort, "0.0.0.0", () => {
+        server.off("error", reject);
+        resolve(server.address().port);
+      });
+    });
+
+  const requestedPort = port ?? config.port;
+  const resolvedPort = await listen(tlsServer, requestedPort);
+  // 注意：WS hub 必须在 TLS listen 成功之后再挂载；端口冲突时提前挂载会让
+  // ws 触发第二次未被捕获的 EADDRINUSE（见 createLanServer.test.js）。
+  const wsHub = createWebSocketHub(tlsServer);
+  app.use("/api", createUploadRouter({ config, wsHub, tmpDir }));
+  const resolvedHttpPort = await listen(redirectServer, httpPort ?? resolvedPort + 1);
+
+  const closeServer = (server) =>
+    new Promise((resolve) => {
+      server.close(() => resolve());
+      // close() 只等待 keep-alive 连接排空；强制销毁以避免悬挂。
+      server.closeAllConnections?.();
+    });
+
+  return {
+    port: resolvedPort,
+    httpPort: resolvedHttpPort,
+    getEndpoints() {
+      return listLocalIps().map((host) => ({
+        host,
+        port: resolvedPort,
+        httpPort: resolvedHttpPort
+      }));
+    },
+    async close() {
+      try {
+        wsHub.close();
+      } catch (error) {
+        logger.error?.("LAN WebSocket hub close failed:", error?.message || error);
+      }
+      await Promise.all([closeServer(tlsServer), closeServer(redirectServer)]);
+    }
+  };
+}

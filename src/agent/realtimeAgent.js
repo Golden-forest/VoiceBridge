@@ -141,7 +141,8 @@ export async function startRealtimeAgent({
   reportWindowTitles = false,
   windowRefreshMs = 5000,
   appVersion,
-  listWindows = listCloudWindows
+  listWindows = listCloudWindows,
+  lanEndpoints = []
 }) {
   const ackChannels = new Map();
   let messageChannel = supabase.channel(deviceChannel(userId, device.id), {
@@ -158,6 +159,7 @@ export async function startRealtimeAgent({
   let messageHealthy = false;
   let presenceHealthy = false;
   let includeWindowTitles = Boolean(reportWindowTitles);
+  let currentLanEndpoints = normalizeLanEndpoints(lanEndpoints);
   let lastWindowsJson = "";
 
   const purgeChannel = async (channel) => {
@@ -221,10 +223,10 @@ export async function startRealtimeAgent({
 
   const trackPresence = async (force = false) => {
     const windows = await listWindows({ includeTitles: includeWindowTitles });
-    const windowsJson = JSON.stringify(windows);
+    const windowsJson = JSON.stringify({ windows, lanEndpoints: currentLanEndpoints });
     if (!force && windowsJson === lastWindowsJson) return;
     lastWindowsJson = windowsJson;
-    await presence.track({
+    const payload = {
       deviceId: device.id,
       name: device.name,
       platform: device.platform,
@@ -232,7 +234,11 @@ export async function startRealtimeAgent({
       protocolVersion: PROTOCOL_VERSION,
       status: "online",
       windows
-    });
+    };
+    if (currentLanEndpoints.length > 0) {
+      payload.lanEndpoints = currentLanEndpoints;
+    }
+    await presence.track(payload);
   };
 
   const schedulePresenceRefresh = () => {
@@ -356,6 +362,11 @@ export async function startRealtimeAgent({
       lastWindowsJson = "";
       await trackPresence(true);
     },
+    async setLanEndpoints(endpoints) {
+      currentLanEndpoints = normalizeLanEndpoints(endpoints);
+      lastWindowsJson = "";
+      await trackPresence(true);
+    },
     async stop() {
       stopped = true;
       reconnectGeneration += 1;
@@ -371,6 +382,18 @@ export async function startRealtimeAgent({
       ackChannels.clear();
     }
   };
+}
+
+function normalizeLanEndpoints(endpoints) {
+  if (!Array.isArray(endpoints)) return [];
+  return endpoints
+    .filter((endpoint) => endpoint && typeof endpoint.host === "string" && endpoint.host !== "")
+    .map((endpoint) => ({
+      host: endpoint.host,
+      port: Number(endpoint.port) || 0,
+      httpPort: Number(endpoint.httpPort) || 0
+    }))
+    .filter((endpoint) => endpoint.port > 0 && endpoint.httpPort > 0);
 }
 
 function subscribeRealtimeChannel(channel, label, onStatus, timeoutMs = 10000) {

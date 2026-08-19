@@ -270,6 +270,56 @@ test("loadOrCreateDevice rejects malformed device JSON", async () => {
   );
 });
 
+test("startRealtimeAgent includes lanEndpoints in presence and updates them via setLanEndpoints", async () => {
+  const trackedPayloads = [];
+  const makeChannel = (topic) => ({
+    topic,
+    on() { return this; },
+    async subscribe(callback) {
+      await callback?.("SUBSCRIBED");
+      return "ok";
+    },
+    async track(payload) {
+      trackedPayloads.push(payload);
+      return "ok";
+    },
+    async send() { return "ok"; },
+    async unsubscribe() { return "ok"; }
+  });
+  const supabase = {
+    channel: (topic) => makeChannel(topic)
+  };
+
+  const endpoints = [{ host: "192.168.1.42", port: 3000, httpPort: 3001 }];
+  const agent = await startRealtimeAgent({
+    supabase,
+    userId: "user-1",
+    device: { id: "desktop-1", name: "Desk", platform: "darwin" },
+    listWindows: async () => [],
+    lanEndpoints: endpoints
+  });
+
+  assert.deepEqual(trackedPayloads[trackedPayloads.length - 1].lanEndpoints, endpoints);
+
+  await agent.setLanEndpoints([{ host: "10.0.0.5", port: 4000, httpPort: 4001 }]);
+  assert.deepEqual(
+    trackedPayloads[trackedPayloads.length - 1].lanEndpoints,
+    [{ host: "10.0.0.5", port: 4000, httpPort: 4001 }]
+  );
+
+  await agent.setLanEndpoints([]);
+  assert.equal(
+    trackedPayloads[trackedPayloads.length - 1].lanEndpoints,
+    undefined,
+    "empty lanEndpoints should be omitted from presence"
+  );
+
+  await agent.setLanEndpoints([{ host: "", port: 1, httpPort: 2 }, { host: "bad" }]);
+  assert.equal(trackedPayloads[trackedPayloads.length - 1].lanEndpoints, undefined);
+
+  await agent.stop();
+});
+
 test("startRealtimeAgent rebuilds channels when CLOSED arrives and recovers health", async () => {
   const createdTopics = [];
   const statuses = [];
