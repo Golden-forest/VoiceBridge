@@ -1,6 +1,6 @@
 import fs from "node:fs/promises";
 
-import { convertToTencentWav } from "./audioConverter.js";
+import { convertToTencentWav, isTencentReadyWav } from "./audioConverter.js";
 import { transcribeWithTencentCloud } from "./tencentCloudTranscriber.js";
 import { resolveAsrChannel, transcribeViaEdgeAsr } from "./directEdgeAsr.js";
 import { removeFillerWords } from "./removeFillerWords.js";
@@ -29,7 +29,15 @@ export async function transcribeAudio({ filePath, tmpDir }, config, edgeAsr) {
     throw error;
   }
 
-  const converted = await convertToTencentWav(filePath, tmpDir);
+  // 手机端上传的已是 16kHz/16bit/mono WAV 时跳过 ffmpeg 转换直接透传，
+  // 打包版桌面 App 不再依赖 ffmpeg（transcriber 路径上的硬性外部依赖）。
+  let converted;
+  if (await isTencentReadyWav(filePath)) {
+    const stats = await fs.stat(filePath);
+    converted = { path: filePath, bytes: stats.size, passthrough: true };
+  } else {
+    converted = await convertToTencentWav(filePath, tmpDir);
+  }
   try {
     if (converted.bytes > TENCENT_MAX_AUDIO_BYTES) {
       const error = new Error(`Converted audio is too large: ${converted.bytes} bytes`);
@@ -50,6 +58,9 @@ export async function transcribeAudio({ filePath, tmpDir }, config, edgeAsr) {
     }
     return removeFillerWords(raw);
   } finally {
-    await fs.rm(converted.path, { force: true });
+    // 透传路径不删原始上传文件（upload 路由的 finally 负责清理）。
+    if (!converted.passthrough) {
+      await fs.rm(converted.path, { force: true });
+    }
   }
 }
