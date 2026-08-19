@@ -6,6 +6,16 @@ import { commandStore } from "./commandStore.js";
 import { isProtocolCompatible } from "./shared/protocol.js";
 import { PLAN_LIMITS, getPlanLimit, isAdminPlan } from "./shared/planLimits.js";
 import { t, getAvailableLocales, setLocale, getCurrentLocale, getIntlLocale } from "./i18n/i18n.js";
+import {
+  LanProbe,
+  LanHealthWatch,
+  buildLanUrl,
+  buildLanWsUrl,
+  createPairingClient,
+  isLanPageEnvironment,
+  lanTokenHeaders,
+  resolveCloudOrigin
+} from "./lanMode.js";
 
 // === Element References ===
 const appConfig = window.__VB_CONFIG || {};
@@ -17,10 +27,18 @@ const autoPasteEl = document.querySelector("#autoPaste");
 const toastEl = document.querySelector("#toast");
 const pageRefreshButton = document.querySelector("#pageRefreshButton");
 const cloudDeviceSelect = document.querySelector("#cloudDeviceSelect");
+const channelBadge = document.querySelector("#channelBadge");
 const billingActions = document.querySelector("#billingActions");
 const planBadge = document.querySelector("#planBadge");
 const accountDrawerBtn = document.querySelector("#accountDrawerBtn");
 const isCloudMode = appConfig.voicebridgeMode === "cloud";
+// LAN 页面模式：页面由桌面端 LAN 服务直接提供（非云端、非本机回环）
+const isLanPage = !isCloudMode && isLanPageEnvironment({
+  mode: appConfig.voicebridgeMode,
+  hostname: location.hostname
+});
+// 云端来源（跳转时的 ?cloud= 参数或本 origin 的 localStorage），失联回退用
+const cloudOrigin = isLanPage ? resolveCloudOrigin(window) : null;
 const lanCommandStore = {
   list: () => requestLanCommands("/api/commands"),
   create: (command) => requestLanCommands("/api/commands", {
@@ -45,7 +63,7 @@ let activeCloudPhoneDeviceId = "";
 async function requestLanCommands(path, init = {}) {
   const response = await fetch(path, {
     ...init,
-    headers: { "Content-Type": "application/json", ...(init.headers || {}) }
+    headers: { "Content-Type": "application/json", ...lanTokenHeaders(), ...(init.headers || {}) }
   });
   const payload = await response.json().catch(() => ({}));
   if (!response.ok) throw new Error(payload.error || t('commandStore.operationFailed'));
@@ -58,6 +76,146 @@ async function requestLanCommands(path, init = {}) {
     }));
   }
   return { ...payload, source: "user", requiredPlan: "free", locked: false };
+}
+
+// === LAN 通道（云端探测切换 / LAN 页面配对回退） ===
+// 云端页面：presence 的 lanEndpoints → 探测明文 HTTP 健康端口 → 展示"局域网可用"。
+// 所有探测失败均静默，绝不弹错误提示。
+let lanProbe = null;
+let lanAffordanceTimer = null;
+
+function updateCloudLanEndpoints(desktopDevices) {
+  if (!isCloudMode) return;
+  const endpoints = desktopDevices.flatMap((device) =>
+    Array.isArray(device.lanEndpoints) ? device.lanEndpoints : []);
+  if (!lanProbe) {
+    lanProbe = new LanProbe();
+    lanProbe.bindWindow(window);
+  }
+  lanProbe.setEndpoints(endpoints);
+  if (endpoints.length > 0) scheduleLanAffordanceRefresh();
+}
+
+function scheduleLanAffordanceRefresh() {
+  if (lanAffordanceTimer) return;
+  lanAffordanceTimer = setTimeout(async () => {
+    lanAffordanceTimer = null;
+    // 端点在探测期间可能已变化，重新读取当前列表
+    const endpoint = await lanProbe.getReachable().catch(() => null);
+    if (!isCloudMode || !channelBadge) return;
+    if (!endpoint) return; // 不可达时保持"云端"状态，静默
+    channelBadge.textContent = t('lan.channelLanAvailable');
+    channelBadge.classList.add("available");
+    channelBadge.title = t('lan.switchToLan');
+    channelBadge.onclick = () => {
+      location.assign(buildLanUrl(endpoint, location.origin));
+    };
+  }, 0);
+}
+
+function initChannelBadge() {
+  if (!channelBadge) return;
+  if (isCloudMode) {
+    channelBadge.classList.remove("hidden");
+    channelBadge.textContent = t('lan.channelCloud');
+    return;
+  }
+  if (!isLanPage) return;
+  channelBadge.classList.remove("hidden");
+  channelBadge.classList.add("lan");
+  channelBadge.textContent = t('lan.channelLan');
+  if (cloudOrigin) {
+    channelBadge.title = t('lan.backToCloud');
+    channelBadge.addEventListener("click", () => location.assign(cloudOrigin));
+  }
+}
+
+// LAN 页面：配对门禁。未配对时展示配对码输入框（复用 pairing-overlay 样式），
+// 配对成功后 token 已写入 localStorage，刷新页面以加载带 token 的 WS / 请求。
+function showLanPairingOverlay(pairing) {
+  const overlay = document.createElement("div");
+  overlay.className = "pairing-overlay";
+  const card = document.createElement("section");
+  card.className = "pairing-card";
+  card.setAttribute("role", "dialog");
+  card.setAttribute("aria-modal", "true");
+
+  const title = document.createElement("h2");
+  title.textContent = t('lan.pairTitle');
+  const hint = document.createElement("p");
+  hint.className = "pairing-description";
+  hint.textContent = t('lan.pairHint');
+  const input = document.createElement("input");
+  input.type = "text";
+  input.inputMode = "numeric";
+  input.autocomplete = "one-time-code";
+  input.placeholder = t('lan.pairCodePlaceholder');
+  input.style.cssText = "padding:12px 14px;border:1.5px solid #ddd;border-radius:12px;font-size:16px;text-align:center;letter-spacing:4px;";
+  const submitBtn = document.createElement("button");
+  submitBtn.className = "auth-submit-btn";
+  submitBtn.type = "button";
+  submitBtn.textContent = t('lan.pairSubmit');
+  const message = document.createElement("p");
+  message.className = "auth-message";
+  message.setAttribute("role", "status");
+
+  const submit = async () => {
+    const code = input.value.trim();
+    if (!code) return;
+    submitBtn.disabled = true;
+    try {
+      const result = await pairing.pair(code);
+      if (result.ok) {
+        message.textContent = t('lan.pairSuccess');
+        setTimeout(() => location.reload(), 800);
+        return;
+      }
+      message.textContent = t('lan.pairFailed');
+    } catch {
+      message.textContent = t('lan.pairFailed');
+    }
+    submitBtn.disabled = false;
+  };
+  submitBtn.addEventListener("click", submit);
+  input.addEventListener("keydown", (event) => {
+    if (event.key === "Enter") submit();
+  });
+
+  card.append(title, hint, input, submitBtn, message);
+  overlay.appendChild(card);
+  document.body.appendChild(overlay);
+  input.focus();
+}
+
+// LAN 页面失联回退：健康轮询连续失败 → 跳回云端来源（若有）
+function startLanHealthWatch() {
+  if (!isLanPage || !cloudOrigin) return;
+  const watch = new LanHealthWatch({
+    onFallback: () => {
+      showToast(t('lan.lanLost'));
+      setTimeout(() => location.assign(cloudOrigin), 800);
+    }
+  });
+  watch.start();
+}
+
+async function bootstrapLanPage() {
+  initChannelBadge();
+  if (isLanPage) {
+    const pairing = createPairingClient({ win: window });
+    let paired = false;
+    try {
+      ({ paired } = await pairing.status());
+    } catch {
+      paired = false;
+    }
+    if (!paired) {
+      showLanPairingOverlay(pairing);
+      return; // 配对成功后会整页刷新，届时再建立 WS
+    }
+    startLanHealthWatch();
+  }
+  connectWebSocket();
 }
 
 // === Phone Clipboard ===
@@ -299,6 +457,7 @@ async function handleAuthState(event) {
     onDevices: (devices) => {
       const desktopDevices = devices.filter((device) => isDesktopDeviceCandidate(device, phoneDeviceId));
       renderCloudDeviceOptions(desktopDevices);
+      updateCloudLanEndpoints(desktopDevices);
     },
     onAck: (ack) => {
       if (ack.key) return;
@@ -782,7 +941,7 @@ class WindowSelector {
     }
     this.el.list.innerHTML = `<p class="window-list-loading">${t('common.loading')}</p>`;
     try {
-      const res = await fetch("/api/windows");
+      const res = await fetch("/api/windows", { headers: lanTokenHeaders() });
       if (!res.ok) {
         console.error("API error:", res.status, await res.text().catch(() => ""));
         this.el.list.innerHTML = `<p class="window-list-empty">${t('windowSelector.fetchFailed')}</p>`;
@@ -1574,8 +1733,10 @@ let ws = null;
 
 const BrowserAudioContext = window.AudioContext || window.webkitAudioContext;
 
-if (!isCloudMode) {
-  connectWebSocket();
+if (isCloudMode) {
+  initChannelBadge();
+} else {
+  void bootstrapLanPage();
 }
 
 function setActionButtonsDisabled(disabled) {
@@ -1756,7 +1917,12 @@ async function uploadAudio(blob, extension) {
     }
     const controller = new AbortController();
     timeout = setTimeout(() => controller.abort(), 30_000);
-    const response = await fetch("/api/upload", { method: "POST", body: formData, signal: controller.signal });
+    const response = await fetch("/api/upload", {
+      method: "POST",
+      body: formData,
+      headers: lanTokenHeaders(),
+      signal: controller.signal
+    });
     clearTimeout(timeout);
     timeout = null;
     const payload = await response.json();
@@ -1804,9 +1970,8 @@ let wsRetryTimer = null;
 let wsVisibilityHandler = null;
 
 function connectWebSocket() {
-  const protocol = location.protocol === "https:" ? "wss" : "ws";
   let wsRetryDelay = 1500;
-  ws = new WebSocket(`${protocol}://${location.host}/ws`);
+  ws = new WebSocket(buildLanWsUrl(window));
 
   ws.addEventListener("open", () => {
     wsRetryDelay = 1500;
@@ -1851,6 +2016,7 @@ function connectWebSocket() {
   });
   ws.addEventListener("close", (event) => {
     if (event.code === 1000) return; // Normal closure, no reconnect
+    if (event.code === 4001) return; // LAN 未配对：不重连，等待配对后刷新页面
     setConnectionStatus("error", t('connection.reconnecting'));
     clearTimeout(wsRetryTimer);
     wsRetryTimer = setTimeout(connectWebSocket, wsRetryDelay);

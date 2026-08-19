@@ -36,6 +36,7 @@ console.log(`Local:   https://localhost:${lan.port}`);
 console.log(`Phone:   ${phoneUrl}`);
 console.log(`ASR:     ${config.asrProvider} (${config.tencentAsrEngServiceType})`);
 console.log(`Paste:   ${config.autoPaste ? "auto paste enabled" : "clipboard only"}`);
+console.log(`Pairing code (LAN): ${lan.pairingCode}`);
 console.log(`HTTP redirect: http://localhost:${lan.httpPort} → HTTPS`);
 console.log("\nScan this QR code from your phone:");
 console.log('(手机首次访问会提示"不安全"，点击"高级" → "继续访问"即可)');

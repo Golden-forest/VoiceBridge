@@ -1,0 +1,271 @@
+// LAN 页面模式（工作包 B 手机端）：
+// - 云端页面：从 presence 的 lanEndpoints 探测桌面可达性，展示"局域网可用"切换入口
+// - LAN 页面：配对门禁、token 注入、失联后回退云端
+// 纯逻辑与可注入依赖（fetch / timers / storage）分离，便于 node --test 测试。
+
+export const LAN_TOKEN_STORAGE_KEY = "voicebridge_lan_token";
+export const CLOUD_ORIGIN_STORAGE_KEY = "voicebridge_cloud_origin";
+export const LAN_TOKEN_HEADER = "x-vb-lan-token";
+export const PROBE_TIMEOUT_MS = 500;
+export const PROBE_CACHE_TTL_MS = 30_000;
+
+const LOOPBACK_HOSTNAMES = new Set(["localhost", "127.0.0.1", "[::1]", "::1"]);
+
+export function isLoopbackHostname(hostname) {
+  return LOOPBACK_HOSTNAMES.has(String(hostname || "").toLowerCase());
+}
+
+/**
+ * 是否运行在 LAN 页面环境：非云端模式且非本机回环地址
+ *（本地开发 localhost 也走 LAN 流程，但不触发配对/回退）。
+ */
+export function isLanPageEnvironment({ mode, hostname }) {
+  return mode !== "cloud" && !isLoopbackHostname(hostname);
+}
+
+/** 过滤 presence 上报的 lanEndpoints，只保留结构完整的条目 */
+export function normalizeEndpoints(endpoints) {
+  if (!Array.isArray(endpoints)) return [];
+  return endpoints.filter((endpoint) =>
+    typeof endpoint?.host === "string" && endpoint.host.length > 0 &&
+    Number.isInteger(endpoint.port) && endpoint.port > 0 &&
+    Number.isInteger(endpoint.httpPort) && endpoint.httpPort > 0
+  );
+}
+
+/** 探测单个端点：任何 HTTP 响应（200 / 301）都证明桌面端可达 */
+export async function probeEndpoint(endpoint, { fetchImpl, timeoutMs = PROBE_TIMEOUT_MS } = {}) {
+  const doFetch = fetchImpl || ((...args) => fetch(...args));
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    await doFetch(`http://${endpoint.host}:${endpoint.httpPort}/api/health`, {
+      mode: "no-cors",
+      cache: "no-store",
+      signal: controller.signal
+    });
+    return true;
+  } catch {
+    return false;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+/** 并行探测所有端点，按输入顺序返回第一个可达端点；全部失败返回 null */
+export async function probeLanEndpoints(endpoints, options = {}) {
+  const valid = normalizeEndpoints(endpoints);
+  if (!valid.length) return null;
+  const results = await Promise.all(valid.map((endpoint) => probeEndpoint(endpoint, options)));
+  const index = results.findIndex(Boolean);
+  return index === -1 ? null : valid[index];
+}
+
+/**
+ * 探测缓存：结果（含失败）缓存 cacheTtlMs；online/offline 事件或端点变化时失效重探。
+ * 云端页面上所有探测失败都必须静默 —— 不抛错、不弹提示。
+ */
+export class LanProbe {
+  constructor({ fetchImpl, timeoutMs = PROBE_TIMEOUT_MS, cacheTtlMs = PROBE_CACHE_TTL_MS, now = Date.now } = {}) {
+    this.fetchImpl = fetchImpl;
+    this.timeoutMs = timeoutMs;
+    this.cacheTtlMs = cacheTtlMs;
+    this.now = now;
+    this.endpoints = [];
+    this.cachedResult = null;
+    this.hasCache = false;
+    this.cachedAt = 0;
+    this.inflight = null;
+  }
+
+  setEndpoints(endpoints) {
+    const next = normalizeEndpoints(endpoints);
+    const same = next.length === this.endpoints.length &&
+      next.every((endpoint, i) =>
+        endpoint.host === this.endpoints[i].host &&
+        endpoint.port === this.endpoints[i].port &&
+        endpoint.httpPort === this.endpoints[i].httpPort);
+    if (!same) this.invalidate();
+    this.endpoints = next;
+  }
+
+  invalidate() {
+    this.cachedResult = null;
+    this.hasCache = false;
+    this.cachedAt = 0;
+  }
+
+  getReachable() {
+    if (this.hasCache && this.now() - this.cachedAt < this.cacheTtlMs) {
+      return Promise.resolve(this.cachedResult);
+    }
+    if (this.inflight) return this.inflight;
+    this.inflight = probeLanEndpoints(this.endpoints, {
+      fetchImpl: this.fetchImpl,
+      timeoutMs: this.timeoutMs
+    }).then((endpoint) => {
+      this.cachedResult = endpoint;
+      this.hasCache = true;
+      this.cachedAt = this.now();
+      return endpoint;
+    }).finally(() => {
+      this.inflight = null;
+    });
+    return this.inflight;
+  }
+
+  /** 网络切换（wifi 变化）后重新探测；返回解绑函数 */
+  bindWindow(win = window) {
+    const handler = () => this.invalidate();
+    win.addEventListener("online", handler);
+    win.addEventListener("offline", handler);
+    return () => {
+      win.removeEventListener("online", handler);
+      win.removeEventListener("offline", handler);
+    };
+  }
+}
+
+/** 只接受 https 来源作为云端回退地址，防止开放重定向 */
+export function sanitizeCloudOrigin(value) {
+  if (typeof value !== "string" || value.length === 0) return null;
+  try {
+    const url = new URL(value);
+    if (url.protocol !== "https:" || !url.hostname) return null;
+    return url.origin;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * 解析并持久化云端来源：云端页面跳转到 LAN 时通过 ?cloud=<origin> 携带
+ *（localStorage 按 origin 隔离，不能跨域读取），LAN 页面存入自己的
+ * localStorage 供后续直访 / 失联回退使用。
+ */
+export function resolveCloudOrigin(win = window) {
+  const fromQuery = sanitizeCloudOrigin(new URLSearchParams(win.location.search).get("cloud"));
+  if (fromQuery) {
+    try {
+      win.localStorage.setItem(CLOUD_ORIGIN_STORAGE_KEY, fromQuery);
+    } catch { /* localStorage 不可用时静默 */ }
+    return fromQuery;
+  }
+  try {
+    return sanitizeCloudOrigin(win.localStorage.getItem(CLOUD_ORIGIN_STORAGE_KEY));
+  } catch {
+    return null;
+  }
+}
+
+/** 云端 → LAN 的跳转地址（携带云端来源参数） */
+export function buildLanUrl(endpoint, cloudOrigin) {
+  const origin = sanitizeCloudOrigin(cloudOrigin);
+  const base = `https://${endpoint.host}:${endpoint.port}/`;
+  return origin ? `${base}?cloud=${encodeURIComponent(origin)}` : base;
+}
+
+/** LAN token 请求头（未配对时为空对象） */
+export function lanTokenHeaders(win = window) {
+  try {
+    const token = win.localStorage.getItem(LAN_TOKEN_STORAGE_KEY);
+    return token ? { [LAN_TOKEN_HEADER]: token } : {};
+  } catch {
+    return {};
+  }
+}
+
+/** 带 token 的 WS 地址（token 走 query，浏览器 WS API 不支持自定义头） */
+export function buildLanWsUrl(win = window) {
+  const protocol = win.location.protocol === "https:" ? "wss" : "ws";
+  let token = "";
+  try {
+    token = win.localStorage.getItem(LAN_TOKEN_STORAGE_KEY) || "";
+  } catch { /* ignore */ }
+  const query = token ? `?token=${encodeURIComponent(token)}` : "";
+  return `${protocol}://${win.location.host}/ws${query}`;
+}
+
+/** LAN 配对客户端：GET 查询状态 / POST 配对码换 token（成功后持久化） */
+export function createPairingClient({ fetchImpl, storage, pairUrl = "/api/lan/pair", win } = {}) {
+  const doFetch = fetchImpl || ((...args) => fetch(...args));
+  const getStorage = () => storage || win?.localStorage;
+  const headers = () => ({ ...lanTokenHeaders(win || { localStorage: storage }), "Content-Type": "application/json" });
+  return {
+    async status() {
+      const response = await doFetch(pairUrl, { headers: headers(), cache: "no-store" });
+      const payload = await response.json().catch(() => ({}));
+      return { paired: response.ok && payload.ok === true && payload.paired === true };
+    },
+    async pair(code) {
+      const response = await doFetch(pairUrl, {
+        method: "POST",
+        headers: headers(),
+        body: JSON.stringify({ code })
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok || payload.ok !== true || typeof payload.token !== "string") {
+        return { ok: false };
+      }
+      try {
+        getStorage()?.setItem(LAN_TOKEN_STORAGE_KEY, payload.token);
+      } catch { /* ignore */ }
+      return { ok: true, token: payload.token };
+    }
+  };
+}
+
+/**
+ * LAN 页面失联回退：轮询同源 /api/health，连续失败达到阈值后触发一次
+ * onFallback（由调用方决定是否跳回云端）。
+ */
+export class LanHealthWatch {
+  constructor({ fetchImpl, healthUrl = "/api/health", intervalMs = 5000, failureThreshold = 2, onFallback, setTimeoutImpl, clearTimeoutImpl } = {}) {
+    this.fetchImpl = fetchImpl || ((...args) => fetch(...args));
+    this.healthUrl = healthUrl;
+    this.intervalMs = intervalMs;
+    this.failureThreshold = failureThreshold;
+    this.onFallback = onFallback;
+    this.setTimeout = setTimeoutImpl || ((fn, ms) => setTimeout(fn, ms));
+    this.clearTimeout = clearTimeoutImpl || ((id) => clearTimeout(id));
+    this.timer = null;
+    this.failures = 0;
+    this.triggered = false;
+    this.stopped = true;
+  }
+
+  start() {
+    if (!this.stopped) return;
+    this.stopped = false;
+    this.poll();
+  }
+
+  stop() {
+    this.stopped = true;
+    if (this.timer !== null) {
+      this.clearTimeout(this.timer);
+      this.timer = null;
+    }
+  }
+
+  async poll() {
+    if (this.stopped) return;
+    try {
+      await this.fetchImpl(this.healthUrl, { cache: "no-store" });
+      this.failures = 0;
+    } catch {
+      this.failures++;
+      if (this.failures >= this.failureThreshold && !this.triggered) {
+        this.triggered = true;
+        this.stop();
+        try {
+          this.onFallback?.();
+        } catch { /* ignore */ }
+        return;
+      }
+    }
+    if (!this.stopped) {
+      this.timer = this.setTimeout(() => this.poll(), this.intervalMs);
+    }
+  }
+}

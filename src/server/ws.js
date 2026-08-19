@@ -1,15 +1,20 @@
 import { WebSocket, WebSocketServer } from "ws";
 import { pressEnter, pressUndo, pressCtrlC, pressEscape, pressDelete, pressArrow, pasteClipboard } from "./input/paste.js";
 import { outputText } from "./input/outputText.js";
+import { isLoopbackRequest } from "./lanPairing.js";
 import { MESSAGE_TYPES } from "../shared/protocol.js";
 
 const MAX_BUFFER_SIZE = 64 * 1024;
 
-export function createWebSocketHub(server) {
+export function createWebSocketHub(server, { authorize } = {}) {
   const wss = new WebSocketServer({ server, path: "/ws", maxPayload: 1024 * 1024 });
   const clients = new Set();
 
-  wss.on("connection", (socket) => {
+  wss.on("connection", (socket, req) => {
+    if (authorize && !isLoopbackRequest(req) && !authorize(req)) {
+      socket.close(4001, "unauthorized");
+      return;
+    }
     clients.add(socket);
     send(socket, {
       type: "status",

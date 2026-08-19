@@ -391,6 +391,31 @@ fieldset.add-cmd-fieldset legend {
   color: var(--text-secondary);
 }
 
+/* === Channel badge (云端 / 局域网) === */
+.channel-badge {
+  flex: 0 0 auto;
+  padding: 3px 8px;
+  border: 0;
+  border-radius: 999px;
+  background: var(--bg-soft);
+  color: var(--text-secondary);
+  font-size: clamp(11px, 1.4svh, 13px);
+  font-weight: 700;
+  white-space: nowrap;
+  cursor: default;
+}
+
+.channel-badge.available {
+  background: #ecfdf5;
+  color: #047857;
+  cursor: pointer;
+}
+
+.channel-badge.lan {
+  background: var(--accent-soft);
+  color: var(--accent-deep);
+}
+
 /* === Window Selector === */
 .window-selector {
   position: relative;

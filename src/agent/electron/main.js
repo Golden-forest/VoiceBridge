@@ -73,6 +73,7 @@ async function startLanServer() {
       tmpDir: join(userData, 'tmp')
     });
     log('lan-started', { port: lanServer.port, httpPort: lanServer.httpPort, endpoints: lanServer.getEndpoints() });
+    console.log(`VoiceBridge LAN pairing code: ${lanServer.pairingCode}`);
     return lanServer;
   } catch (error) {
     lanServer = null;

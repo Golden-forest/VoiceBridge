@@ -38,6 +38,22 @@ export default {
     cursorPosition: 'Cursor position',
   },
 
+  // === LAN page mode ===
+  lan: {
+    channelCloud: 'Cloud',
+    channelLanAvailable: 'LAN available',
+    channelLan: 'LAN',
+    switchToLan: 'Switch to LAN mode for lower latency',
+    backToCloud: 'Back to cloud mode',
+    pairTitle: 'LAN pairing',
+    pairHint: 'Enter the pairing code shown in VoiceBridge on your computer.',
+    pairCodePlaceholder: 'Pairing code',
+    pairSubmit: 'Pair',
+    pairFailed: 'Incorrect pairing code, please try again.',
+    pairSuccess: 'Paired, refreshing…',
+    lanLost: 'LAN connection lost, returning to cloud…',
+  },
+
   // === Text input ===
   input: {
     editLabelPlaceholder: 'Button display name…',

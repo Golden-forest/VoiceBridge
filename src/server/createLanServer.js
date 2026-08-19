@@ -10,6 +10,7 @@ import { listLocalIps, getLocalIp } from "./network/getLocalIp.js";
 import { createUploadRouter } from "./routes/upload.js";
 import { createCommandsRouter } from "./routes/commands.js";
 import { createWebSocketHub } from "./ws.js";
+import { createLanPairing } from "./lanPairing.js";
 import { ensureCertificates } from "./certs.js";
 import { listWindows } from "./input/windowManager.js";
 
@@ -72,6 +73,23 @@ export async function createLanServer({
       hasTencentCredentials: Boolean(config.tencentSecretId && config.tencentSecretKey)
     });
   });
+  // ---- 局域网配对门禁 ----
+  // /api/health 与配对接口本身保持开放；其余 /api 路由和 WS 需要配对 token
+  //（本机回环访问免配对，本地开发不受影响）。手机端在 LAN 页面输入配对码。
+  const pairing = createLanPairing();
+  app.get("/api/lan/pair", (req, res) => {
+    res.json({ ok: true, paired: pairing.isAuthorizedRequest(req) });
+  });
+  app.post("/api/lan/pair", (req, res) => {
+    const token = pairing.pair(req.body?.code);
+    if (!token) {
+      res.status(403).json({ ok: false, error: "配对码错误。" });
+      return;
+    }
+    res.json({ ok: true, token });
+  });
+  app.use("/api", pairing.createMiddleware());
+
   app.get("/api/windows", async (_req, res) => {
     try {
       const windows = await listWindows();
@@ -123,7 +141,9 @@ export async function createLanServer({
   const resolvedPort = await listen(tlsServer, requestedPort);
   // 注意：WS hub 必须在 TLS listen 成功之后再挂载；端口冲突时提前挂载会让
   // ws 触发第二次未被捕获的 EADDRINUSE（见 createLanServer.test.js）。
-  const wsHub = createWebSocketHub(tlsServer);
+  const wsHub = createWebSocketHub(tlsServer, {
+    authorize: (req) => pairing.isAuthorizedRequest(req)
+  });
   app.use("/api", createUploadRouter({ config, wsHub, tmpDir: uploadTmpDir }));
   let resolvedHttpPort;
   try {
@@ -142,6 +162,8 @@ export async function createLanServer({
   return {
     port: resolvedPort,
     httpPort: resolvedHttpPort,
+    /** 当前配对码：桌面端展示，手机端在 LAN 页面输入一次 */
+    pairingCode: pairing.code,
     getEndpoints() {
       return listLocalIps().map((host) => ({
         host,

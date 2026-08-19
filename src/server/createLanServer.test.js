@@ -98,6 +98,20 @@ test("createLanServer requires rootDir", async () => {
   await assert.rejects(createLanServer({}), /rootDir/);
 });
 
+test("createLanServer exposes a pairing code and loopback access is pre-authorized", async () => {
+  const rootDir = await fs.mkdtemp(path.join(os.tmpdir(), "voicebridge-lan-"));
+  const lan = await createLanServer({ rootDir, port: 0, config: {} });
+
+  assert.match(lan.pairingCode, /^\d{6}$/);
+
+  // 回环（本机开发）免配对
+  const loopback = await httpsGetJson(lan.port, "/api/lan/pair");
+  assert.equal(loopback.status, 200);
+  assert.deepEqual(loopback.body, { ok: true, paired: true });
+
+  await lan.close();
+});
+
 test("createLanServer closes the HTTPS server when the HTTP port is taken", async () => {
   const rootDir = await fs.mkdtemp(path.join(os.tmpdir(), "voicebridge-lan-"));
   const blocker = http.createServer();

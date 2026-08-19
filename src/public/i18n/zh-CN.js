@@ -38,6 +38,22 @@ export default {
     cursorPosition: '光标位置',
   },
 
+  // === 局域网页面模式 ===
+  lan: {
+    channelCloud: '云端',
+    channelLanAvailable: '局域网可用',
+    channelLan: '局域网',
+    switchToLan: '切换到局域网模式，速度更快',
+    backToCloud: '返回云端模式',
+    pairTitle: '局域网配对',
+    pairHint: '输入电脑端 VoiceBridge 显示的配对码，连接本机局域网服务。',
+    pairCodePlaceholder: '配对码',
+    pairSubmit: '配对',
+    pairFailed: '配对码错误，请检查后重试。',
+    pairSuccess: '配对成功，正在刷新…',
+    lanLost: '局域网连接已断开，正在返回云端…',
+  },
+
   // === 文本输入 ===
   input: {
     editLabelPlaceholder: '按钮显示名称…',
