@@ -2,6 +2,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 import { corsHeaders, jsonResponse } from "../_shared/cors.ts";
 import { ERROR_CODE_QUOTA_EXCEEDED, USAGE_PROVIDER_TENCENT_CLOUD } from "../_shared/contracts.ts";
+import { verifySupabaseJwt } from "../_shared/local_jwt.ts";
 import type { PlanName } from "../_shared/plan_limits.ts";
 import { transcribeTencentWav } from "../_shared/tencent_asr.ts";
 import { parsePcmWavDurationMs } from "../_shared/wav.ts";
@@ -11,6 +12,8 @@ const MAX_AUDIO_BYTES = 3 * 1024 * 1024;
 type SupabaseClientLike = ReturnType<typeof createClient<any, "public", any>>;
 const PLAN_CACHE_TTL_MS = 60_000;
 const planCache = new Map<string, { plan: PlanName; expiresAt: number }>();
+// 模块级复用：客户端创建一次，跨请求共享连接，避免每次请求重建的冷启动开销。
+let cachedServiceClient: SupabaseClientLike | null = null;
 declare const EdgeRuntime: {
   waitUntil(promise: Promise<unknown>): void;
 };
@@ -34,26 +37,37 @@ Deno.serve(async (req) => {
   try {
     const env = getSupabaseEnv();
     const authHeader = req.headers.get("Authorization") || "";
-    const authClient = createClient(env.supabaseUrl, env.supabaseAnonKey, {
-      global: { headers: { Authorization: authHeader } },
-      auth: {
-        autoRefreshToken: false,
-        persistSession: false,
-        detectSessionInUrl: false
-      }
-    });
-    serviceClient = createClient(env.supabaseUrl, env.supabaseServiceRoleKey);
+    serviceClient = cachedServiceClient ??= createClient(env.supabaseUrl, env.supabaseServiceRoleKey);
 
     const accessToken = authHeader.match(/^Bearer\s+(.+)$/i)?.[1]?.trim();
     if (!accessToken) {
       return errorResponse("unauthorized", "请先登录后再使用云端语音识别。", 401);
     }
-    const { data, error } = await authClient.auth.getClaims(accessToken);
-    const subject = data?.claims?.sub;
-    if (error || typeof subject !== "string" || !subject) {
-      return errorResponse("unauthorized", "请先登录后再使用云端语音识别。", 401);
+    // 本地验签（SUPABASE_JWKS 是平台默认注入的 secret）：
+    // 替代 getClaims 的 300-400ms 网络往返。旧项目若仍用 HS256 对称签名
+    // （JWKS 无法本地验证），回退到 getClaims 网络验签。
+    const jwksJson = Deno.env.get("SUPABASE_JWKS");
+    const issuer = `${env.supabaseUrl}/auth/v1`;
+    let claims = jwksJson
+      ? await verifySupabaseJwt(accessToken, { jwksJson, issuer }).catch(() => null)
+      : null;
+    if (!claims?.sub) {
+      const authClient = createClient(env.supabaseUrl, env.supabaseAnonKey, {
+        global: { headers: { Authorization: authHeader } },
+        auth: {
+          autoRefreshToken: false,
+          persistSession: false,
+          detectSessionInUrl: false
+        }
+      });
+      const { data, error } = await authClient.auth.getClaims(accessToken);
+      const subject = data?.claims?.sub;
+      if (error || typeof subject !== "string" || !subject) {
+        return errorResponse("unauthorized", "请先登录后再使用云端语音识别。", 401);
+      }
+      claims = { sub: subject, exp: 0 };
     }
-    userId = subject;
+    userId = claims.sub;
     timing.authAt = Date.now();
 
     const formData = await req.formData();
