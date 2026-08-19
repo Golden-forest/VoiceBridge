@@ -81,7 +81,15 @@ export async function createLanServer({
     res.json({ ok: true, paired: pairing.isAuthorizedRequest(req) });
   });
   app.post("/api/lan/pair", (req, res) => {
-    const token = pairing.pair(req.body?.code);
+    // 暴力破解防护：连续失败后按 IP 指数退避（内存状态）
+    const retryAfterMs = pairing.getRetryAfterMs(req);
+    if (retryAfterMs > 0) {
+      res.status(429)
+        .set("Retry-After", String(Math.ceil(retryAfterMs / 1000)))
+        .json({ ok: false, error: "尝试过于频繁，请稍后再试。" });
+      return;
+    }
+    const token = pairing.pair(req.body?.code, req);
     if (!token) {
       res.status(403).json({ ok: false, error: "配对码错误。" });
       return;
@@ -162,8 +170,10 @@ export async function createLanServer({
   return {
     port: resolvedPort,
     httpPort: resolvedHttpPort,
-    /** 当前配对码：桌面端展示，手机端在 LAN 页面输入一次 */
-    pairingCode: pairing.code,
+    /** 当前配对码（成功配对或 TTL 到期后自动轮换）：桌面端展示 */
+    get pairingCode() {
+      return pairing.code;
+    },
     getEndpoints() {
       return listLocalIps().map((host) => ({
         host,

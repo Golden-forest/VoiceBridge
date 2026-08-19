@@ -79,8 +79,10 @@ async function requestLanCommands(path, init = {}) {
 }
 
 // === LAN 通道（云端探测切换 / LAN 页面配对回退） ===
-// 云端页面：presence 的 lanEndpoints → 探测明文 HTTP 健康端口 → 展示"局域网可用"。
-// 所有探测失败均静默，绝不弹错误提示。
+// 云端页面：presence 上报 lanEndpoints（桌面自称在局域网）即展示"局域网可用"；
+// 明文 HTTP 探测仅作增强 —— 真实手机浏览器上 https 页面 fetch http://<ip>
+// 属 mixed content 必然失败，探测失败不代表桌面不可达。所有探测失败均静默，
+// 绝不弹错误提示。
 let lanProbe = null;
 let lanAffordanceTimer = null;
 
@@ -100,10 +102,11 @@ function scheduleLanAffordanceRefresh() {
   if (lanAffordanceTimer) return;
   lanAffordanceTimer = setTimeout(async () => {
     lanAffordanceTimer = null;
-    // 端点在探测期间可能已变化，重新读取当前列表
-    const endpoint = await lanProbe.getReachable().catch(() => null);
+    // 端点在探测期间可能已变化，重新读取当前列表。
+    // 探测成功优先可达端点；探测失败（含 mixed-content 拦截）回退首个上报端点。
+    const endpoint = await lanProbe.getSwitchTarget().catch(() => null);
     if (!isCloudMode || !channelBadge) return;
-    if (!endpoint) return; // 不可达时保持"云端"状态，静默
+    if (!endpoint) return; // 无上报端点时保持"云端"状态，静默
     channelBadge.textContent = t('lan.channelLanAvailable');
     channelBadge.classList.add("available");
     channelBadge.title = t('lan.switchToLan');

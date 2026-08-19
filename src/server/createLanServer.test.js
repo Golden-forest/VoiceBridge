@@ -39,6 +39,33 @@ function portClosed(port) {
   });
 }
 
+function httpsPostJson(port, pathname, payload) {
+  const body = JSON.stringify(payload);
+  return new Promise((resolve, reject) => {
+    const req = https.request(
+      {
+        host: "127.0.0.1",
+        port,
+        path: pathname,
+        method: "POST",
+        headers: { "Content-Type": "application/json", "Content-Length": Buffer.byteLength(body) },
+        rejectUnauthorized: false
+      },
+      (res) => {
+        let data = "";
+        res.on("data", (chunk) => { data += chunk; });
+        res.on("end", () => {
+          let parsed = null;
+          try { parsed = JSON.parse(data); } catch { /* ignore */ }
+          resolve({ status: res.statusCode, retryAfter: res.headers["retry-after"], body: parsed });
+        });
+      }
+    );
+    req.on("error", reject);
+    req.end(body);
+  });
+}
+
 test("createLanServer starts, serves health on both ports, and stops cleanly", async () => {
   const rootDir = await fs.mkdtemp(path.join(os.tmpdir(), "voicebridge-lan-"));
 
@@ -108,6 +135,30 @@ test("createLanServer exposes a pairing code and loopback access is pre-authoriz
   const loopback = await httpsGetJson(lan.port, "/api/lan/pair");
   assert.equal(loopback.status, 200);
   assert.deepEqual(loopback.body, { ok: true, paired: true });
+
+  await lan.close();
+});
+
+test("createLanServer rotates the pairing code on use and rate-limits brute force", async () => {
+  const rootDir = await fs.mkdtemp(path.join(os.tmpdir(), "voicebridge-lan-"));
+  const lan = await createLanServer({ rootDir, port: 0, config: {} });
+
+  // 成功配对：返回 token，配对码立即轮换（一次性）
+  const first = lan.pairingCode;
+  const paired = await httpsPostJson(lan.port, "/api/lan/pair", { code: first });
+  assert.equal(paired.status, 200);
+  assert.equal(typeof paired.body.token, "string");
+  assert.notEqual(lan.pairingCode, first, "code rotates after successful pairing");
+  assert.equal((await httpsPostJson(lan.port, "/api/lan/pair", { code: first })).status, 403);
+
+  // 连续错误：累计 5 次失败（上面的旧码 403 已计 1 次）后进入按 IP 指数退避
+  for (let i = 0; i < 4; i++) {
+    assert.equal((await httpsPostJson(lan.port, "/api/lan/pair", { code: "000000" })).status, 403);
+  }
+  const limited = await httpsPostJson(lan.port, "/api/lan/pair", { code: "000000" });
+  assert.equal(limited.status, 429);
+  assert.ok(Number(limited.retryAfter) >= 1, "Retry-After header in whole seconds");
+  assert.equal(limited.body.ok, false);
 
   await lan.close();
 });

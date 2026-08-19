@@ -151,6 +151,20 @@ test("LanProbe endpoint change invalidates cache and online/offline events re-pr
 
 // --- 云端来源 / URL 构建 ---
 
+test("formatLanHost brackets IPv6 literals in probe and switch URLs", async () => {
+  const ipv6 = { host: "fd00::1", port: 3000, httpPort: 3001 };
+  const fetchImpl = fakeFetch([{ url: "http://[fd00::1]:3001/api/health", result: { ok: true } }]);
+  assert.equal(await probeEndpoint(ipv6, { fetchImpl }), true);
+
+  assert.equal(
+    buildLanUrl(ipv6, "https://vb.pages.dev"),
+    "https://[fd00::1]:3000/?cloud=https%3A%2F%2Fvb.pages.dev"
+  );
+  // 已带方括号 / IPv4 不受影响
+  assert.equal(buildLanUrl({ host: "[fd00::2]", port: 3000 }, null), "https://[fd00::2]:3000/");
+  assert.equal(buildLanUrl(ENDPOINT_A, null), "https://192.168.1.10:3000/");
+});
+
 test("sanitizeCloudOrigin only accepts https URLs", () => {
   assert.equal(sanitizeCloudOrigin("https://voicebridge.example.com/app?x=1"), "https://voicebridge.example.com");
   assert.equal(sanitizeCloudOrigin("http://voicebridge.example.com"), null);
@@ -238,6 +252,32 @@ test("createPairingClient surfaces pairing failure without storing anything", as
   const client = createPairingClient({ fetchImpl, win });
   assert.deepEqual(await client.pair("000000"), { ok: false });
   assert.equal(win.localStorage.getItem(LAN_TOKEN_STORAGE_KEY), null);
+});
+
+// --- 切换目标决策（presence 上报即展示，探测仅增强） ---
+
+test("getSwitchTarget falls back to the first advertised endpoint when probes all fail", async () => {
+  // 真实手机浏览器上 https 页面探测 http://<ip> 属 mixed content，必然 reject
+  const fetchImpl = () => Promise.reject(new TypeError("mixed content blocked"));
+  const probe = new LanProbe({ fetchImpl, cacheTtlMs: 60_000, now: () => 0 });
+  probe.setEndpoints([ENDPOINT_A, ENDPOINT_B]);
+  assert.deepEqual(await probe.getSwitchTarget(), ENDPOINT_A);
+});
+
+test("getSwitchTarget prefers a probe-confirmed reachable endpoint", async () => {
+  const fetchImpl = (url) => {
+    if (url.includes(ENDPOINT_B.host)) return Promise.resolve({});
+    return Promise.reject(new Error("unreachable"));
+  };
+  const probe = new LanProbe({ fetchImpl, cacheTtlMs: 60_000, now: () => 0 });
+  probe.setEndpoints([ENDPOINT_A, ENDPOINT_B]);
+  assert.deepEqual(await probe.getSwitchTarget(), ENDPOINT_B);
+});
+
+test("getSwitchTarget returns null when nothing is advertised", async () => {
+  const probe = new LanProbe({ fetchImpl: () => Promise.reject(new Error("down")) });
+  probe.setEndpoints([]);
+  assert.equal(await probe.getSwitchTarget(), null);
 });
 
 // --- 失联回退 ---

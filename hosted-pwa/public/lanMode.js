@@ -1,5 +1,9 @@
 // LAN 页面模式（工作包 B 手机端）：
-// - 云端页面：从 presence 的 lanEndpoints 探测桌面可达性，展示"局域网可用"切换入口
+// - 云端页面：只要 presence 上报了 lanEndpoints（桌面自称在局域网）就展示
+//   "局域网可用"切换入口；明文 HTTP 探测仅作增强（成功时优先选可达端点），
+//   失败不作为隐藏依据 —— https 云端页面 fetch http://<lan-ip> 属 mixed
+//   content，在真实手机浏览器上必然被拦截，探测失败 ≠ 桌面不可达。
+//   端点失效时用户点击跳转会看到导航失败并返回，可接受。
 // - LAN 页面：配对门禁、token 注入、失联后回退云端
 // 纯逻辑与可注入依赖（fetch / timers / storage）分离，便于 node --test 测试。
 
@@ -33,13 +37,19 @@ export function normalizeEndpoints(endpoints) {
   );
 }
 
+/** URL host 部分：IPv6 字面量必须加方括号 */
+export function formatLanHost(host) {
+  const value = String(host || "");
+  return value.includes(":") && !value.startsWith("[") ? `[${value}]` : value;
+}
+
 /** 探测单个端点：任何 HTTP 响应（200 / 301）都证明桌面端可达 */
 export async function probeEndpoint(endpoint, { fetchImpl, timeoutMs = PROBE_TIMEOUT_MS } = {}) {
   const doFetch = fetchImpl || ((...args) => fetch(...args));
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
-    await doFetch(`http://${endpoint.host}:${endpoint.httpPort}/api/health`, {
+    await doFetch(`http://${formatLanHost(endpoint.host)}:${endpoint.httpPort}/api/health`, {
       mode: "no-cors",
       cache: "no-store",
       signal: controller.signal
@@ -114,6 +124,17 @@ export class LanProbe {
     return this.inflight;
   }
 
+  /**
+   * 切换目标端点：探测成功 → 首个可达端点（增强）；
+   * 探测全部失败 → 仍返回第一个已上报端点（mixed content 下探测必然失败，
+   * 不能据此隐藏入口；端点真失效时由用户点击后的导航失败兜底）；
+   * 无任何上报端点 → null。
+   */
+  async getSwitchTarget() {
+    const reachable = await this.getReachable().catch(() => null);
+    return reachable || this.endpoints[0] || null;
+  }
+
   /** 网络切换（wifi 变化）后重新探测；返回解绑函数 */
   bindWindow(win = window) {
     const handler = () => this.invalidate();
@@ -161,7 +182,7 @@ export function resolveCloudOrigin(win = window) {
 /** 云端 → LAN 的跳转地址（携带云端来源参数） */
 export function buildLanUrl(endpoint, cloudOrigin) {
   const origin = sanitizeCloudOrigin(cloudOrigin);
-  const base = `https://${endpoint.host}:${endpoint.port}/`;
+  const base = `https://${formatLanHost(endpoint.host)}:${endpoint.port}/`;
   return origin ? `${base}?cloud=${encodeURIComponent(origin)}` : base;
 }
 
