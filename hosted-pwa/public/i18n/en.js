@@ -42,8 +42,10 @@ export default {
   lan: {
     channelCloud: 'Cloud',
     channelLanAvailable: 'LAN available',
+    channelLanTry: 'Try LAN direct',
     channelLan: 'LAN',
     switchToLan: 'Switch to LAN mode for lower latency',
+    lanTryTitle: 'Your computer has LAN direct enabled; both devices must be on the same Wi-Fi',
     backToCloud: 'Back to cloud mode',
     pairTitle: 'LAN pairing',
     pairHint: 'Enter the pairing code shown in VoiceBridge on your computer.',

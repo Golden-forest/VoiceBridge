@@ -107,9 +107,21 @@ function scheduleLanAffordanceRefresh() {
     const endpoint = await lanProbe.getSwitchTarget().catch(() => null);
     if (!isCloudMode || !channelBadge) return;
     if (!endpoint) return; // 无上报端点时保持"云端"状态，静默
-    channelBadge.textContent = t('lan.channelLanAvailable');
-    channelBadge.classList.add("available");
-    channelBadge.title = t('lan.switchToLan');
+    // 真实手机上 https 页面探测 http 端点会被 mixed-content 拦截，探测基本
+    // 必败。探测失败绝不亮"局域网可用"绿灯（手机可能根本不在同一网络），
+    // 降级为中性入口文案；点击后的导航结果由 LAN 页面健康回退兜底。
+    const reachable = await lanProbe.getReachable().catch(() => null);
+    if (reachable) {
+      channelBadge.textContent = t('lan.channelLanAvailable');
+      channelBadge.classList.add("available");
+      channelBadge.classList.remove("try");
+      channelBadge.title = t('lan.switchToLan');
+    } else {
+      channelBadge.textContent = t('lan.channelLanTry');
+      channelBadge.classList.remove("available");
+      channelBadge.classList.add("try");
+      channelBadge.title = t('lan.lanTryTitle');
+    }
     channelBadge.onclick = () => {
       location.assign(buildLanUrl(endpoint, location.origin));
     };

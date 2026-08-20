@@ -411,6 +411,11 @@ fieldset.add-cmd-fieldset legend {
   cursor: pointer;
 }
 
+/* 未探测到可达端点时的中性入口：不亮绿灯，但仍然可点击尝试直连 */
+.channel-badge.try {
+  cursor: pointer;
+}
+
 .channel-badge.lan {
   background: var(--accent-soft);
   color: var(--accent-deep);

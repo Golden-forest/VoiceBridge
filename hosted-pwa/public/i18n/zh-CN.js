@@ -42,8 +42,10 @@ export default {
   lan: {
     channelCloud: '云端',
     channelLanAvailable: '局域网可用',
+    channelLanTry: '试试局域网直连',
     channelLan: '局域网',
     switchToLan: '切换到局域网模式，速度更快',
+    lanTryTitle: '电脑端已开启局域网直连；需与电脑连接同一 Wi-Fi 才能使用',
     backToCloud: '返回云端模式',
     pairTitle: '局域网配对',
     pairHint: '输入电脑端 VoiceBridge 显示的配对码，连接本机局域网服务。',
