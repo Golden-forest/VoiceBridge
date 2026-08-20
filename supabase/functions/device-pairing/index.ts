@@ -35,7 +35,8 @@ Deno.serve(async (req) => {
 
     if (body.action === "start") {
       if (!userData.user.is_anonymous) {
-        return errorResponse("desktop_session_required", "电脑端配对必须使用临时设备会话。", 403);
+        // 桌面端用真实账号登录（邮箱+密码）：同账号直接自激活，无需手机扫码。
+        return await selfActivate(serviceClient, userData.user.id, body.device);
       }
       return await startPairing(serviceClient, userData.user.id, body.device);
     }
@@ -109,6 +110,51 @@ async function startPairing(
     device: { id: device.id, name: device.name, platform: device.platform },
     pairing_token: pairingToken,
     expires_at: expiresAt
+  });
+}
+
+// 真实账号（非匿名）请求 start：设备直接归属该账号并激活，跳过配对 token。
+// LAN 会员门禁依赖桌面端登录账号，此路径保证同账号登录即上线。
+async function selfActivate(
+  serviceClient: ReturnType<typeof createClient>,
+  userId: string,
+  rawDevice: unknown
+) {
+  const device = parseDevice(rawDevice);
+  if (!device) {
+    return errorResponse("invalid_device", "电脑设备信息无效。", 400);
+  }
+
+  const { data: existing, error: existingError } = await serviceClient
+    .from("devices")
+    .select("id,user_id,runtime_user_id,status")
+    .eq("id", device.id)
+    .maybeSingle();
+  if (existingError) throw existingError;
+  if (existing && existing.user_id !== userId && existing.status === "active") {
+    return errorResponse("already_paired", "这台电脑已绑定其他账号，请先在原账号上解除绑定。", 409);
+  }
+
+  const now = new Date().toISOString();
+  const { error: deviceError } = await serviceClient.from("devices").upsert({
+    id: device.id,
+    user_id: userId,
+    runtime_user_id: userId,
+    name: device.name,
+    device_type: "desktop",
+    platform: device.platform,
+    app_version: device.appVersion,
+    status: "active",
+    paired_at: now,
+    last_seen_at: now,
+    updated_at: now
+  });
+  if (deviceError) throw deviceError;
+
+  return jsonResponse({
+    ok: true,
+    self_activated: true,
+    device: { id: device.id, name: device.name, platform: device.platform }
   });
 }
 

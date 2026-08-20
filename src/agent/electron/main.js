@@ -22,6 +22,8 @@ let initializing = null;
 let agentLogger = null;
 let lanServer = null;
 let lanWatcher = null;
+// 当前登录账号的套餐：'free' | 'pro' | 'admin'。LAN 服务仅会员可用。
+let currentPlan = null;
 
 function log(event, detail) {
   agentLogger?.log(event, detail);
@@ -185,27 +187,38 @@ async function getOrCreateDesktopClient() {
   watchAuthLifecycle(desktopClient);
   const { data: sessionData } = await desktopClient.auth.getSession();
   if (sessionData.session) {
-    // 会话可能已失效（匿名刷新令牌吊销后不可恢复）。提前探测并清掉坏会话，
+    // 会话可能已失效（刷新令牌吊销后不可恢复）。提前探测并清掉坏会话，
     // 否则 getUser 抛错会把应用锁死在"初始化失败"，用户无法自救。
+    // 存量安装里的旧匿名会话也一并清除：桌面端现在要求真实账号登录。
     const { data: userData, error: userError } = await desktopClient.auth.getUser();
     if (userError || !userData.user) {
       log('auth-stale-session', { error: userError?.message });
       await desktopClient.auth.signOut();
-    }
-  }
-  const { data: refreshed } = await desktopClient.auth.getSession();
-  if (!refreshed.session) {
-    const { error } = await desktopClient.auth.signInAnonymously();
-    if (error) {
-      throw new Error(`无法创建电脑配对会话：${error.message}`);
+    } else if (userData.user.is_anonymous) {
+      log('auth-legacy-anonymous-session');
+      await desktopClient.auth.signOut();
     }
   }
   return desktopClient;
 }
 
-// 匿名会话的刷新令牌一旦死亡（断网跨过期、吊销、用户被删），私有通道 join 会
-// 永远 403，桌面端表现为"掉线直到重启"。这里监听 SIGNED_OUT，自动重新匿名
-// 登录并走重配对流程，让链路自愈。
+// 桌面账号套餐判定：管理员 > 有效订阅 > 免费。与云端 reserve_and_get_plan
+// RPC 的语义保持一致（subscriptions active/trialing 记为 pro）。
+async function resolveDesktopPlan(supabase, userId) {
+  const [subscriptions, profiles] = await Promise.all([
+    supabase.from('subscriptions').select('status').eq('user_id', userId).maybeSingle(),
+    supabase.from('profiles').select('is_admin').eq('user_id', userId).maybeSingle()
+  ]);
+  if (profiles.error) throw new Error(`读取账号信息失败：${profiles.error.message}`);
+  if (profiles.data?.is_admin) return 'admin';
+  const status = subscriptions.data?.status;
+  if (status === 'active' || status === 'trialing') return 'pro';
+  return 'free';
+}
+
+// 会话失效（刷新令牌吊销、密码修改、用户被删）时，私有通道 join 会永远
+// 403，桌面端表现为"掉线直到重启"。这里监听 SIGNED_OUT，停掉所有服务并
+// 回到登录面板，让用户重新登录自愈。
 function watchAuthLifecycle(supabase) {
   supabase.auth.onAuthStateChange((event, session) => {
     log('auth-event', { event, userId: session?.user?.id ?? null });
@@ -221,16 +234,9 @@ function watchAuthLifecycle(supabase) {
 async function recoverAfterSignOut() {
   clearPairingPoll();
   await stopRealtimeOnly();
-  const config = getDesktopPublicConfig();
-  if (!desktopClient) return;
-  const { error } = await desktopClient.auth.signInAnonymously();
-  if (error) throw new Error(`无法重建电脑配对会话：${error.message}`);
-  // 设备记录绑定的是旧 runtime 用户，重新匿名登录后必须走配对。
-  const device = await loadOrCreateDevice();
-  const { data: userData } = await desktopClient.auth.getUser();
-  const runtimeUserId = userData.user?.id;
-  if (!runtimeUserId) throw new Error('重建配对会话失败。');
-  await startPairing({ supabase: desktopClient, runtimeUserId, device });
+  await stopLanServer();
+  currentPlan = null;
+  sendDesktopState({ mode: 'login' });
 }
 
 async function initializeDesktop() {
@@ -244,8 +250,22 @@ async function initializeDesktop() {
 async function initializeDesktopInternal() {
   clearPairingPoll();
   const supabase = await getOrCreateDesktopClient();
+  // supabase-js 在无会话时 getUser() 会抛 "Auth session missing!"——
+  // 这是"未登录"而不是错误，先查本地会话再决定走登录面板。
+  const { data: sessionData } = await supabase.auth.getSession();
+  if (!sessionData.session) {
+    return sendDesktopState({ mode: 'login' });
+  }
   const { data: userData, error: userError } = await supabase.auth.getUser();
-  if (userError || !userData.user) throw new Error(userError?.message || '电脑配对会话无效。');
+  if (userError) throw new Error(userError?.message || '登录状态无效。');
+  // 未登录（或旧匿名会话已被清除）→ 显示邮箱+密码登录面板。
+  if (!userData.user) {
+    return sendDesktopState({ mode: 'login' });
+  }
+  if (userData.user.is_anonymous) {
+    await supabase.auth.signOut();
+    return sendDesktopState({ mode: 'login' });
+  }
   const runtimeUserId = userData.user.id;
   const device = await loadOrCreateDevice();
   const { data: record, error: recordError } = await supabase
@@ -255,11 +275,12 @@ async function initializeDesktopInternal() {
     .maybeSingle();
   if (recordError) throw new Error(`读取设备状态失败：${recordError.message}`);
 
+  // 设备已激活且归属明确：同账号自激活（user_id === runtime）与手机扫码
+  // claim（user_id !== runtime）两条路径都直接上线。
   if (
     record
     && record.status === 'active'
-    && record.runtime_user_id === runtimeUserId
-    && record.user_id !== runtimeUserId
+    && record.user_id
     && record.paired_at
   ) {
     return await goOnline({ supabase, userId: record.user_id, device });
@@ -328,8 +349,7 @@ function schedulePairingPoll(context) {
       if (
         data
         && data.status === 'active'
-        && data.runtime_user_id === context.runtimeUserId
-        && data.user_id !== context.runtimeUserId
+        && data.user_id
         && data.paired_at
       ) {
         clearPairingPoll();
@@ -355,8 +375,15 @@ async function goOnline({ supabase, userId, device }) {
     reportWindowTitles: settings.reportWindowTitles,
     onStatus: sendAgentStatus
   });
-  if (settings.lanMode && !lanServer) {
-    await startLanServer();
+  // LAN 功能会员专属：登录账号 plan ∈ {pro, admin} 才启动内嵌 LAN 服务。
+  currentPlan = await resolveDesktopPlan(supabase, userId);
+  const lanAllowed = currentPlan === 'pro' || currentPlan === 'admin';
+  if (lanAllowed) {
+    if (settings.lanMode && !lanServer) {
+      await startLanServer();
+    }
+  } else {
+    await stopLanServer();
   }
   // LAN 端点上报失败绝不能拖垮云模式上线。
   try {
@@ -368,7 +395,9 @@ async function goOnline({ supabase, userId, device }) {
   return sendDesktopState({
     mode: 'online',
     deviceName: device.name,
-    reportWindowTitles: settings.reportWindowTitles
+    reportWindowTitles: settings.reportWindowTitles,
+    plan: currentPlan,
+    lanAllowed
   });
 }
 
@@ -426,6 +455,16 @@ ipcMain.handle('voicebridge:public-config', () => {
 });
 ipcMain.handle('voicebridge:lan-state', () => buildLanState(lanServer));
 ipcMain.handle('voicebridge:initialize', () => initializeDesktop());
+ipcMain.handle('voicebridge:login', async (_event, credentials) => {
+  const email = String(credentials?.email || '').trim();
+  const password = String(credentials?.password || '');
+  if (!email || !password) throw new Error('请输入邮箱和密码。');
+  const supabase = await getOrCreateDesktopClient();
+  const { error } = await supabase.auth.signInWithPassword({ email, password });
+  if (error) throw new Error(error.message);
+  log('auth-login', { email });
+  return await initializeDesktopInternal();
+});
 ipcMain.handle('voicebridge:refresh-pairing', () => initializeDesktopInternal());
 ipcMain.handle('voicebridge:unpair', () => unpairDesktop());
 ipcMain.handle('voicebridge:update-settings', async (_event, updates) => {
@@ -443,7 +482,6 @@ app.whenReady().then(() => {
   log('app-start', { version: app.getVersion(), platform: process.platform });
   createWindow();
   wireLifecycleEvents();
-  void startLanServer();
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();
   });

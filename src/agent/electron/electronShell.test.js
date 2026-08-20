@@ -40,7 +40,9 @@ test('Electron main process uses a safe BrowserWindow shell', () => {
   assert.match(mainJs, /preload\.cjs/);
   assert.match(mainJs, /voicebridge:version/);
   assert.match(mainJs, /voicebridge:initialize/);
-  assert.match(mainJs, /signInAnonymously/);
+  assert.match(mainJs, /voicebridge:login/);
+  assert.match(mainJs, /signInWithPassword/);
+  assert.doesNotMatch(mainJs, /signInAnonymously/);
   assert.match(mainJs, /device-pairing/);
   assert.match(mainJs, /QRCode\.toDataURL/);
   assert.match(mainJs, /startRealtimeAgent/);
@@ -64,6 +66,7 @@ test('preload exposes a minimal VoiceBridge bridge API', () => {
   assert.match(preloadJs, /initialize:\s*\(\)\s*=>\s*ipcRenderer\.invoke\('voicebridge:initialize'\)/);
   assert.match(preloadJs, /refreshPairing/);
   assert.match(preloadJs, /unpair/);
+  assert.match(preloadJs, /login:\s*\(?credentials\)?\s*=>/);
   assert.match(preloadJs, /onAgentStatus/);
   assert.match(preloadJs, /lanState:\s*\(\)\s*=>\s*ipcRenderer\.invoke\('voicebridge:lan-state'\)/);
   assert.match(preloadJs, /onLanState/);
@@ -71,7 +74,9 @@ test('preload exposes a minimal VoiceBridge bridge API', () => {
 
 test('renderer is a Chinese QR pairing and status shell with a content security policy', () => {
   assert.match(rendererHtml, /Content-Security-Policy/);
+  assert.match(rendererHtml, /登录账号/);
   assert.match(rendererHtml, /手机扫码绑定/);
+  assert.match(rendererHtml, /局域网功能需要会员/);
   assert.match(rendererHtml, /连接状态/);
   assert.match(rendererHtml, /刷新二维码/);
   assert.match(rendererHtml, /voicebridge\?\.initialize/);

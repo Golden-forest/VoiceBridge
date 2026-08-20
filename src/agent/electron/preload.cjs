@@ -4,6 +4,7 @@ contextBridge.exposeInMainWorld('voicebridge', {
   version: () => ipcRenderer.invoke('voicebridge:version'),
   publicConfig: () => ipcRenderer.invoke('voicebridge:public-config'),
   initialize: () => ipcRenderer.invoke('voicebridge:initialize'),
+  login: (credentials) => ipcRenderer.invoke('voicebridge:login', credentials),
   refreshPairing: () => ipcRenderer.invoke('voicebridge:refresh-pairing'),
   unpair: () => ipcRenderer.invoke('voicebridge:unpair'),
   updateSettings: (settings) => ipcRenderer.invoke('voicebridge:update-settings', settings),

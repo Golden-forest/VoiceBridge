@@ -222,6 +222,19 @@
         <span class="status-value">正在初始化</span>
       </section>
 
+      <section id="loginPanel" class="panel" hidden>
+        <h2>登录账号</h2>
+        <p class="hint">局域网功能需要会员账号。使用注册邮箱登录后自动上线。</p>
+        <form id="loginForm" style="display:grid;gap:10px;width:100%">
+          <input id="loginEmail" type="email" placeholder="邮箱" required
+            autocomplete="email" style="min-height:40px;border:1px solid #d9d3db;border-radius:12px;padding:9px 12px;font:inherit">
+          <input id="loginPassword" type="password" placeholder="密码" required
+            autocomplete="current-password" style="min-height:40px;border:1px solid #d9d3db;border-radius:12px;padding:9px 12px;font:inherit">
+          <button id="loginButton" type="submit">登录</button>
+        </form>
+        <p class="hint">没有账号？在手机网页注册后再回来登录。</p>
+      </section>
+
       <section id="pairingPanel" class="panel" hidden>
         <h2>手机扫码绑定</h2>
         <img id="qrImage" alt="VoiceBridge 手机配对二维码">
@@ -241,6 +254,10 @@
           <p class="eyebrow">局域网输入</p>
           <p class="device-name lan-code" id="lanPairingCode"></p>
           <p class="hint">手机访问同一 Wi-Fi 下的电脑页面，输入上面的 6 位配对码即可使用。配对码会自动更换。</p>
+        </div>
+        <div id="lanMemberBlock" class="lan-block" hidden>
+          <p class="eyebrow">局域网输入</p>
+          <p class="hint">局域网功能需要会员。订阅会员后重启本应用即可使用，并可享受单次 60 秒的局域网语音输入。</p>
         </div>
         <label class="privacy-setting">
           <span>向手机显示完整窗口标题</span>
@@ -265,6 +282,9 @@
 
     <script>
       const statusEl = document.querySelector('.status-value');
+      const loginPanel = document.querySelector('#loginPanel');
+      const loginForm = document.querySelector('#loginForm');
+      const loginButton = document.querySelector('#loginButton');
       const pairingPanel = document.querySelector('#pairingPanel');
       const onlinePanel = document.querySelector('#onlinePanel');
       const qrImage = document.querySelector('#qrImage');
@@ -277,6 +297,7 @@
       const messageEl = document.querySelector('#message');
       const lanSection = document.querySelector('#lanSection');
       const lanPairingCode = document.querySelector('#lanPairingCode');
+      const lanMemberBlock = document.querySelector('#lanMemberBlock');
 
       function renderLanState(state) {
         lanSection.hidden = !state?.running;
@@ -294,9 +315,14 @@
       }
 
       function renderState(state) {
+        loginPanel.hidden = state?.mode !== 'login';
         pairingPanel.hidden = state?.mode !== 'pairing';
         onlinePanel.hidden = state?.mode !== 'online';
-        if (state?.mode === 'pairing') {
+        lanMemberBlock.hidden = !(state?.mode === 'online' && state.lanAllowed === false);
+        if (state?.mode === 'login') {
+          setStatus('未登录', true);
+          setMessage('请登录后使用。');
+        } else if (state?.mode === 'pairing') {
           setStatus('等待手机扫码');
           qrImage.src = state.qrDataUrl;
           deviceName.textContent = state.deviceName || '';
@@ -304,10 +330,30 @@
         } else if (state?.mode === 'online') {
           setStatus('已上线');
           onlineDeviceName.textContent = state.deviceName || '';
-          setMessage('绑定成功，保持此应用运行即可。');
+          setMessage(state.plan === 'pro' || state.plan === 'admin'
+            ? '会员账号已上线，局域网输入可用（单次最长 60 秒）。'
+            : '绑定成功，保持此应用运行即可。');
           reportWindowTitles.checked = Boolean(state.reportWindowTitles);
         }
       }
+
+      loginForm.addEventListener('submit', async (event) => {
+        event.preventDefault();
+        loginButton.disabled = true;
+        setStatus('正在登录');
+        try {
+          renderState(await window.voicebridge.login({
+            email: document.querySelector('#loginEmail').value,
+            password: document.querySelector('#loginPassword').value
+          }));
+          document.querySelector('#loginPassword').value = '';
+        } catch (error) {
+          setStatus('登录失败', true);
+          setMessage(error.message || '登录失败，请检查邮箱和密码。', true);
+        } finally {
+          loginButton.disabled = false;
+        }
+      });
 
       window.voicebridge?.version().then((version) => {
         document.querySelector('#version').textContent = version;
