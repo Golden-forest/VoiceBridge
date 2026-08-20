@@ -22,11 +22,11 @@ function httpsGetJson(port, pathname) {
   });
 }
 
-function httpGet(port, pathname) {
+function httpGet(port, pathname, headers = {}) {
   return new Promise((resolve, reject) => {
-    const req = http.get({ host: "127.0.0.1", port, path: pathname, agent: false }, (res) => {
+    const req = http.get({ host: "127.0.0.1", port, path: pathname, agent: false, headers }, (res) => {
       res.resume();
-      res.on("end", () => resolve({ status: res.statusCode }));
+      res.on("end", () => resolve({ status: res.statusCode, location: res.headers.location }));
     });
     req.on("error", reject);
   });
@@ -89,6 +89,27 @@ test("createLanServer starts, serves health on both ports, and stops cleanly", a
 
   assert.equal(await portClosed(lan.port), true, "https port should be closed");
   assert.equal(await portClosed(lan.httpPort), true, "http port should be closed");
+});
+
+test("createLanServer HTTP redirect keeps the phone's host instead of falling back to localhost", async () => {
+  const rootDir = await fs.mkdtemp(path.join(os.tmpdir(), "voicebridge-lan-"));
+  const lan = await createLanServer({ rootDir, port: 0, config: {} });
+
+  try {
+    // 手机访问 HTTP 探测端口时 Host 头带的是 httpPort；重定向必须保留
+    // 该主机名并指向 HTTPS 端口，否则手机会被跳到"localhost"（它自己）。
+    const redirect = await httpGet(lan.httpPort, "/some/path", {
+      Host: `127.0.0.1:${lan.httpPort}`
+    });
+    assert.equal(redirect.status, 301);
+    assert.equal(redirect.location, `https://127.0.0.1:${lan.port}/some/path`);
+
+    // 未知主机名仍回退到 localhost（防开放重定向）。
+    const unknown = await httpGet(lan.httpPort, "/x", { Host: "evil.example:1234" });
+    assert.equal(unknown.location, `https://localhost:${lan.port}/x`);
+  } finally {
+    await lan.close();
+  }
 });
 
 test("createLanServer getEndpoints lists local IPv4 addresses with both ports", async () => {

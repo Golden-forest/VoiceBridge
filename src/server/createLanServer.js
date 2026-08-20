@@ -133,14 +133,21 @@ export async function createLanServer({
     res.json({ ok: true, app: "VoiceBridge", lan: true });
   });
   redirectApp.use((req, res) => {
-    const allowedHosts = [
+    // 手机从 HTTP 探测端口进来时 Host 带的是 httpPort，不能拿它和
+    // "主机:httpsPort" 整串比较——否则永远匹配不上、回退到 localhost，
+    // 手机端就被重定向到自己身上。按主机名（去端口）白名单校验后，
+    // 保留该主机名并拼上 HTTPS 端口。
+    const allowedHosts = new Set([
       "localhost",
       "127.0.0.1",
       getLocalIp(),
       ...listLocalIps()
-    ].map((host) => `${host}:${resolvedPort}`);
-    const host = req.headers.host;
-    const safeHost = allowedHosts.includes(host) ? host : `localhost:${resolvedPort}`;
+    ]);
+    const requestedHost = String(req.headers.host || "");
+    const requestedHostname = requestedHost.replace(/:\d+$/, "");
+    const safeHost = allowedHosts.has(requestedHostname)
+      ? `${requestedHostname}:${resolvedPort}`
+      : `localhost:${resolvedPort}`;
     const safePath = req.url.replace(/^\/+/, "/");
     res.redirect(301, `https://${safeHost}${safePath}`);
   });
