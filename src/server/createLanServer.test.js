@@ -91,6 +91,25 @@ test("createLanServer starts, serves health on both ports, and stops cleanly", a
   assert.equal(await portClosed(lan.httpPort), true, "http port should be closed");
 });
 
+test("createLanServer notifies onPairingKnock when an unpaired phone probes the pairing endpoint", async () => {
+  const rootDir = await fs.mkdtemp(path.join(os.tmpdir(), "voicebridge-lan-"));
+  const knocks = [];
+  const lan = await createLanServer({
+    rootDir,
+    port: 0,
+    config: {},
+    onPairingKnock: (req) => knocks.push(req.socket?.remoteAddress || "unknown")
+  });
+
+  try {
+    // 手机（LAN 页面加载时的 status 探测）→ 敲门。
+    await httpsGetJson(lan.port, "/api/lan/pair");
+    assert.equal(knocks.length, 1);
+  } finally {
+    await lan.close();
+  }
+});
+
 test("createLanServer HTTP redirect keeps the phone's host instead of falling back to localhost", async () => {
   const rootDir = await fs.mkdtemp(path.join(os.tmpdir(), "voicebridge-lan-"));
   const lan = await createLanServer({ rootDir, port: 0, config: {} });

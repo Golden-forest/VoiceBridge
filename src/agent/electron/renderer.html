@@ -252,8 +252,9 @@
         <p class="hint">现在可以在手机端录音。转写完成后会自动发送并粘贴到这台电脑。</p>
         <div id="lanSection" class="lan-block" hidden>
           <p class="eyebrow">局域网输入</p>
-          <p class="device-name lan-code" id="lanPairingCode"></p>
-          <p class="hint">手机访问同一 Wi-Fi 下的电脑页面，输入上面的 6 位配对码即可使用。配对码会自动更换。</p>
+          <p class="device-name lan-code" id="lanPairingCode" hidden></p>
+          <p class="hint" id="lanIdleHint">手机打开语音输入页面时，这里会显示 6 位配对码。</p>
+          <p class="hint" id="lanActiveHint" hidden>在手机上输入上面的 6 位配对码即可使用。长时间不用会自动隐藏。</p>
         </div>
         <div id="lanMemberBlock" class="lan-block" hidden>
           <p class="eyebrow">局域网输入</p>
@@ -297,11 +298,17 @@
       const messageEl = document.querySelector('#message');
       const lanSection = document.querySelector('#lanSection');
       const lanPairingCode = document.querySelector('#lanPairingCode');
+      const lanIdleHint = document.querySelector('#lanIdleHint');
+      const lanActiveHint = document.querySelector('#lanActiveHint');
       const lanMemberBlock = document.querySelector('#lanMemberBlock');
 
       function renderLanState(state) {
         lanSection.hidden = !state?.running;
-        lanPairingCode.textContent = state?.pairingCode || '';
+        // 配对码按需显示：只有手机敲门（codeVisible）才亮码，平时只有引导语。
+        lanPairingCode.hidden = !state?.codeVisible;
+        lanPairingCode.textContent = state?.codeVisible ? (state.pairingCode || '') : '';
+        lanIdleHint.hidden = Boolean(state?.codeVisible);
+        lanActiveHint.hidden = !state?.codeVisible;
       }
 
       function setStatus(message, isError = false) {

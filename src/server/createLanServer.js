@@ -44,6 +44,7 @@ export async function createLanServer({
   getAccessToken,
   supabaseUrl,
   supabaseAnonKey,
+  onPairingKnock,
   logger = console
 } = {}) {
   if (!rootDir) {
@@ -95,7 +96,16 @@ export async function createLanServer({
   //（本机回环访问免配对，本地开发不受影响）。手机端在 LAN 页面输入配对码。
   const pairing = createLanPairing();
   app.get("/api/lan/pair", (req, res) => {
-    res.json({ ok: true, paired: pairing.isAuthorizedRequest(req) });
+    const paired = pairing.isAuthorizedRequest(req);
+    res.json({ ok: true, paired });
+    // 敲门：未携带有效 token 的客户端（手机 LAN 页面加载时的状态探测）
+    // 到达即通知桌面端"按需亮码"——平时不显示配对码，手机来了才展示
+    //（带 TTL 自动隐藏）。回环开发访问也会敲门，行为一致且可测试。
+    if (!pairing.hasValidToken(req)) {
+      try {
+        onPairingKnock?.(req);
+      } catch { /* 敲门回调绝不能影响响应 */ }
+    }
   });
   app.post("/api/lan/pair", (req, res) => {
     // 暴力破解防护：连续失败后按 IP 指数退避（内存状态）

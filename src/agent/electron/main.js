@@ -88,7 +88,8 @@ async function startLanServer() {
         } catch {
           return null;
         }
-      }
+      },
+      onPairingKnock: revealLanCode
     });
     log('lan-started', { port: lanServer.port, httpPort: lanServer.httpPort, endpoints: lanServer.getEndpoints() });
     console.log(`VoiceBridge LAN pairing code: ${lanServer.pairingCode}`);
@@ -106,6 +107,9 @@ async function stopLanServer() {
   if (!lanServer) return;
   const server = lanServer;
   lanServer = null;
+  clearTimeout(lanCodeHideTimer);
+  lanCodeHideTimer = null;
+  lanCodeVisible = false;
   lanWatcher?.stop();
   lanWatcher = null;
   sendLanState();
@@ -157,17 +161,31 @@ function sendDesktopState(state) {
   return state;
 }
 
-// LAN 配对码会轮换（每 10 分钟 TTL + 成功配对后一次性重置），渲染窗口需要
-// 跟随展示。轮询 lanServer.pairingCode，仅在变化时推送；服务未运行时推
-// running:false 让渲染端隐藏局域网区块。
+// LAN 配对码按需显示：手机在 LAN 页面敲门（探测配对状态）后亮码 3 分钟，
+// 之后自动隐藏。平时桌面端只显示引导语，配对码不出现在屏幕上。
+const LAN_CODE_VISIBLE_MS = 3 * 60 * 1000;
+let lanCodeVisible = false;
+let lanCodeHideTimer = null;
+
 function sendLanState() {
-  mainWindow?.webContents.send('voicebridge:lan-state', buildLanState(lanServer));
+  mainWindow?.webContents.send('voicebridge:lan-state', buildLanState(lanServer, lanCodeVisible));
+}
+
+function revealLanCode() {
+  lanCodeVisible = true;
+  clearTimeout(lanCodeHideTimer);
+  lanCodeHideTimer = setTimeout(() => {
+    lanCodeVisible = false;
+    sendLanState();
+  }, LAN_CODE_VISIBLE_MS);
+  log('lan-pairing-knock');
+  sendLanState();
 }
 
 function startLanWatcher() {
   if (lanWatcher) return;
   lanWatcher = createLanCodeWatcher({
-    getState: () => buildLanState(lanServer),
+    getState: () => buildLanState(lanServer, lanCodeVisible),
     send: sendLanState,
     intervalMs: 3000
   });
@@ -453,7 +471,7 @@ ipcMain.handle('voicebridge:public-config', () => {
     hasSupabaseAnonKey: Boolean(config.supabaseAnonKey)
   };
 });
-ipcMain.handle('voicebridge:lan-state', () => buildLanState(lanServer));
+ipcMain.handle('voicebridge:lan-state', () => buildLanState(lanServer, lanCodeVisible));
 ipcMain.handle('voicebridge:initialize', () => initializeDesktop());
 ipcMain.handle('voicebridge:login', async (_event, credentials) => {
   const email = String(credentials?.email || '').trim();

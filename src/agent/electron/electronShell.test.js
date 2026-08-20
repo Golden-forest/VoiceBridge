@@ -56,6 +56,7 @@ test('Electron main process surfaces LAN pairing state to the renderer', () => {
   assert.match(mainJs, /createLanCodeWatcher/);
   assert.match(mainJs, /'voicebridge:lan-state'/);
   assert.match(mainJs, /lanWatcher\?\.stop\(\)/);
+  assert.match(mainJs, /onPairingKnock/);
 });
 
 test('preload exposes a minimal VoiceBridge bridge API', () => {
@@ -82,7 +83,10 @@ test('renderer is a Chinese QR pairing and status shell with a content security 
   assert.match(rendererHtml, /voicebridge\?\.initialize/);
   assert.match(rendererHtml, /局域网输入/);
   assert.match(rendererHtml, /id="lanPairingCode"/);
+  assert.match(rendererHtml, /id="lanIdleHint"/);
+  assert.match(rendererHtml, /id="lanActiveHint"/);
   assert.match(rendererHtml, /lanSection\.hidden\s*=\s*!state\?\.running/);
+  assert.match(rendererHtml, /lanPairingCode\.hidden\s*=\s*!state\?\.codeVisible/);
   assert.match(rendererHtml, /onLanState\(renderLanState\)/);
 });
 

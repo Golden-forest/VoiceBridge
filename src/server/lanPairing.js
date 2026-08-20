@@ -80,6 +80,11 @@ export function createLanPairing({
       return 0;
     },
 
+    /** 请求是否携带了有效 token（不含回环豁免，用于敲门判定） */
+    hasValidToken(req) {
+      return this.isValidToken(tokenFromRequest(req));
+    },
+
     /**
      * 用配对码换取 token；成功返回 token，失败或被限流返回 null。
      * 成功后配对码立即轮换（一次性），并清空该 IP 的失败计数。
