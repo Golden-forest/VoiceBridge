@@ -129,8 +129,12 @@ export function createAgentClient({ supabaseUrl, supabaseAnonKey, storage }) {
 // realtime-js 的 channel 一旦进入 CLOSED 状态永不 rejoin；errored 状态下
 // subscribe() 是 no-op 且 supabase.channel(topic) 会返回缓存里的死对象。
 // 所以通道死亡时必须 removeChannel 后整体重建，否则桌面端"掉线直到重启"。
-const RECONNECT_BACKOFF_MS = [1000, 2000, 5000, 10000];
+const RECONNECT_BACKOFF_MS = [1000, 2000, 5000, 10000, 30000];
 const FATAL_CHANNEL_STATUSES = ["CHANNEL_ERROR", "CLOSED"];
+// 重连计数只有在持续在线这么久后才清零。瞬时 SUBSCRIBED 就清零会把退避
+// 永远打回 1s：一旦服务端因 join 频率超限开始断连，"重连→订阅成功→又被
+// 断开"的循环就自我维持，永远以 1 秒间隔重打服务器（2026-08 桌面端死循环）。
+const HEALTH_RESET_MS = 30000;
 
 export async function startRealtimeAgent({
   supabase,
@@ -155,6 +159,7 @@ export async function startRealtimeAgent({
   let stopped = false;
   let reconnectTimer = null;
   let reconnectAttempt = 0;
+  let healthResetTimer = null;
   let reconnectGeneration = 0;
   let messageHealthy = false;
   let presenceHealthy = false;
@@ -211,14 +216,33 @@ export async function startRealtimeAgent({
     await subscribeCoreChannels();
   };
 
+  const clearHealthResetTimer = () => {
+    clearTimeout(healthResetTimer);
+    healthResetTimer = null;
+  };
+
   const noteChannelHealth = () => {
-    if (messageHealthy && presenceHealthy && reconnectAttempt > 0) {
-      onStatus("reconnect:recovered");
-    }
     if (messageHealthy && presenceHealthy) {
-      reconnectAttempt = 0;
+      if (reconnectAttempt > 0) {
+        onStatus("reconnect:recovered");
+        // 不立刻清零 reconnectAttempt；持续在线 HEALTH_RESET_MS 后才恢复
+        // 最短退避，避免瞬时恢复把下次断开又拉回 1s 间隔。
+        if (!healthResetTimer) {
+          healthResetTimer = setTimeout(() => {
+            healthResetTimer = null;
+            if (stopped) return;
+            if (messageHealthy && presenceHealthy) {
+              reconnectAttempt = 0;
+              onStatus("reconnect:stable");
+            }
+          }, HEALTH_RESET_MS);
+        }
+      }
+      onStatus("health:online");
+    } else {
+      clearHealthResetTimer();
+      onStatus("health:degraded");
     }
-    onStatus(`health:${messageHealthy && presenceHealthy ? "online" : "degraded"}`);
   };
 
   const trackPresence = async (force = false) => {
@@ -379,6 +403,7 @@ export async function startRealtimeAgent({
       reconnectGeneration += 1;
       clearTimeout(presenceTimer);
       clearTimeout(reconnectTimer);
+      clearHealthResetTimer();
       presenceTimer = null;
       reconnectTimer = null;
       await Promise.all([

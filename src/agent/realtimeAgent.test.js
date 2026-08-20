@@ -137,6 +137,67 @@ test("handleDesktopMessage does not type when the selected window cannot be acti
   assert.equal(result.ack.detail, "window closed");
 });
 
+test("startRealtimeAgent backs off across flaps instead of resetting to 1s on transient health", async () => {
+  const statuses = [];
+  let messageSubscribers = [];
+  let presenceSubscribers = [];
+  const channelStore = new Map();
+  const supabase = {
+    channel(topic) {
+      if (!channelStore.has(topic)) {
+        channelStore.set(topic, {
+          topic,
+          removed: false,
+          on() { return this; },
+          async subscribe(callback) {
+            if (topic.endsWith("desktop-1")) messageSubscribers.push(callback);
+            if (topic.endsWith("presence")) presenceSubscribers.push(callback);
+            await callback?.("SUBSCRIBED");
+            return "ok";
+          },
+          async track() { return "ok"; },
+          async send() { return "ok"; },
+          async unsubscribe() { return "ok"; }
+        });
+      }
+      return channelStore.get(topic);
+    },
+    async removeChannel(channel) {
+      channel.removed = true;
+      channelStore.delete(channel.topic);
+    }
+  };
+
+  const agent = await startRealtimeAgent({
+    supabase,
+    userId: "user-1",
+    device: { id: "desktop-1", name: "Desk", platform: "darwin" },
+    listWindows: async () => [],
+    onStatus: (status) => statuses.push(status)
+  });
+
+  try {
+    // 第一次断开：退避 1s
+    messageSubscribers.at(-1)("CLOSED");
+    assert.ok(statuses.some((s) => s === "reconnect:scheduled:message:CLOSED:1000ms"));
+
+    // 等 1s 退避结束、重建成功（瞬时 SUBSCRIBED 不应清零重连计数）
+    await new Promise((resolve) => setTimeout(resolve, 1200));
+    assert.equal(agent.getHealth().online, true);
+
+    // 第二次断开：退避必须增长到 2s，而不是又回到 1s
+    messageSubscribers = messageSubscribers.filter((cb) => !channelStore.get("device:user-1:desktop-1")?.removed);
+    const latestMessageCb = messageSubscribers.at(-1);
+    latestMessageCb("CLOSED");
+    assert.ok(
+      statuses.some((s) => s === "reconnect:scheduled:message:CLOSED:2000ms"),
+      `expected 2000ms backoff, got: ${statuses.filter((s) => s.startsWith("reconnect:scheduled")).join(", ")}`
+    );
+  } finally {
+    await agent.stop();
+  }
+});
+
 test("startRealtimeAgent reuses ack channels and cleans them up", async () => {
   const channels = new Map();
   const createdTopics = [];
