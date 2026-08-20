@@ -41,7 +41,12 @@ test('Electron main process uses a safe BrowserWindow shell', () => {
   assert.match(mainJs, /voicebridge:version/);
   assert.match(mainJs, /voicebridge:initialize/);
   assert.match(mainJs, /voicebridge:login/);
+  assert.match(mainJs, /voicebridge:otp-send/);
+  assert.match(mainJs, /voicebridge:login-otp/);
   assert.match(mainJs, /signInWithPassword/);
+  assert.match(mainJs, /signInWithOtp/);
+  assert.match(mainJs, /shouldCreateUser:\s*false/);
+  assert.match(mainJs, /verifyOtp/);
   assert.doesNotMatch(mainJs, /signInAnonymously/);
   assert.match(mainJs, /device-pairing/);
   assert.match(mainJs, /QRCode\.toDataURL/);
@@ -68,6 +73,8 @@ test('preload exposes a minimal VoiceBridge bridge API', () => {
   assert.match(preloadJs, /refreshPairing/);
   assert.match(preloadJs, /unpair/);
   assert.match(preloadJs, /login:\s*\(?credentials\)?\s*=>/);
+  assert.match(preloadJs, /otpSend/);
+  assert.match(preloadJs, /loginOtp/);
   assert.match(preloadJs, /onAgentStatus/);
   assert.match(preloadJs, /lanState:\s*\(\)\s*=>\s*ipcRenderer\.invoke\('voicebridge:lan-state'\)/);
   assert.match(preloadJs, /onLanState/);
@@ -85,6 +92,7 @@ test('renderer is a Chinese QR pairing and status shell with a content security 
   assert.match(rendererHtml, /id="lanPairingCode"/);
   assert.match(rendererHtml, /id="lanIdleHint"/);
   assert.match(rendererHtml, /id="lanActiveHint"/);
+  assert.match(rendererHtml, /使用邮箱验证码登录/);
   assert.match(rendererHtml, /lanSection\.hidden\s*=\s*!state\?\.running/);
   assert.match(rendererHtml, /lanPairingCode\.hidden\s*=\s*!state\?\.codeVisible/);
   assert.match(rendererHtml, /onLanState\(renderLanState\)/);

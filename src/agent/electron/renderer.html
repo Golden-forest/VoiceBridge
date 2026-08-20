@@ -228,11 +228,14 @@
         <form id="loginForm" style="display:grid;gap:10px;width:100%">
           <input id="loginEmail" type="email" placeholder="邮箱" required
             autocomplete="email" style="min-height:40px;border:1px solid #d9d3db;border-radius:12px;padding:9px 12px;font:inherit">
-          <input id="loginPassword" type="password" placeholder="密码" required
+          <input id="loginPassword" type="password" placeholder="密码" hidden
             autocomplete="current-password" style="min-height:40px;border:1px solid #d9d3db;border-radius:12px;padding:9px 12px;font:inherit">
+          <input id="loginOtp" type="text" inputmode="numeric" placeholder="邮箱验证码（6 位）" hidden
+            autocomplete="one-time-code" style="min-height:40px;border:1px solid #d9d3db;border-radius:12px;padding:9px 12px;font:inherit;letter-spacing:4px;text-align:center">
           <button id="loginButton" type="submit">登录</button>
+          <button id="otpSwitchButton" type="button" class="secondary">使用邮箱验证码登录</button>
         </form>
-        <p class="hint">没有账号？在手机网页注册后再回来登录。</p>
+        <p class="hint">没有账号？在手机网页注册后再回来登录。GitHub / 谷歌注册的账号请用验证码登录。</p>
       </section>
 
       <section id="pairingPanel" class="panel" hidden>
@@ -347,18 +350,70 @@
       loginForm.addEventListener('submit', async (event) => {
         event.preventDefault();
         loginButton.disabled = true;
-        setStatus('正在登录');
+        setStatus(otpMode ? '正在验证' : '正在登录');
         try {
-          renderState(await window.voicebridge.login({
-            email: document.querySelector('#loginEmail').value,
-            password: document.querySelector('#loginPassword').value
-          }));
-          document.querySelector('#loginPassword').value = '';
+          const email = document.querySelector('#loginEmail').value;
+          if (otpMode) {
+            renderState(await window.voicebridge.loginOtp({
+              email,
+              token: document.querySelector('#loginOtp').value.trim()
+            }));
+            document.querySelector('#loginOtp').value = '';
+          } else {
+            renderState(await window.voicebridge.login({
+              email,
+              password: document.querySelector('#loginPassword').value
+            }));
+            document.querySelector('#loginPassword').value = '';
+          }
         } catch (error) {
           setStatus('登录失败', true);
           setMessage(error.message || '登录失败，请检查邮箱和密码。', true);
         } finally {
           loginButton.disabled = false;
+        }
+      });
+
+      // 邮箱验证码登录：GitHub / 谷歌 OAuth 注册的账号没有密码，用 Supabase
+      // 邮件 OTP 登录，与密码登录等效。
+      const loginPassword = document.querySelector('#loginPassword');
+      const loginOtp = document.querySelector('#loginOtp');
+      const otpSwitchButton = document.querySelector('#otpSwitchButton');
+      let otpMode = false;
+      otpSwitchButton.addEventListener('click', async () => {
+        otpMode = !otpMode;
+        loginPassword.hidden = otpMode;
+        loginOtp.hidden = !otpMode;
+        loginPassword.required = !otpMode;
+        loginOtp.required = otpMode;
+        otpSwitchButton.textContent = otpMode ? '使用密码登录' : '使用邮箱验证码登录';
+        loginButton.textContent = otpMode ? '验证并登录' : '登录';
+        if (otpMode) {
+          const email = document.querySelector('#loginEmail').value.trim();
+          if (!email) {
+            setMessage('请先填写邮箱，再获取验证码。', true);
+            otpMode = false;
+            loginPassword.hidden = false;
+            loginOtp.hidden = true;
+            otpSwitchButton.textContent = '使用邮箱验证码登录';
+            loginButton.textContent = '登录';
+            return;
+          }
+          otpSwitchButton.disabled = true;
+          try {
+            await window.voicebridge.otpSend(email);
+            setMessage('验证码已发送到邮箱，请在 10 分钟内输入。');
+            loginOtp.focus();
+          } catch (error) {
+            setMessage(error.message || '验证码发送失败。', true);
+            otpMode = false;
+            loginPassword.hidden = false;
+            loginOtp.hidden = true;
+            otpSwitchButton.textContent = '使用邮箱验证码登录';
+            loginButton.textContent = '登录';
+          } finally {
+            otpSwitchButton.disabled = false;
+          }
         }
       });
 

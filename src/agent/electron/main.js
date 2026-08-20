@@ -483,6 +483,30 @@ ipcMain.handle('voicebridge:login', async (_event, credentials) => {
   log('auth-login', { email });
   return await initializeDesktopInternal();
 });
+// 邮箱验证码登录（OTP）：GitHub / 谷歌 OAuth 注册的账号没有密码，走邮件
+// 验证码。shouldCreateUser:false 保证只允许已注册邮箱，不产生新账号。
+ipcMain.handle('voicebridge:otp-send', async (_event, email) => {
+  const normalized = String(email || '').trim();
+  if (!normalized) throw new Error('请输入邮箱。');
+  const supabase = await getOrCreateDesktopClient();
+  const { error } = await supabase.auth.signInWithOtp({
+    email: normalized,
+    options: { shouldCreateUser: false }
+  });
+  if (error) throw new Error(error.message);
+  log('auth-otp-send', { email: normalized });
+  return { ok: true };
+});
+ipcMain.handle('voicebridge:login-otp', async (_event, credentials) => {
+  const email = String(credentials?.email || '').trim();
+  const token = String(credentials?.token || '').trim();
+  if (!email || !token) throw new Error('请输入邮箱和验证码。');
+  const supabase = await getOrCreateDesktopClient();
+  const { error } = await supabase.auth.verifyOtp({ email, token, type: 'email' });
+  if (error) throw new Error(error.message);
+  log('auth-login-otp', { email });
+  return await initializeDesktopInternal();
+});
 ipcMain.handle('voicebridge:refresh-pairing', () => initializeDesktopInternal());
 ipcMain.handle('voicebridge:unpair', () => unpairDesktop());
 ipcMain.handle('voicebridge:update-settings', async (_event, updates) => {

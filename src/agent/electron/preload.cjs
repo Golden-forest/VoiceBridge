@@ -5,6 +5,8 @@ contextBridge.exposeInMainWorld('voicebridge', {
   publicConfig: () => ipcRenderer.invoke('voicebridge:public-config'),
   initialize: () => ipcRenderer.invoke('voicebridge:initialize'),
   login: (credentials) => ipcRenderer.invoke('voicebridge:login', credentials),
+  otpSend: (email) => ipcRenderer.invoke('voicebridge:otp-send', email),
+  loginOtp: (credentials) => ipcRenderer.invoke('voicebridge:login-otp', credentials),
   refreshPairing: () => ipcRenderer.invoke('voicebridge:refresh-pairing'),
   unpair: () => ipcRenderer.invoke('voicebridge:unpair'),
   updateSettings: (settings) => ipcRenderer.invoke('voicebridge:update-settings', settings),
