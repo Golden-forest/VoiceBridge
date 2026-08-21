@@ -434,8 +434,12 @@
           setStatus('已上线');
         } else if (text === 'health:degraded' || text.includes('CHANNEL_ERROR') || text.includes('CLOSED')) {
           setStatus('连接中断，正在重连…');
-        } else if (text.startsWith('reconnect:')) {
+        } else if (text.startsWith('reconnect:scheduled')) {
+          // 只有真正排了重连才显示断线。reconnect:stable（持续在线 30s，
+          // 退避清零）是正面事件，reconnect:recovered 后必跟 health:online。
           setStatus('连接中断，正在重连…');
+        } else if (text === 'reconnect:stable') {
+          setStatus('已上线');
         } else if (text.startsWith('auth-')) {
           setStatus('登录状态恢复中…');
         }
