@@ -14,6 +14,24 @@ import { createLanPairing } from "./lanPairing.js";
 import { ensureCertificates } from "./certs.js";
 import { listWindows } from "./input/windowManager.js";
 
+const STALE_UPLOAD_MS = 24 * 60 * 60 * 1000;
+
+// 进程崩溃 / 断电时上传的音频会残留在 tmp 目录（正常路径在 finally 里删除）。
+// 启动时清理超过一天的孤儿文件，避免长期运行的磁盘垃圾积累。尽力而为，
+// 失败不影响服务启动。
+function sweepStaleUploads(dir, now = Date.now()) {
+  fs.readdir(dir).then((entries) => {
+    for (const entry of entries) {
+      const filePath = path.join(dir, entry);
+      fs.stat(filePath).then((stats) => {
+        if (stats.isFile() && now - stats.mtimeMs > STALE_UPLOAD_MS) {
+          return fs.rm(filePath, { force: true });
+        }
+      }).catch(() => { /* best effort */ });
+    }
+  }).catch(() => { /* best effort */ });
+}
+
 /**
  * 可嵌入的 LAN 服务工厂：构建 HTTPS 主服务（自签名证书）+ WS hub +
  * HTTP 探测/重定向服务。供 `node src/server/index.js`（独立运行）和
@@ -63,6 +81,7 @@ export async function createLanServer({
   const publicDir = path.join(rootDir, "src/public");
   const uploadTmpDir = tmpDir ?? path.join(rootDir, "tmp");
   await fs.mkdir(uploadTmpDir, { recursive: true });
+  sweepStaleUploads(uploadTmpDir);
 
   const localIp = getLocalIp();
   const { key, cert } = await ensureCertificates(rootDir, { localIp, certsDir });
