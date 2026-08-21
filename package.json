@@ -66,6 +66,8 @@
           "^/src/.*\\.test\\.js$",
           "^/node_modules/\\.cache($|/)",
           "^/node_modules/\\.bin($|/)",
+          "^/node_modules/\\.deno($|/)",
+          "^/node_modules/stripe($|/)",
           "^/node_modules/.*/\\.cache($|/)",
           "^/node_modules/.*/\\.wrangler($|/)",
           "^/node_modules/.*/\\.bin($|/)",
