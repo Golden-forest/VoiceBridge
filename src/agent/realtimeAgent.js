@@ -223,6 +223,15 @@ export async function startRealtimeAgent({
 
   const noteChannelHealth = () => {
     if (messageHealthy && presenceHealthy) {
+      // 双通道恢复健康时，挂起的重连定时器已无意义——通道是 phoenix 自动
+      // rejoin 修好的。留着它会在 30s 后主动 purge 掉健康通道，purge 又触发
+      // CLOSED → 再排下一个定时器，形成每 30s 一次的"已上线→重连"死循环
+      //（2026-08 桌面端日志实测）。取消定时器并作废代次，让迟到的回调 no-op。
+      if (reconnectTimer) {
+        clearTimeout(reconnectTimer);
+        reconnectTimer = null;
+        reconnectGeneration += 1;
+      }
       if (reconnectAttempt > 0) {
         onStatus("reconnect:recovered");
         // 不立刻清零 reconnectAttempt；持续在线 HEALTH_RESET_MS 后才恢复

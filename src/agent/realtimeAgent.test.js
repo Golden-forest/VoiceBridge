@@ -198,6 +198,71 @@ test("startRealtimeAgent backs off across flaps instead of resetting to 1s on tr
   }
 });
 
+test("startRealtimeAgent cancels pending reconnect when phoenix rejoins channels", async () => {
+  // 回归：通道 CLOSED 排了退避重连，但 phoenix 在定时器到期前就自动 rejoin
+  // 成功。挂起的定时器必须被取消——否则它会在 30s 后主动 purge 健康通道，
+  // 形成每 30s 一次的"上线→重连"死循环（2026-08 桌面端日志实测）。
+  const statuses = [];
+  let messageCb = null;
+  let presenceCb = null;
+  const channelStore = new Map();
+  const supabase = {
+    channel(topic) {
+      if (!channelStore.has(topic)) {
+        channelStore.set(topic, {
+          topic,
+          removed: false,
+          on() { return this; },
+          async subscribe(callback) {
+            if (topic.endsWith("desktop-1")) messageCb = callback;
+            if (topic.endsWith("presence")) presenceCb = callback;
+            await callback?.("SUBSCRIBED");
+            return "ok";
+          },
+          async track() { return "ok"; },
+          async send() { return "ok"; },
+          async unsubscribe() { return "ok"; }
+        });
+      }
+      return channelStore.get(topic);
+    },
+    async removeChannel(channel) {
+      channel.removed = true;
+      channelStore.delete(channel.topic);
+    }
+  };
+
+  const agent = await startRealtimeAgent({
+    supabase,
+    userId: "user-1",
+    device: { id: "desktop-1", name: "Desk", platform: "darwin" },
+    listWindows: async () => [],
+    onStatus: (status) => statuses.push(status)
+  });
+
+  try {
+    // 真实断开：排 1s 退避重连。
+    messageCb("CLOSED");
+    assert.ok(statuses.some((s) => s === "reconnect:scheduled:message:CLOSED:1000ms"));
+
+    // phoenix 在退避到期前自动 rejoin 成功（不经过我们的 reconnect()）。
+    messageCb("SUBSCRIBED");
+    presenceCb("SUBSCRIBED");
+    assert.equal(agent.getHealth().online, true);
+
+    // 等待远超 1s 退避：挂起的定时器必须已被取消，不得 purge 健康通道。
+    await new Promise((resolve) => setTimeout(resolve, 1300));
+    const scheduledAfterRecovery = statuses
+      .filter((s) => s.startsWith("reconnect:scheduled"))
+      .length;
+    assert.equal(scheduledAfterRecovery, 1, `unexpected extra reconnects: ${statuses.join(", ")}`);
+    assert.equal(agent.getHealth().online, true);
+    assert.ok(!channelStore.get("device:user-1:desktop-1")?.removed);
+  } finally {
+    await agent.stop();
+  }
+});
+
 test("startRealtimeAgent reuses ack channels and cleans them up", async () => {
   const channels = new Map();
   const createdTopics = [];
