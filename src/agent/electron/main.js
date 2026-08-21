@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, powerMonitor } from 'electron';
+import { app, BrowserWindow, ipcMain, net, powerMonitor } from 'electron';
 import { readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -393,9 +393,20 @@ async function goOnline({ supabase, userId, device }) {
     reportWindowTitles: settings.reportWindowTitles,
     onStatus: sendAgentStatus
   });
+  // 先登记 activeAgent 再做后续步骤：若之后任何一步抛错，stopRealtimeOnly
+  // 才能停掉已启动的 runtime，否则通道和定时器会泄漏到进程结束。
+  activeAgent = { supabase, runtime, device, userId };
   // LAN 功能会员专属：登录账号 plan ∈ {pro, admin} 才启动内嵌 LAN 服务。
-  currentPlan = await resolveDesktopPlan(supabase, userId);
-  const lanAllowed = currentPlan === 'pro' || currentPlan === 'admin';
+  // 套餐查询失败（网络瞬断）不能让整个上线失败——那会把用户锁死在
+  // "初始化失败"且没有重试入口。降级为 LAN 不可用，云链路照常工作。
+  let lanAllowed = false;
+  try {
+    currentPlan = await resolveDesktopPlan(supabase, userId);
+    lanAllowed = currentPlan === 'pro' || currentPlan === 'admin';
+  } catch (error) {
+    currentPlan = null;
+    log('plan-resolve-failed', { error: error instanceof Error ? error.message : String(error) });
+  }
   if (lanAllowed) {
     if (settings.lanMode && !lanServer) {
       await startLanServer();
@@ -409,7 +420,6 @@ async function goOnline({ supabase, userId, device }) {
   } catch (error) {
     log('lan-endpoints-track-failed', { error: error instanceof Error ? error.message : String(error) });
   }
-  activeAgent = { supabase, runtime, device, userId };
   return sendDesktopState({
     mode: 'online',
     deviceName: device.name,
@@ -537,6 +547,19 @@ function wireLifecycleEvents() {
     activeAgent?.runtime?.forceReconnect?.('power-resume');
   });
   powerMonitor.on('lock-screen', () => log('power-lock'));
+  // Wi-Fi 切换 / 断网重连没有专门的系统事件可订阅；realtime 要等约 30s
+  // 心跳超时才能发现链路已死。轮询 net.isOnline()，在"断→通"瞬间主动
+  // 重连，把假在线盲区压到轮询间隔（5s）以内。
+  let wasOnline = net.isOnline();
+  const networkTimer = setInterval(() => {
+    const online = net.isOnline();
+    if (online && !wasOnline) {
+      log('network-online');
+      activeAgent?.runtime?.forceReconnect?.('network-online');
+    }
+    wasOnline = online;
+  }, 5000);
+  networkTimer.unref?.();
 }
 
 app.on('window-all-closed', () => {
