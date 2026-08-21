@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 
 import {
+  __waitForPendingAsrReportsForTests,
   resolveAsrChannel,
   transcribeViaEdgeAsr
 } from "./directEdgeAsr.js";
@@ -61,6 +62,9 @@ test("transcribeViaEdgeAsr happy path: issue -> tencent POST raw wav -> report s
   const text = await transcribeViaEdgeAsr({ ...baseCtx(), fetchImpl });
 
   assert.equal(text, "你好，世界");
+
+  // 成功上报 fire-and-forget：主流程返回时上报可能尚未发出。
+  await __waitForPendingAsrReportsForTests();
 
   const issue = calls[0];
   assert.equal(issue.url, `${BASE}/functions/v1/issue-asr-request`);
@@ -168,6 +172,28 @@ test("transcribeViaEdgeAsr tolerates report-asr-result failure", async () => {
   ]);
   const text = await transcribeViaEdgeAsr({ ...baseCtx(), fetchImpl });
   assert.equal(text, "你好");
+  await __waitForPendingAsrReportsForTests();
+});
+
+test("transcribeViaEdgeAsr returns text without waiting for the success report", async () => {
+  let releaseReport;
+  const reportBlocked = new Promise((resolve) => { releaseReport = resolve; });
+  const { fetchImpl, calls } = createFetchSpy([
+    okIssue(),
+    tencentOk("你好"),
+    async () => {
+      await reportBlocked;
+      return jsonResponse({ ok: true });
+    }
+  ]);
+
+  const text = await transcribeViaEdgeAsr({ ...baseCtx(), fetchImpl });
+  // 上报悬而未决时文字已返回，且上报请求已发起。
+  assert.equal(text, "你好");
+  assert.equal(calls.length, 3);
+
+  releaseReport();
+  await __waitForPendingAsrReportsForTests();
 });
 
 test("transcribeViaEdgeAsr reports invalid/stale signature payloads as failed", async () => {

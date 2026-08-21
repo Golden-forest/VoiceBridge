@@ -132,9 +132,20 @@ export async function transcribeViaEdgeAsr({
     throw edgeError("识别完成，但没有返回可用文字。");
   }
 
-  // 成功上报尽力而为：失败不影响识别结果。
-  await report("success", { textLength: text.length });
+  // 成功上报 fire-and-forget（与手机端直连通道一致）：上报慢/挂起不得拖延
+  // 把文字交还给手机，否则识别完还要白等一次代理/公网往返。
+  wrapPendingReport(report("success", { textLength: text.length }));
   return text;
+}
+
+// 测试专用：等待所有进行中的成功上报 promise。生产代码不应调用。
+const pendingReports = new Set();
+const wrapPendingReport = (promise) => {
+  pendingReports.add(promise);
+  promise.then(() => pendingReports.delete(promise), () => pendingReports.delete(promise));
+};
+export async function __waitForPendingAsrReportsForTests() {
+  await Promise.allSettled([...pendingReports]);
 }
 
 async function reportAsrResult({ fetchImpl, baseUrl, supabaseAnonKey, accessToken, requestId, status, errorCode, textLength }) {
