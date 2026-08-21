@@ -478,7 +478,18 @@ async function handleAuthState(event) {
       if (ack.key) return;
       showToast(ack.status === "success" ? t('status.sentToDesktopAck') : t('status.desktopExecFailed', ack.detail));
     },
-    onStatus: () => setConnectionStatus("connected", t('connection.cloudConnected'))
+    onStatus: (status) => {
+      const text = String(status);
+      // ack:* 是单次请求的超时/错误，不代表云端连接状态。
+      if (text.startsWith("ack:")) return;
+      if (text === "SUBSCRIBED") {
+        setConnectionStatus("connected", t('connection.cloudConnected'));
+      } else if (/CLOSED|CHANNEL_ERROR|TIMED_OUT/.test(text)) {
+        // 通道异常立即降级显示；realtime-js 内部会自动 rejoin，
+        // 恢复后会再次收到 SUBSCRIBED 纠正回 connected。
+        setConnectionStatus("error", t('connection.reconnecting'));
+      }
+    }
   });
   cloudRealtime = realtime;
   // 更新 plan badge

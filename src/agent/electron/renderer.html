@@ -428,6 +428,10 @@
       window.voicebridge?.lanState().then(renderLanState).catch(() => {});
       window.voicebridge?.onAgentStatus((status) => {
         const text = String(status);
+        // ack 通道是按需创建、 routinely 重建的（预热超时、重连清理），
+        // 它的 CLOSED/TIMED_OUT 不代表云链路状态；health 只由 message +
+        // presence 双通道定义。显示它会把状态卡死在"断线"。
+        if (text.startsWith('ack:')) return;
         // 只有双通道健康才显示在线；通道异常立即降级，不再"见过一次
         // SUBSCRIBED 就永远显示已上线"。
         if (text === 'health:online') {
