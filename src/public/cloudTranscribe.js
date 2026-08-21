@@ -35,6 +35,7 @@ export async function transcribeCloudAudio({
   audio,
   filename = "voicebridge.wav",
   durationMs,
+  prefetchedIssue = null,
   fetch: fetchImpl = globalThis.fetch
 } = {}) {
   if (!supabase) {
@@ -56,8 +57,19 @@ export async function transcribeCloudAudio({
   }
   const baseUrl = supabaseUrl.replace(/\/$/, "");
 
+  // 录音期间预取的签名（Promise 或已解析对象）：有效则跳过签名请求，
+  // 说完话直接上传腾讯，省掉一次跨境 Edge 往返（含冷启动）。
+  let preloaded = null;
+  if (prefetchedIssue) {
+    try {
+      preloaded = await prefetchedIssue;
+    } catch {
+      preloaded = null;
+    }
+  }
+
   // 直连通道（Task 2）：签名 → 手机直传腾讯 → 上报结果；任何失败都静默回退到 Edge 中转。
-  const direct = await tryDirectAsr({ baseUrl, anonKey, accessToken, audio, durationMs, fetchImpl });
+  const direct = await tryDirectAsr({ baseUrl, anonKey, accessToken, audio, durationMs, fetchImpl, preloadedIssue: preloaded });
   if (direct) {
     return direct;
   }
@@ -66,40 +78,106 @@ export async function transcribeCloudAudio({
 
 // === 直连通道 ===
 
-async function tryDirectAsr({ baseUrl, anonKey, accessToken, audio, durationMs, fetchImpl }) {
+// 录音开始时预取签名：跨境 Edge 往返（热 ~0.5s / 冷启动 2.5~4.5s）与录音
+// 并行，说完话直接上传腾讯。durationMs 传客户端的录音上限——配额只在
+// report 结算时按实际时长计（reserved 行不计数），上限预留不会多扣。
+// 任何失败返回 null，transcribeCloudAudio 照常走实时签名/中转，零风险回退。
+export function prefetchDirectAsrSignature({
+  supabase = globalThis.window?.VoiceBridgeAuth?.supabase,
+  durationMs,
+  fetch: fetchImpl = globalThis.fetch
+} = {}) {
+  const estimateBytes = Math.max(1, Math.round((Number(durationMs) || 0) / 1000 * 32_000));
+  return (async () => {
+    try {
+      if (!supabase || typeof fetchImpl !== "function") return null;
+      const accessToken = await getAccessToken(supabase);
+      const supabaseUrl = supabase.supabaseUrl || supabase.rest?.url?.replace(/\/rest\/v1\/?$/, "");
+      const anonKey = supabase.supabaseKey || supabase.headers?.apikey;
+      if (!supabaseUrl || !anonKey) return null;
+      const response = await fetchImpl(`${supabaseUrl.replace(/\/$/, "")}/functions/v1/issue-asr-request`, {
+        method: "POST",
+        headers: {
+          apikey: anonKey,
+          Authorization: `Bearer ${accessToken}`,
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          duration_ms: Math.round(Number(durationMs) || 0),
+          audio_size_bytes: estimateBytes
+        })
+      });
+      const issue = await parseJson(response);
+      if (!response.ok || !issue?.ok) return null;
+      console.info("[vb-timing] presign (during recording)", { ms: null, expires_at: issue.expires_at });
+      return issue;
+    } catch {
+      return null;
+    }
+  })();
+}
+
+function isValidIssuePayload(issue) {
+  return typeof issue?.url === "string" && issue.url.length > 0
+    && Boolean(issue?.headers)
+    && Number.isFinite(issue?.expires_at)
+    && typeof issue?.request_id === "string";
+}
+
+async function tryDirectAsr({ baseUrl, anonKey, accessToken, audio, durationMs, fetchImpl, preloadedIssue }) {
   const t0 = Date.now();
   let issueMs = 0;
   let issue = null;
-  try {
-    const response = await fetchImpl(`${baseUrl}/functions/v1/issue-asr-request`, {
-      method: "POST",
-      headers: {
-        apikey: anonKey,
-        Authorization: `Bearer ${accessToken}`,
-        "Content-Type": "application/json"
-      },
-      body: JSON.stringify({
-        duration_ms: Number.isFinite(durationMs) && durationMs > 0 ? Math.round(durationMs) : 0,
-        audio_size_bytes: typeof audio.size === "number" ? audio.size : 0
-      })
-    });
-    issueMs = Date.now() - t0;
-    issue = await parseJson(response);
-    if (!response.ok || !issue?.ok) {
+  const preloadedFresh = preloadedIssue
+    && isValidIssuePayload(preloadedIssue)
+    && Date.now() < preloadedIssue.expires_at * 1000;
+  if (preloadedIssue && isValidIssuePayload(preloadedIssue) && !preloadedFresh) {
+    // 预签名已过期（录音超过签名 TTL 等）：上报 failed 关掉服务端预留行，
+    // 然后走下面的实时签名——不要直接掉到慢的中转通道。
+    await reportAsrResult({
+      baseUrl, anonKey, accessToken, fetchImpl,
+      requestId: preloadedIssue.request_id,
+      status: "failed",
+      error_code: "stale_signature"
+    }).catch(() => {});
+  }
+  if (preloadedFresh) {
+    issue = preloadedIssue;
+    issueMs = 0;
+  } else {
+    try {
+      const response = await fetchImpl(`${baseUrl}/functions/v1/issue-asr-request`, {
+        method: "POST",
+        headers: {
+          apikey: anonKey,
+          Authorization: `Bearer ${accessToken}`,
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          duration_ms: Number.isFinite(durationMs) && durationMs > 0 ? Math.round(durationMs) : 0,
+          audio_size_bytes: typeof audio.size === "number" ? audio.size : 0
+        })
+      });
+      issueMs = Date.now() - t0;
+      issue = await parseJson(response);
+      if (!response.ok || !issue?.ok) {
+        return null;
+      }
+    } catch {
       return null;
     }
-  } catch {
-    return null;
   }
 
   const report = (status, extra = {}) => reportAsrResult({
     baseUrl, anonKey, accessToken, fetchImpl,
     requestId: issue?.request_id,
     status,
+    // 实际录音时长随上报回写：预签名按上限预留，这里结算为真实用量。
+    durationMs: Number.isFinite(durationMs) && durationMs > 0 ? Math.round(durationMs) : null,
     ...extra
   });
 
-  if (typeof issue?.url !== "string" || !issue.url || !issue?.headers || !Number.isFinite(issue.expires_at)) {
+  if (!isValidIssuePayload(issue)) {
     // ok:true 但签名载荷不完整：尽力上报失败，避免服务端预留额度悬挂。
     await report("failed", { error_code: "invalid_issue_response" });
     return null;
@@ -158,7 +236,7 @@ function logDirectTiming(t0, issueMs, directAsrMs) {
 // 返回的 promise 被记录到 pendingReports，仅供测试确定性等待；生产成功路径不 await。
 const pendingReports = new Set();
 
-function reportAsrResult({ baseUrl, anonKey, accessToken, fetchImpl, requestId, status, error_code: errorCode, text_length: textLength }) {
+function reportAsrResult({ baseUrl, anonKey, accessToken, fetchImpl, requestId, status, durationMs, error_code: errorCode, text_length: textLength }) {
   if (!requestId) return Promise.resolve();
   const promise = fetchWithTimeout(fetchImpl, `${baseUrl}/functions/v1/report-asr-result`, {
     method: "POST",
@@ -171,7 +249,8 @@ function reportAsrResult({ baseUrl, anonKey, accessToken, fetchImpl, requestId, 
       request_id: requestId,
       status,
       ...(errorCode ? { error_code: errorCode } : {}),
-      ...(Number.isFinite(textLength) ? { text_length: textLength } : {})
+      ...(Number.isFinite(textLength) ? { text_length: textLength } : {}),
+      ...(Number.isFinite(durationMs) && durationMs > 0 ? { duration_ms: durationMs } : {})
     }),
     keepalive: true
   }, DIRECT_REPORT_TIMEOUT_MS).catch(() => {

@@ -272,6 +272,32 @@ test("report: second call on already-closed row is an idempotent no-op", async (
   assert.equal(row.error_code, null);
 });
 
+test("report: writes actual duration_ms over the reserved estimate", async () => {
+  // 预签名模式：录音开始按上限（如 60s）预留，上报时按实际时长结算配额。
+  const client = createMockServiceClient();
+  const issue = buildIssueHandler(client);
+  const issued = await issue(authedRequest({ duration_ms: 60000, audio_size_bytes: 100 }));
+  const requestId = (await issued.json()).request_id;
+  assert.equal(client.rows.get(requestId).audio_duration_ms, 60000);
+
+  const handler = buildReportHandler(client);
+  const response = await handler(reportRequest({ request_id: requestId, status: "success", duration_ms: 3200 }));
+  assert.equal(response.status, 200);
+  const row = client.rows.get(requestId);
+  assert.equal(row.status, "success");
+  assert.equal(row.audio_duration_ms, 3200);
+});
+
+test("report: ignores invalid duration_ms and keeps the reserved value", async () => {
+  const client = createMockServiceClient();
+  const requestId = await seedReserved(client); // 预留 1000ms
+  const handler = buildReportHandler(client);
+  await handler(reportRequest({ request_id: requestId, status: "success", duration_ms: -5 }));
+  await handler(reportRequest({ request_id: requestId, status: "success", duration_ms: "abc" }));
+  const row = client.rows.get(requestId);
+  assert.equal(row.audio_duration_ms, 1000);
+});
+
 test("report: no token -> 401", async () => {
   const client = createMockServiceClient();
   const handler = createReportAsrHandler({

@@ -1,7 +1,7 @@
 import { CloudRealtime, getPhoneDeviceId, isDesktopDeviceCandidate } from "./cloudRealtime.js";
 import { createBillingSession, invokeBillingFunction } from "./billing.js";
 import { recordWavUntilStopped } from "./cloudRecorder.js";
-import { transcribeCloudAudio } from "./cloudTranscribe.js";
+import { transcribeCloudAudio, prefetchDirectAsrSignature } from "./cloudTranscribe.js";
 import { commandStore } from "./commandStore.js";
 import { isProtocolCompatible } from "./shared/protocol.js";
 import { PLAN_LIMITS, getPlanLimit, isAdminPlan } from "./shared/planLimits.js";
@@ -1743,6 +1743,8 @@ let recordSeconds = 0;
 let recordingStartedAt = 0;
 let stopStartedAt = 0;
 let currentRecordingDurationMs = null;
+// 录音期间预取的直连 ASR 签名（Promise|null）：说完话免一次跨境签名往返。
+let prefetchedAsrIssue = null;
 let isUploading = false;
 let ws = null;
 
@@ -1853,6 +1855,9 @@ async function startRecording() {
         }
       });
       beginRecordingState();
+      // 录音开始即预取直连签名：跨境签名往返（含 Edge 冷启动）与录音并行，
+      // 说完话直接上传腾讯。失败静默回退到原有的实时签名路径。
+      prefetchedAsrIssue = prefetchDirectAsrSignature({ durationMs: maxMs });
       return;
     }
 
@@ -1907,8 +1912,10 @@ async function uploadAudio(blob, extension) {
       const payload = await transcribeCloudAudio({
         audio: blob,
         filename: `voicebridge.${extension}`,
-        durationMs: currentRecordingDurationMs
+        durationMs: currentRecordingDurationMs,
+        prefetchedIssue: prefetchedAsrIssue
       });
+      prefetchedAsrIssue = null;
       console.info("[vb-timing] stop→transcribed", { ms: Math.round(performance.now() - stopStartedAt) });
       const text = (payload.text || "").trim();
       if (!text) throw new Error(t('record.noTranscriptText'));

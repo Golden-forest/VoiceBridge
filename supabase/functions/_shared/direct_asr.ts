@@ -192,10 +192,17 @@ export function createReportAsrHandler(deps: ReportDeps) {
         return errorResponse("invalid_request", "请求参数不合法。", 400);
       }
       const errorCode = typeof body?.error_code === "string" && body.error_code ? body.error_code : undefined;
+      // 实际时长回写：预签名模式在录音开始时按上限预留，成功/失败上报时用
+      // 实际录音时长结算配额（quota 只统计 success/processing 行的时长）。
+      // 时长本就来自客户端上报，与原信任模型一致。缺省/非法时不改动预留值。
+      const durationMs = Number(body?.duration_ms);
+      const actualDurationMs = Number.isFinite(durationMs) && durationMs > 0
+        ? Math.round(durationMs)
+        : null;
 
       // 只把 status=reserved 的行关掉；对已关闭的行是幂等 no-op（迟到上报不会
       // 覆盖第一次结果），并限定 user_id + request_id 防止跨用户写。
-      await updateReservedUsage(serviceClient, { userId, requestId, status, errorCode });
+      await updateReservedUsage(serviceClient, { userId, requestId, status, errorCode, actualDurationMs });
       return jsonResponse({ ok: true });
     } catch (error) {
       console.error("ReportAsrResult function error:", error);
@@ -268,16 +275,21 @@ function reservationError(reservation: { errorCode: string; maxAudioMs: number }
 // 以实现 report-asr-result 的幂等性。
 async function updateReservedUsage(
   serviceClient: DirectAsrServiceClient,
-  { userId, requestId, status, errorCode }: {
+  { userId, requestId, status, errorCode, actualDurationMs }: {
     userId: string;
     requestId: string;
     status: "success" | "failed";
     errorCode?: string;
+    actualDurationMs?: number | null;
   }
 ) {
+  const cols: Record<string, unknown> = { status, error_code: errorCode || null };
+  if (actualDurationMs) {
+    cols.audio_duration_ms = actualDurationMs;
+  }
   const { error } = await serviceClient
     .from("usage_events")
-    .update({ status, error_code: errorCode || null })
+    .update(cols)
     .eq("user_id", userId)
     .eq("request_id", requestId)
     .eq("status", "reserved");

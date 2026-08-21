@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 
 import {
   transcribeCloudAudio,
+  prefetchDirectAsrSignature,
   __clearAccessTokenCacheForTests,
   __waitForPendingAsrReportsForTests
 } from "./cloudTranscribe.js";
@@ -99,7 +100,8 @@ test("transcribeCloudAudio direct path: issue → Tencent POST → success repor
   assert.deepEqual(JSON.parse(report.options.body), {
     request_id: "req-direct",
     status: "success",
-    text_length: "你好，世界。".length
+    text_length: "你好，世界。".length,
+    duration_ms: 1500
   });
   assert.equal(report.options.keepalive, true);
   assert.equal(report.options.headers.Authorization, "Bearer access-token");
@@ -142,7 +144,8 @@ test("transcribeCloudAudio falls back to relay when Tencent returns a non-zero c
   assert.deepEqual(JSON.parse(report.options.body), {
     request_id: "req-2",
     status: "failed",
-    error_code: "tencent_4003"
+    error_code: "tencent_4003",
+    duration_ms: 1000
   });
   assert.ok(calls.some((c) => c.url.endsWith("/transcribe")), "relay fallback must run");
 });
@@ -274,7 +277,8 @@ test("transcribeCloudAudio reports failed and falls back on an invalid issue pay
   assert.deepEqual(JSON.parse(report.options.body), {
     request_id: "req-invalid",
     status: "failed",
-    error_code: "invalid_issue_response"
+    error_code: "invalid_issue_response",
+    duration_ms: 1000
   });
   assert.equal(calls.some((c) => c.url.endsWith("/transcribe")), true, "relay fallback must run");
   assert.equal(calls.some((c) => c.url.startsWith("https://asr.cloud.tencent.com/")), false,
@@ -343,6 +347,133 @@ test("transcribeCloudAudio requires a signed-in Supabase session", async () => {
     }),
     /请先登录/
   );
+});
+
+test("transcribeCloudAudio uses a valid prefetched signature without re-issuing", async () => {
+  __clearAccessTokenCacheForTests();
+  const calls = [];
+  const supabase = createSupabaseClient({ url: BASE, anonKey: "anon-key", accessToken: "access-token" });
+  const prefetched = {
+    ok: true,
+    request_id: "req-presigned",
+    url: TENCENT_URL,
+    headers: { Authorization: "TC3-Presigned", "Content-Type": "application/json" },
+    expires_at: Math.floor(Date.now() / 1000) + 300
+  };
+
+  const result = await transcribeCloudAudio({
+    supabase,
+    audio: new Blob(["wav-bytes"], { type: "audio/wav" }),
+    durationMs: 2000,
+    prefetchedIssue: Promise.resolve(prefetched),
+    fetch: async (url, options) => {
+      calls.push({ url, options });
+      if (url.includes("issue-asr-request")) {
+        throw new Error("issue-asr-request must not be called when a valid prefetched signature exists");
+      }
+      if (url.startsWith("https://asr.cloud.tencent.com/")) {
+        assert.equal(options.headers.Authorization, "TC3-Presigned");
+        return jsonResponse(200, { code: 0, flash_result: [{ text: "预签名" }] });
+      }
+      if (url.includes("report-asr-result")) {
+        return jsonResponse(200, { ok: true });
+      }
+      throw new Error(`unexpected fetch: ${url}`);
+    }
+  });
+
+  assert.equal(result.ok, true);
+  assert.equal(result.request_id, "req-presigned");
+  assert.equal(result.text, "预签名");
+  assert.equal(calls.some((c) => c.url.includes("issue-asr-request")), false);
+
+  await __waitForPendingAsrReportsForTests();
+  const report = calls.find((c) => c.url.includes("report-asr-result"));
+  assert.ok(report, "report-asr-result must be called");
+  // 预签名按上限预留，上报必须回写实际时长结算配额。
+  assert.equal(JSON.parse(report.options.body).duration_ms, 2000);
+});
+
+test("transcribeCloudAudio ignores an expired prefetched signature and re-issues", async () => {
+  __clearAccessTokenCacheForTests();
+  const calls = [];
+  const supabase = createSupabaseClient({ url: BASE, anonKey: "anon-key", accessToken: "access-token" });
+  const stale = {
+    ok: true,
+    request_id: "req-stale",
+    url: TENCENT_URL,
+    headers: { Authorization: "TC3-Stale" },
+    expires_at: Math.floor(Date.now() / 1000) - 10
+  };
+
+  const result = await transcribeCloudAudio({
+    supabase,
+    audio: new Blob(["wav"], { type: "audio/wav" }),
+    durationMs: 1000,
+    prefetchedIssue: Promise.resolve(stale),
+    fetch: async (url, options) => {
+      calls.push({ url, options });
+      if (url.includes("issue-asr-request")) {
+        return jsonResponse(200, {
+          ok: true,
+          request_id: "req-fresh",
+          url: TENCENT_URL,
+          headers: { Authorization: "TC3-Fresh" },
+          expires_at: Math.floor(Date.now() / 1000) + 300
+        });
+      }
+      if (url.startsWith("https://asr.cloud.tencent.com/")) {
+        assert.equal(options.headers.Authorization, "TC3-Fresh");
+        return jsonResponse(200, { code: 0, flash_result: [{ text: "回退" }] });
+      }
+      if (url.includes("report-asr-result")) {
+        return jsonResponse(200, { ok: true });
+      }
+      throw new Error(`unexpected fetch: ${url}`);
+    }
+  });
+
+  assert.equal(result.ok, true);
+  assert.equal(result.request_id, "req-fresh");
+  assert.equal(calls.some((c) => c.url.includes("issue-asr-request")), true);
+});
+
+test("prefetchDirectAsrSignature returns the issue payload and stays silent on failure", async () => {
+  __clearAccessTokenCacheForTests();
+  const supabase = createSupabaseClient({ url: BASE, anonKey: "anon-key", accessToken: "access-token" });
+
+  const ok = await prefetchDirectAsrSignature({
+    supabase,
+    durationMs: 60000,
+    fetch: async (url, options) => {
+      assert.equal(url, `${BASE}/functions/v1/issue-asr-request`);
+      const body = JSON.parse(options.body);
+      assert.equal(body.duration_ms, 60000);
+      assert.ok(body.audio_size_bytes > 0);
+      return jsonResponse(200, {
+        ok: true,
+        request_id: "req-pre",
+        url: TENCENT_URL,
+        headers: { Authorization: "TC3" },
+        expires_at: Math.floor(Date.now() / 1000) + 300
+      });
+    }
+  });
+  assert.equal(ok.request_id, "req-pre");
+
+  const failed = await prefetchDirectAsrSignature({
+    supabase,
+    durationMs: 60000,
+    fetch: async () => jsonResponse(429, { ok: false })
+  });
+  assert.equal(failed, null);
+
+  const thrown = await prefetchDirectAsrSignature({
+    supabase,
+    durationMs: 60000,
+    fetch: async () => { throw new Error("network down"); }
+  });
+  assert.equal(thrown, null);
 });
 
 function createSupabaseClient({ url, anonKey, accessToken }) {
