@@ -1,30 +1,30 @@
 {
-  "version": "0.1.1",
+  "version": "0.1.2",
   "repository": "Golden-forest/VoiceBridge",
   "assets": [
     {
       "platform": "darwin",
       "arch": "arm64",
-      "filename": "VoiceBridge.Agent-darwin-arm64-0.1.1.zip",
-      "size": 176309141,
+      "filename": "VoiceBridge.Agent-darwin-arm64-0.1.2.zip",
+      "size": 176309286,
       "minimumOs": null,
-      "url": "https://github.com/Golden-forest/VoiceBridge/releases/download/v0.1.1/VoiceBridge.Agent-darwin-arm64-0.1.1.zip"
+      "url": "https://github.com/Golden-forest/VoiceBridge/releases/download/v0.1.2/VoiceBridge.Agent-darwin-arm64-0.1.2.zip"
     },
     {
       "platform": "darwin",
       "arch": "x64",
-      "filename": "VoiceBridge.Agent-darwin-x64-0.1.1.zip",
-      "size": 181716456,
+      "filename": "VoiceBridge.Agent-darwin-x64-0.1.2.zip",
+      "size": 181716601,
       "minimumOs": null,
-      "url": "https://github.com/Golden-forest/VoiceBridge/releases/download/v0.1.1/VoiceBridge.Agent-darwin-x64-0.1.1.zip"
+      "url": "https://github.com/Golden-forest/VoiceBridge/releases/download/v0.1.2/VoiceBridge.Agent-darwin-x64-0.1.2.zip"
     },
     {
       "platform": "win32",
       "arch": "x64",
-      "filename": "VoiceBridge.Agent-win32-x64-0.1.1.zip",
-      "size": 205244810,
+      "filename": "VoiceBridge.Agent-win32-x64-0.1.2.zip",
+      "size": 205244960,
       "minimumOs": null,
-      "url": "https://github.com/Golden-forest/VoiceBridge/releases/download/v0.1.1/VoiceBridge.Agent-win32-x64-0.1.1.zip"
+      "url": "https://github.com/Golden-forest/VoiceBridge/releases/download/v0.1.2/VoiceBridge.Agent-win32-x64-0.1.2.zip"
     }
   ]
 }

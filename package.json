@@ -1,6 +1,6 @@
 {
   "name": "voicebridge",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "Local cross-device speech input bridge MVP.",
   "main": "src/agent/electron/main.js",
   "type": "module",
@@ -61,6 +61,7 @@
           "^/\\.wrangler($|/)",
           "^/certs($|/)",
           "^/docs($|/)",
+          "^/cloudflare($|/)",
           "^/supabase($|/)",
           "^/scripts($|/)",
           "^/src/.*\\.test\\.js$",
