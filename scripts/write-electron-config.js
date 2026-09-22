@@ -6,7 +6,7 @@ const existingConfig = await readExistingConfig(outputPath);
 const supabaseUrl = process.env.VOICEBRIDGE_DESKTOP_SUPABASE_URL
   || process.env.SUPABASE_URL
   || existingConfig.supabaseUrl
-  || "https://gqxxknusznbunkiznnal.supabase.co";
+  || "https://vb-api.heyflint.top";
 const supabaseAnonKey = process.env.VOICEBRIDGE_DESKTOP_SUPABASE_ANON_KEY
   || process.env.SUPABASE_ANON_KEY
   || existingConfig.supabaseAnonKey

@@ -10,7 +10,8 @@ import { createAgentClient, startRealtimeAgent } from '../realtimeAgent.js';
 import { buildLanState, createLanCodeWatcher } from './lanState.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const bundledSupabaseUrl = 'https://gqxxknusznbunkiznnal.supabase.co';
+// 经自有域名（Cloudflare Worker 反代）访问 Supabase，规避大陆 SNI 阻断。
+const bundledSupabaseUrl = 'https://vb-api.heyflint.top';
 const bundledWebAppUrl = 'https://voicebridge-6kr.pages.dev';
 const bundledDesktopConfig = loadBundledDesktopConfig();
 

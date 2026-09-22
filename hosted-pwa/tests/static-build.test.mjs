@@ -13,7 +13,7 @@ test("hosted PWA ships cloud config and pairing entrypoint", async () => {
   ]);
 
   assert.match(config, /voicebridgeMode:\s*"cloud"/);
-  assert.match(config, /gqxxknusznbunkiznnal\.supabase\.co/);
+  assert.match(config, /vb-api\.heyflint\.top/);
   assert.match(config, /paddleEnvironment:\s*"production"/);
   assert.match(config, /paddleClientToken:\s*"live_[a-z0-9]+"/);
   assert.match(pairing, /action:\s*"claim"/);
@@ -110,11 +110,11 @@ test("legal pages are substantive and commercially consistent", async () => {
 
 // ---- downloads.json --------------------------------------------------------
 
-test("downloads.json is shipped with three real v0.1.0 assets", async () => {
+test("downloads.json is shipped with three real v0.1.2 assets", async () => {
   const raw = await readFile(new URL("client/downloads.json", distRoot), "utf8");
   const data = JSON.parse(raw);
 
-  assert.equal(data.version, "0.1.0");
+  assert.equal(data.version, "0.1.2");
   assert.equal(data.repository, "Golden-forest/VoiceBridge");
   assert.equal(data.assets.length, 3);
 
@@ -126,8 +126,8 @@ test("downloads.json is shipped with three real v0.1.0 assets", async () => {
     assert.ok(asset.url, "asset.url must be non-empty");
     assert.match(
       asset.url,
-      /^https:\/\/github\.com\/Golden-forest\/VoiceBridge\/releases\/download\/v0\.1\.0\//,
-      `asset.url for ${asset.filename} must point at the v0.1.0 GitHub release`
+      /^https:\/\/github\.com\/Golden-forest\/VoiceBridge\/releases\/download\/v0\.1\.2\//,
+      `asset.url for ${asset.filename} must point at the v0.1.2 GitHub release`
     );
     // Real file size from the release, never null after batch 3
     assert.equal(typeof asset.size, "number");

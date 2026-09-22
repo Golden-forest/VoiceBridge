@@ -1,0 +1,13 @@
+{
+  "name": "vb-api",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-09-15",
+  // Cloudflare 会自动创建 DNS 记录与证书；heyflint.top zone 已在本账号
+  "routes": [
+    { "pattern": "vb-api.heyflint.top", "custom_domain": true }
+  ],
+  "observability": {
+    "enabled": true,
+    "head_sampling_rate": 1
+  }
+}
