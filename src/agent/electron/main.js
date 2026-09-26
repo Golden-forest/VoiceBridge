@@ -5,7 +5,7 @@ import { fileURLToPath } from 'node:url';
 import QRCode from 'qrcode';
 import { createFileAuthStorage } from '../authStorage.js';
 import { createAgentLogger } from './agentLogger.js';
-import { loadOrCreateDevice } from '../deviceStore.js';
+import { loadOrCreateDevice, rotateDeviceIdentity } from '../deviceStore.js';
 import { createAgentClient, startRealtimeAgent } from '../realtimeAgent.js';
 import { buildLanState, createLanCodeWatcher, isLanAllowedPlan } from './lanState.js';
 
@@ -316,7 +316,17 @@ async function initializeDesktopInternal() {
       plan: status.plan
     });
   }
-  return await startPairing({ supabase, device });
+  try {
+    return await startPairing({ supabase, device });
+  } catch (error) {
+    if (error?.code !== 'device_conflict') throw error;
+    // A stale anonymous runtime cannot safely reclaim an active device id.
+    // Rotate only the local id and require a fresh phone scan; the old account
+    // binding remains untouched and can be removed later from Connected Devices.
+    const replacement = await rotateDeviceIdentity();
+    log('device-identity-rotated', { previousDeviceId: device.id, deviceId: replacement.id });
+    return await startPairing({ supabase, device: replacement });
+  }
 }
 
 async function ensureAnonymousSession(supabase) {
@@ -392,7 +402,9 @@ async function startPairing({ supabase, device }) {
   });
   const payload = await response.json().catch(() => null);
   if (!response.ok || !payload?.ok) {
-    throw new Error(payload?.message || '无法生成配对二维码。');
+    const error = new Error(payload?.message || '无法生成配对二维码。');
+    error.code = payload?.code || '';
+    throw error;
   }
 
   const pairingUrl = new URL(config.webAppUrl);

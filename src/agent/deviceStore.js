@@ -22,13 +22,27 @@ export async function loadOrCreateDevice(filePath = defaultDevicePath()) {
   return JSON.parse(raw);
 }
 
+export async function rotateDeviceIdentity(filePath = defaultDevicePath()) {
+  const current = await loadOrCreateDevice(filePath);
+  return writeDevice(filePath, {
+    ...current,
+    id: crypto.randomUUID()
+  });
+}
+
 async function createDevice(filePath) {
   const device = {
     id: crypto.randomUUID(),
     name: os.hostname(),
     platform: process.platform
   };
+  return writeDevice(filePath, device);
+}
+
+async function writeDevice(filePath, device) {
   await fs.mkdir(path.dirname(filePath), { recursive: true });
-  await fs.writeFile(filePath, JSON.stringify(device, null, 2) + "\n", "utf8");
+  const tmpPath = `${filePath}.${process.pid}.tmp`;
+  await fs.writeFile(tmpPath, JSON.stringify(device, null, 2) + "\n", "utf8");
+  await fs.rename(tmpPath, filePath);
   return device;
 }

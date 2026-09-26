@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import os from "node:os";
 import path from "node:path";
 import fs from "node:fs/promises";
-import { loadOrCreateDevice } from "./deviceStore.js";
+import { loadOrCreateDevice, rotateDeviceIdentity } from "./deviceStore.js";
 import { handleDesktopMessage, startRealtimeAgent } from "./realtimeAgent.js";
 
 test("handleDesktopMessage ignores messages for another device", async () => {
@@ -452,6 +452,18 @@ test("loadOrCreateDevice rejects malformed device JSON", async () => {
     loadOrCreateDevice(filePath),
     SyntaxError
   );
+});
+
+test("rotateDeviceIdentity preserves device metadata and replaces a conflicted id", async () => {
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), "voicebridge-device-"));
+  const filePath = path.join(dir, "device.json");
+  const original = await loadOrCreateDevice(filePath);
+  const rotated = await rotateDeviceIdentity(filePath);
+
+  assert.notEqual(rotated.id, original.id);
+  assert.equal(rotated.name, original.name);
+  assert.equal(rotated.platform, original.platform);
+  assert.deepEqual(await loadOrCreateDevice(filePath), rotated);
 });
 
 test("startRealtimeAgent includes lanEndpoints in presence and updates them via setLanEndpoints", async () => {

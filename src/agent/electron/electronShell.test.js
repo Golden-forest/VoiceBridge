@@ -48,6 +48,8 @@ test('Electron main process uses a safe BrowserWindow shell', () => {
   assert.doesNotMatch(mainJs, /verifyOtp/);
   assert.match(mainJs, /signInAnonymously/);
   assert.match(mainJs, /migrateLegacyDesktopSession/);
+  assert.match(mainJs, /rotateDeviceIdentity/);
+  assert.match(mainJs, /error\?\.code !== 'device_conflict'/);
   assert.match(mainJs, /status:\s*'revoked'/);
   assert.match(mainJs, /action:\s*'status'/);
   assert.match(mainJs, /device-pairing/);
