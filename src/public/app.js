@@ -429,6 +429,9 @@ nativePairButton?.addEventListener("click", async () => {
     const scanned = String(result?.ScanResult || "").trim();
     if (!scanned) return;
     const url = new URL(scanned);
+    if (url.protocol !== "voicebridge:" || url.hostname !== "pair") {
+      throw new Error(t('pairing.invalidQr'));
+    }
     const token = url.searchParams.get("pairing_token") || "";
     const name = url.searchParams.get("device") || "";
     if (token.length < 20 || token.length > 200) throw new Error(t('pairing.invalidQr'));

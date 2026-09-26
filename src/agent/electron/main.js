@@ -407,10 +407,8 @@ async function startPairing({ supabase, device }) {
     throw error;
   }
 
-  const pairingUrl = new URL(config.webAppUrl);
-  pairingUrl.searchParams.set('pairing_token', payload.pairing_token);
-  pairingUrl.searchParams.set('device', device.name);
-  const qrDataUrl = await QRCode.toDataURL(pairingUrl.href, {
+  const pairingUri = buildNativePairingUri(payload.pairing_token, device.name);
+  const qrDataUrl = await QRCode.toDataURL(pairingUri, {
     width: 280,
     margin: 1,
     color: { dark: '#17202a', light: '#ffffff' }
@@ -418,7 +416,7 @@ async function startPairing({ supabase, device }) {
   const state = sendDesktopState({
     mode: 'pairing',
     qrDataUrl,
-    pairingUrl: pairingUrl.href,
+    pairingUrl: pairingUri,
     deviceName: device.name,
     expiresAt: payload.expires_at
   });
@@ -452,10 +450,8 @@ async function startAdditionalPairing() {
     throw new Error(payload?.message || '无法生成新的配对二维码。');
   }
 
-  const pairingUrl = new URL(config.webAppUrl);
-  pairingUrl.searchParams.set('pairing_token', payload.pairing_token);
-  pairingUrl.searchParams.set('device', activeAgent.device.name);
-  const qrDataUrl = await QRCode.toDataURL(pairingUrl.href, {
+  const pairingUri = buildNativePairingUri(payload.pairing_token, activeAgent.device.name);
+  const qrDataUrl = await QRCode.toDataURL(pairingUri, {
     width: 280,
     margin: 1,
     color: { dark: '#17202a', light: '#ffffff' }
@@ -463,12 +459,19 @@ async function startAdditionalPairing() {
   const state = sendDesktopState({
     mode: 'additional-pairing',
     qrDataUrl,
-    pairingUrl: pairingUrl.href,
+    pairingUrl: pairingUri,
     deviceName: activeAgent.device.name,
     expiresAt: payload.expires_at
   });
   scheduleAdditionalPairingPoll();
   return state;
+}
+
+function buildNativePairingUri(pairingToken, deviceName) {
+  const pairingUri = new URL('voicebridge://pair');
+  pairingUri.searchParams.set('pairing_token', pairingToken);
+  pairingUri.searchParams.set('device', deviceName);
+  return pairingUri.href;
 }
 
 function sendOnlineDesktopState() {

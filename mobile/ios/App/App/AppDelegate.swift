@@ -1,5 +1,44 @@
 import UIKit
 import Capacitor
+import AudioToolbox
+
+@objc(VoiceBridgeFeedbackPlugin)
+public class VoiceBridgeFeedbackPlugin: CAPPlugin, CAPBridgedPlugin {
+    public let identifier = "VoiceBridgeFeedbackPlugin"
+    public let jsName = "VoiceBridgeFeedback"
+    public let pluginMethods: [CAPPluginMethod] = [
+        CAPPluginMethod(name: "play", returnType: CAPPluginReturnPromise)
+    ]
+
+    @objc func play(_ call: CAPPluginCall) {
+        let kind = call.getString("kind") ?? "selection"
+        let soundID: SystemSoundID
+        switch kind {
+        case "recordStart":
+            soundID = 1113 // iOS begin-record system sound
+        case "recordStop":
+            soundID = 1114 // iOS end-record system sound
+        case "success":
+            soundID = 1057
+        case "error":
+            soundID = 1073
+        default:
+            call.resolve()
+            return
+        }
+        DispatchQueue.main.async {
+            AudioServicesPlaySystemSoundWithCompletion(soundID) {
+                call.resolve()
+            }
+        }
+    }
+}
+
+final class VoiceBridgeViewController: CAPBridgeViewController {
+    override func capacitorDidLoad() {
+        bridge?.registerPluginInstance(VoiceBridgeFeedbackPlugin())
+    }
+}
 
 @UIApplicationMain
 class AppDelegate: UIResponder, UIApplicationDelegate {

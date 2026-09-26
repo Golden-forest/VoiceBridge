@@ -12,7 +12,7 @@ export function performNativeFeedback(kind, win = globalThis.window) {
   if (!win || !isNativeRuntime(win)) return false;
   const feedback = FEEDBACK[kind] || FEEDBACK.selection;
   void playHaptic(win, feedback.haptic);
-  playTones(win, feedback.tones);
+  void playSound(win, kind, feedback.tones);
   return true;
 }
 
@@ -42,6 +42,19 @@ async function playHaptic(win, haptic) {
   } catch {
     // Feedback must never interrupt recording, pairing, or sending.
   }
+}
+
+async function playSound(win, kind, tones) {
+  const plugin = win.Capacitor?.Plugins?.VoiceBridgeFeedback;
+  if (plugin?.play) {
+    try {
+      await plugin.play({ kind });
+      return;
+    } catch {
+      // Fall through to Web Audio for non-iOS runtimes and plugin failures.
+    }
+  }
+  playTones(win, tones);
 }
 
 function playTones(win, tones) {

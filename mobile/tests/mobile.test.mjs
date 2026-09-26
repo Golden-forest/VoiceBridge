@@ -18,6 +18,8 @@ test("mobile bundle starts the VoiceBridge app from local packaged assets", asyn
   assert.match(appJs, /cloudRealtime\?\.reconnectNow\(\)/);
   assert.match(html, /id="nativePairButton"/);
   assert.match(appJs, /CapacitorBarcodeScanner/);
+  assert.match(appJs, /url\.protocol !== "voicebridge:"/);
+  assert.match(appJs, /url\.hostname !== "pair"/);
   assert.match(appJs, /activateNativeLan/);
   assert.match(appJs, /performNativeFeedback/);
   await access(new URL("www/nativeFeedback.js", mobileRoot));
@@ -25,14 +27,19 @@ test("mobile bundle starts the VoiceBridge app from local packaged assets", asyn
 });
 
 test("native projects declare microphone and local-network access", async () => {
-  const [iosInfo, androidManifest] = await Promise.all([
+  const [iosInfo, iosDelegate, iosSceneDelegate, androidManifest] = await Promise.all([
     readFile(new URL("ios/App/App/Info.plist", mobileRoot), "utf8"),
+    readFile(new URL("ios/App/App/AppDelegate.swift", mobileRoot), "utf8"),
+    readFile(new URL("ios/App/App/SceneDelegate.swift", mobileRoot), "utf8"),
     readFile(new URL("android/app/src/main/AndroidManifest.xml", mobileRoot), "utf8")
   ]);
   assert.match(iosInfo, /NSMicrophoneUsageDescription/);
   assert.match(iosInfo, /NSLocalNetworkUsageDescription/);
   assert.match(iosInfo, /NSCameraUsageDescription/);
   assert.match(iosInfo, /NSAllowsArbitraryLoadsInWebContent/);
+  assert.match(iosDelegate, /VoiceBridgeFeedbackPlugin/);
+  assert.match(iosDelegate, /AudioServicesPlaySystemSoundWithCompletion/);
+  assert.match(iosSceneDelegate, /VoiceBridgeViewController/);
   assert.match(androidManifest, /android\.permission\.RECORD_AUDIO/);
   assert.match(androidManifest, /android\.permission\.INTERNET/);
   assert.match(androidManifest, /android:usesCleartextTraffic="true"/);

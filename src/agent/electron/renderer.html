@@ -240,14 +240,13 @@
         <h2>手机扫码绑定</h2>
         <img id="qrImage" alt="VoiceBridge 手机配对二维码">
         <p class="device-name" id="deviceName"></p>
-        <p class="hint">扫码后可以登录或注册，再确认绑定。二维码 10 分钟内有效。</p>
-        <p id="pairingUrlText" class="pairing-url" aria-label="手机配对网址"></p>
+        <p class="hint">请使用已登录的 VoiceBridge 手机 App 扫码确认。二维码 10 分钟内有效。</p>
+        <p id="pairingUrlText" class="pairing-url" aria-label="App 配对码"></p>
         <div class="actions">
           <button id="refreshButton" type="button">刷新二维码</button>
-          <button id="copyPhoneUrlButton" class="secondary" type="button">复制手机网址</button>
+          <button id="copyPhoneUrlButton" class="secondary" type="button">复制配对码</button>
         </div>
         <button id="cancelPairingButton" class="secondary" type="button" hidden>返回在线状态</button>
-        <a id="phoneUrl" class="button" href="#" target="_blank" rel="noreferrer">在浏览器打开此配对页</a>
       </section>
 
       <section id="onlinePanel" class="panel" hidden>
@@ -298,7 +297,6 @@
       const showPairingQrButton = document.querySelector('#showPairingQrButton');
       const unpairButton = document.querySelector('#unpairButton');
       const reportWindowTitles = document.querySelector('#reportWindowTitles');
-      const phoneUrl = document.querySelector('#phoneUrl');
       const pairingUrlText = document.querySelector('#pairingUrlText');
       const copyPhoneUrlButton = document.querySelector('#copyPhoneUrlButton');
       const messageEl = document.querySelector('#message');
@@ -342,11 +340,10 @@
           deviceName.textContent = state.deviceName || '';
           currentPairingUrl = state.pairingUrl || '';
           pairingUrlText.textContent = currentPairingUrl;
-          phoneUrl.href = currentPairingUrl || '#';
           cancelPairingButton.hidden = !additional;
           setMessage(additional
             ? '请用已登录同一账号的 VoiceBridge 手机 App 扫码。'
-            : '请用手机相机扫描二维码。');
+            : '请打开已登录的 VoiceBridge 手机 App，点击“扫码连接电脑”。');
         } else if (state?.mode === 'online') {
           setStatus('已上线');
           onlineDeviceName.textContent = state.deviceName || '';

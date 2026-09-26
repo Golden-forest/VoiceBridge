@@ -12,6 +12,10 @@ const additionalPairingMigration = await readFile(
   new URL("../../migrations/20260926143000_same_account_additional_pairing.sql", import.meta.url),
   "utf8"
 );
+const ambiguityFixMigration = await readFile(
+  new URL("../../migrations/20260926144500_fix_claim_device_pairing_ambiguity.sql", import.meta.url),
+  "utf8"
+);
 
 test("device pairing uses authenticated one-time tokens without transferring phone sessions", () => {
   assert.match(source, /userData\.user\.is_anonymous/);
@@ -26,6 +30,13 @@ test("device pairing claim is atomic and restricted to service role", () => {
   assert.match(migration, /security invoker/);
   assert.match(migration, /grant execute on function public\.claim_device_pairing\(text, uuid\) to service_role/);
   assert.match(migration, /revoke all on public\.device_pairings from anon, authenticated/);
+});
+
+test("device pairing claim qualifies columns that collide with output variables", () => {
+  assert.match(ambiguityFixMigration, /update public\.device_pairings as pairing/);
+  assert.match(ambiguityFixMigration, /where pairing\.device_id = pairing_device_id/);
+  assert.match(ambiguityFixMigration, /coalesce\(device\.paired_at, now\(\)\)/);
+  assert.match(ambiguityFixMigration, /where device\.id = pairing_device_id/);
 });
 
 test("desktop status is scoped to its runtime identity and returns only normalized entitlement", () => {

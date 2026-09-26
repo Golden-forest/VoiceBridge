@@ -56,6 +56,7 @@ test('Electron main process uses a safe BrowserWindow shell', () => {
   assert.match(mainJs, /action:\s*'start_additional'/);
   assert.match(mainJs, /action:\s*'cancel_additional'/);
   assert.match(mainJs, /QRCode\.toDataURL/);
+  assert.match(mainJs, /voicebridge:\/\/pair/);
   assert.doesNotMatch(mainJs, /phoneQrDataUrl/);
   assert.match(mainJs, /startRealtimeAgent/);
   assert.match(mainJs, /const deviceId = activeAgent\?\.device\?\.id/);
@@ -108,6 +109,8 @@ test('renderer is a Chinese QR pairing and status shell with a content security 
   assert.match(rendererHtml, /连接另一台手机/);
   assert.match(rendererHtml, /连接状态/);
   assert.match(rendererHtml, /刷新二维码/);
+  assert.match(rendererHtml, /复制配对码/);
+  assert.doesNotMatch(rendererHtml, /在浏览器打开此配对页/);
   assert.match(rendererHtml, /voicebridge\?\.initialize/);
   assert.match(rendererHtml, /局域网输入/);
   assert.match(rendererHtml, /id="lanPairingCode"/);
