@@ -5,18 +5,33 @@
 > **状态**：进行中
 > **关联历史**：项目接近尾声，需要接入支付、上架各大应用商店。本文档梳理从"功能开发完成"到"可公开发布"之间的全部必要工作。
 
+## 2026-09-25 自用版上线结论
+
+已完成并部署当前自用版的阻塞项：手机账号与匿名桌面运行身份安全绑定、云端/局域网共用管理员权益、60 秒签发链路、直录 16 kHz WAV、网络地址变化后局域网证书重建、设备所有权列保护、Realtime topic 隔离、遗留 `processing` 请求清理，以及直接生产依赖漏洞清零。生产 PWA、三个关键 Edge Functions、数据库迁移和本机桌面 App 均已替换并验证。
+
+2026-09-25 补充：桌面端已升级到 0.1.3，在线状态仍会展示手机二维码和固定网址；手机端 Realtime 在首次订阅失败、断网恢复和回到前台时会自动重建连接，并会恢复上次使用的在线电脑。手机网页依赖已全部本地打包，不再运行时加载第三方 CDN。已生成 Capacitor iOS/Android 原生工程，Android debug APK 和 iOS 模拟器构建通过；真机 iOS 签名、真机麦克风及自签名局域网证书仍需设备验收。
+
+以下事项明确延后，不阻塞当前单人自用：
+
+- [ ] macOS/Windows 正式签名、公证与安装器；当前 macOS 包仍是 ad-hoc 签名。
+- [ ] 桌面端自动更新；当前升级仍需手工替换 App。
+- [ ] 付费订阅全流程、退款/取消和删号时的计费侧清理；开始收费前必须完成。
+- [ ] 崩溃上报、服务端告警与长期可观测性。
+- [ ] Windows、Intel Mac 与移动商店构建验证。
+- [ ] 在真实手机上持续做麦克风、局域网切换、网络切换和 60 秒长录音回归；自动测试不能完全覆盖设备权限与路由器差异。
+
 ---
 
 ## 0. 本地版 vs 云端版：不冲突
 
 | 维度 | Local Mode | Cloud Mode |
 |------|-----------|------------|
-| 入口 | `npm start`（express HTTPS） | Electron 桌面 App + Supabase Realtime |
+| 入口 | Electron 内置局域网服务（express HTTPS） | Electron 桌面 App + Supabase Realtime |
 | 通讯 | 局域网 WebSocket | Supabase Realtime 跨网 |
 | ASR | 本地 `.env` 直调腾讯云 | Supabase Edge Function `/transcribe` |
-| 鉴权 | 无（局域网信任） | Supabase auth + 套餐配额 + Stripe |
+| 鉴权 | 配对码 + 已登录账号权益（仅 pro/admin） | Supabase auth + 套餐配额 + Stripe |
 
-两种模式是**独立运行**的，共用部分代码（`shared/`、`agent/`、`server/input/`）。Electron 桌面 App **只走 cloud 模式**（`main.js` 只加载 `renderer.html`，不启 express），`src/server/` 运行时不加载。**不存在冲突**。
+两种传输模式共用同一登录账号和权益判定。Electron 桌面端默认保持云端在线；只有 `pro` / `admin` 才会启动局域网服务，`free` 不会启动，也不能通过配对码绕过会员限制。管理员单次录音上限为 60 秒。
 
 ---
 
@@ -84,12 +99,12 @@ Google Play 允许使用 Google Play Billing（抽成 15%~30%），或（仅限�
   - PWA `index.html`：底部加了 `.legal-footer`（隐私政策 · 用户协议），含 i18n 中英双语
   - Electron `renderer.html`：footer 加了隐私政策 · 用户协议 · 版本号链接
 
-### 1.6 ⏳ 录音权限说明文案
+### 1.6 🟡 录音权限说明文案
 
 iOS / Android / macOS 都要求在 Info.plist / AndroidManifest / Electron Info.plist 中明确说明为什么需要录音：
 
-- [ ] `NSMicrophoneUsageDescription`：中文 + 英文文案
-- [ ] Android `RECORD_AUDIO` 权限说明
+- [x] iOS `NSMicrophoneUsageDescription` 和本地网络权限声明
+- [x] Android `RECORD_AUDIO`、网络和网络状态权限声明
 - [ ] 录音数据处理方式说明（仅上传至你的 Supabase 用于 ASR，不做其他用途）
 
 ---
@@ -113,13 +128,15 @@ iOS / Android / macOS 都要求在 Info.plist / AndroidManifest / Electron Info.
 
 ### 2.2 ⏳ 多平台构建产物
 
-当前只有 macOS arm64 zip。上架需要：
+当前已有 macOS arm64 App、自用 Android debug APK 和 iOS 原生工程/模拟器构建。正式分发仍需要：
 
 - [ ] macOS Universal Binary（arm64 + x64）
 - [ ] macOS DMG 安装包（`@electron-forge/maker-dmg`）
 - [ ] Windows x64 NSIS 安装包（`@electron-forge/maker-squirrel`）或 MSI
 - [ ] （可选）Linux deb / AppImage（`@electron-forge/maker-deb`）
 - [ ] 在 GitHub Actions 配置跨平台构建矩阵
+- [ ] iOS 真机选择 Apple Development Team 并完成签名、安装和局域网证书验收
+- [ ] Android 生成正式签名 AAB/APK，并在真实设备完成录音、云端重连和局域网验收
 
 ### 2.3 ⏳ 自动更新
 
@@ -168,9 +185,9 @@ iOS / Android / macOS 都要求在 Info.plist / AndroidManifest / Electron Info.
 
 | 问题 | 答案 |
 |------|------|
-| 本地版和云端版冲突吗？ | 不冲突，独立运行，共用部分代码 |
-| 打包后的 app 是云端版吗？ | 是，Electron 桌面端只走 cloud 模式 |
-| app 里包含本地模式代码吗？ | 物理包含（已通过 ignore 规则修复），运行时不加载 |
+| 本地版和云端版冲突吗？ | 不冲突，共用账号与权益，传输链路独立 |
+| 打包后的 app 是云端版吗？ | 同时支持云端；pro/admin 还会启用局域网直连 |
+| Free 能使用局域网配对码吗？ | 不能；桌面端不会为 free 启动局域网服务 |
 | 用户能逆向出源码吗？ | 之前能（裸明文），启用 asar 后门槛提高，但仍可解包 |
 | 有安全隐患吗？ | 之前有（Cloudflare 账户信息泄露），已修复；密钥本身（Tencent/Stripe/Service Role）从未泄露 |
 | Supabase anon key 泄露吗？ | 不算，按设计就是公开的，安全靠 RLS 保障 |

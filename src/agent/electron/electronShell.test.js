@@ -40,17 +40,24 @@ test('Electron main process uses a safe BrowserWindow shell', () => {
   assert.match(mainJs, /preload\.cjs/);
   assert.match(mainJs, /voicebridge:version/);
   assert.match(mainJs, /voicebridge:initialize/);
-  assert.match(mainJs, /voicebridge:login/);
-  assert.match(mainJs, /voicebridge:otp-send/);
-  assert.match(mainJs, /voicebridge:login-otp/);
-  assert.match(mainJs, /signInWithPassword/);
-  assert.match(mainJs, /signInWithOtp/);
-  assert.match(mainJs, /shouldCreateUser:\s*false/);
-  assert.match(mainJs, /verifyOtp/);
-  assert.doesNotMatch(mainJs, /signInAnonymously/);
+  assert.doesNotMatch(mainJs, /voicebridge:login/);
+  assert.doesNotMatch(mainJs, /voicebridge:otp-send/);
+  assert.doesNotMatch(mainJs, /voicebridge:login-otp/);
+  assert.doesNotMatch(mainJs, /signInWithPassword/);
+  assert.doesNotMatch(mainJs, /signInWithOtp/);
+  assert.doesNotMatch(mainJs, /verifyOtp/);
+  assert.match(mainJs, /signInAnonymously/);
+  assert.match(mainJs, /migrateLegacyDesktopSession/);
+  assert.match(mainJs, /status:\s*'revoked'/);
+  assert.match(mainJs, /action:\s*'status'/);
   assert.match(mainJs, /device-pairing/);
+  assert.match(mainJs, /action:\s*'start_additional'/);
+  assert.match(mainJs, /action:\s*'cancel_additional'/);
   assert.match(mainJs, /QRCode\.toDataURL/);
+  assert.doesNotMatch(mainJs, /phoneQrDataUrl/);
   assert.match(mainJs, /startRealtimeAgent/);
+  assert.match(mainJs, /const deviceId = activeAgent\?\.device\?\.id/);
+  assert.match(mainJs, /if \(!deviceId\)/);
   assert.match(mainJs, /\.from\('devices'\)/);
   assert.match(mainJs, /desktop-config\.json/);
   assert.match(mainJs, /window-all-closed/);
@@ -62,6 +69,9 @@ test('Electron main process surfaces LAN pairing state to the renderer', () => {
   assert.match(mainJs, /'voicebridge:lan-state'/);
   assert.match(mainJs, /lanWatcher\?\.stop\(\)/);
   assert.match(mainJs, /onPairingKnock/);
+  assert.match(mainJs, /refreshLanServerForNetworkChange/);
+  assert.match(mainJs, /lan-network-changed/);
+  assert.match(mainJs, /setLanEndpoints/);
 });
 
 test('preload exposes a minimal VoiceBridge bridge API', () => {
@@ -71,10 +81,12 @@ test('preload exposes a minimal VoiceBridge bridge API', () => {
   assert.match(preloadJs, /version:\s*\(\)\s*=>\s*ipcRenderer\.invoke\('voicebridge:version'\)/);
   assert.match(preloadJs, /initialize:\s*\(\)\s*=>\s*ipcRenderer\.invoke\('voicebridge:initialize'\)/);
   assert.match(preloadJs, /refreshPairing/);
+  assert.match(preloadJs, /showPairingQr/);
+  assert.match(preloadJs, /cancelPairingQr/);
   assert.match(preloadJs, /unpair/);
-  assert.match(preloadJs, /login:\s*\(?credentials\)?\s*=>/);
-  assert.match(preloadJs, /otpSend/);
-  assert.match(preloadJs, /loginOtp/);
+  assert.doesNotMatch(preloadJs, /login:\s*\(?credentials\)?\s*=>/);
+  assert.doesNotMatch(preloadJs, /otpSend/);
+  assert.doesNotMatch(preloadJs, /loginOtp/);
   assert.match(preloadJs, /onAgentStatus/);
   assert.match(preloadJs, /lanState:\s*\(\)\s*=>\s*ipcRenderer\.invoke\('voicebridge:lan-state'\)/);
   assert.match(preloadJs, /onLanState/);
@@ -82,9 +94,16 @@ test('preload exposes a minimal VoiceBridge bridge API', () => {
 
 test('renderer is a Chinese QR pairing and status shell with a content security policy', () => {
   assert.match(rendererHtml, /Content-Security-Policy/);
-  assert.match(rendererHtml, /登录账号/);
+  assert.doesNotMatch(rendererHtml, /id="loginPanel"/);
+  assert.doesNotMatch(rendererHtml, /id="loginPassword"/);
+  assert.doesNotMatch(rendererHtml, /使用邮箱验证码登录/);
   assert.match(rendererHtml, /手机扫码绑定/);
-  assert.match(rendererHtml, /局域网功能需要会员/);
+  assert.match(rendererHtml, /账号只需在手机登录/);
+  assert.match(rendererHtml, /id="pairingUrlText"/);
+  assert.match(rendererHtml, /id="copyPhoneUrlButton"/);
+  assert.match(rendererHtml, /id="showPairingQrButton"/);
+  assert.match(rendererHtml, /id="cancelPairingButton"/);
+  assert.match(rendererHtml, /连接另一台手机/);
   assert.match(rendererHtml, /连接状态/);
   assert.match(rendererHtml, /刷新二维码/);
   assert.match(rendererHtml, /voicebridge\?\.initialize/);
@@ -92,7 +111,6 @@ test('renderer is a Chinese QR pairing and status shell with a content security 
   assert.match(rendererHtml, /id="lanPairingCode"/);
   assert.match(rendererHtml, /id="lanIdleHint"/);
   assert.match(rendererHtml, /id="lanActiveHint"/);
-  assert.match(rendererHtml, /使用邮箱验证码登录/);
   assert.match(rendererHtml, /lanSection\.hidden\s*=\s*!state\?\.running/);
   assert.match(rendererHtml, /lanPairingCode\.hidden\s*=\s*!state\?\.codeVisible/);
   assert.match(rendererHtml, /onLanState\(renderLanState\)/);
@@ -103,6 +121,7 @@ test('Electron packaging writes a bundled public Supabase config', () => {
   assert.match(writeConfigJs, /VOICEBRIDGE_DESKTOP_SUPABASE_ANON_KEY/);
   assert.match(writeConfigJs, /desktop-config\.json/);
   assert.match(writeConfigJs, /VOICEBRIDGE_WEB_APP_URL/);
-  assert.match(writeConfigJs, /voicebridge-6kr\.pages\.dev/);
+  assert.match(writeConfigJs, /https:\/\/voicebridge\.heyflint\.top\/app/);
+  assert.doesNotMatch(writeConfigJs, /existingConfig\.webAppUrl/);
   assert.match(writeConfigJs, /process\.exit\(1\)/);
 });

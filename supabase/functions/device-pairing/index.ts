@@ -41,6 +41,18 @@ Deno.serve(async (req) => {
       return await startPairing(serviceClient, userData.user.id, body.device);
     }
 
+    if (body.action === "status") {
+      return await getPairingStatus(serviceClient, userData.user.id, body.device_id);
+    }
+
+    if (body.action === "start_additional") {
+      return await startAdditionalPairing(serviceClient, userData.user.id, body.device_id);
+    }
+
+    if (body.action === "cancel_additional") {
+      return await cancelAdditionalPairing(serviceClient, userData.user.id, body.device_id);
+    }
+
     if (body.action === "claim") {
       if (userData.user.is_anonymous) {
         return errorResponse("account_required", "请先使用邮箱或 GitHub 登录手机端。", 403);
@@ -94,16 +106,7 @@ async function startPairing(
   if (deviceError) throw deviceError;
 
   const pairingToken = createPairingToken();
-  const tokenHash = await sha256(pairingToken);
-  const expiresAt = new Date(Date.now() + PAIRING_TTL_MS).toISOString();
-  const { error: pairingError } = await serviceClient.from("device_pairings").upsert({
-    device_id: device.id,
-    token_hash: tokenHash,
-    expires_at: expiresAt,
-    claimed_at: null,
-    created_at: new Date().toISOString()
-  });
-  if (pairingError) throw pairingError;
+  const expiresAt = await savePairingToken(serviceClient, device.id, pairingToken);
 
   return jsonResponse({
     ok: true,
@@ -111,6 +114,121 @@ async function startPairing(
     pairing_token: pairingToken,
     expires_at: expiresAt
   });
+}
+
+async function getPairingStatus(
+  serviceClient: ReturnType<typeof createClient>,
+  runtimeUserId: string,
+  rawDeviceId: unknown
+) {
+  if (typeof rawDeviceId !== "string" || !UUID_PATTERN.test(rawDeviceId)) {
+    return errorResponse("invalid_device", "电脑设备信息无效。", 400);
+  }
+
+  const { data: device, error: deviceError } = await serviceClient
+    .from("devices")
+    .select("user_id,status,paired_at")
+    .eq("id", rawDeviceId)
+    .eq("runtime_user_id", runtimeUserId)
+    .maybeSingle();
+  if (deviceError) throw deviceError;
+  const { data: pairing, error: pairingError } = await serviceClient
+    .from("device_pairings")
+    .select("claimed_at,expires_at")
+    .eq("device_id", rawDeviceId)
+    .maybeSingle();
+  if (pairingError) throw pairingError;
+  const additionalPairingPending = Boolean(
+    pairing
+    && !pairing.claimed_at
+    && new Date(pairing.expires_at).getTime() > Date.now()
+  );
+  if (!device || device.status !== "active" || !device.paired_at || !device.user_id) {
+    return jsonResponse({ ok: true, paired: false, plan: "free" });
+  }
+
+  const { data: profile, error: profileError } = await serviceClient
+    .from("profiles")
+    .select("is_admin")
+    .eq("user_id", device.user_id)
+    .maybeSingle();
+  if (profileError) throw profileError;
+  if (profile?.is_admin) {
+    return jsonResponse({ ok: true, paired: true, user_id: device.user_id, plan: "admin", additional_pairing_pending: additionalPairingPending });
+  }
+
+  const { data: subscription, error: subscriptionError } = await serviceClient
+    .from("subscriptions")
+    .select("plan,status")
+    .eq("user_id", device.user_id)
+    .order("updated_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (subscriptionError) throw subscriptionError;
+  if (subscription?.plan === "admin") {
+    return jsonResponse({ ok: true, paired: true, user_id: device.user_id, plan: "admin", additional_pairing_pending: additionalPairingPending });
+  }
+  if (
+    subscription?.plan === "pro"
+    && (subscription.status === "active" || subscription.status === "trialing")
+  ) {
+    return jsonResponse({ ok: true, paired: true, user_id: device.user_id, plan: "pro", additional_pairing_pending: additionalPairingPending });
+  }
+  return jsonResponse({ ok: true, paired: true, user_id: device.user_id, plan: "free", additional_pairing_pending: additionalPairingPending });
+}
+
+async function startAdditionalPairing(
+  serviceClient: ReturnType<typeof createClient>,
+  runtimeUserId: string,
+  rawDeviceId: unknown
+) {
+  if (typeof rawDeviceId !== "string" || !UUID_PATTERN.test(rawDeviceId)) {
+    return errorResponse("invalid_device", "电脑设备信息无效。", 400);
+  }
+  const { data: device, error: deviceError } = await serviceClient
+    .from("devices")
+    .select("id,name,platform,user_id,runtime_user_id,status,paired_at")
+    .eq("id", rawDeviceId)
+    .eq("runtime_user_id", runtimeUserId)
+    .maybeSingle();
+  if (deviceError) throw deviceError;
+  if (!device || device.status !== "active" || !device.paired_at || !device.user_id) {
+    return errorResponse("device_not_paired", "电脑端尚未绑定账号。", 409);
+  }
+
+  const pairingToken = createPairingToken();
+  const expiresAt = await savePairingToken(serviceClient, device.id, pairingToken);
+  return jsonResponse({
+    ok: true,
+    device: { id: device.id, name: device.name, platform: device.platform },
+    pairing_token: pairingToken,
+    expires_at: expiresAt
+  });
+}
+
+async function cancelAdditionalPairing(
+  serviceClient: ReturnType<typeof createClient>,
+  runtimeUserId: string,
+  rawDeviceId: unknown
+) {
+  if (typeof rawDeviceId !== "string" || !UUID_PATTERN.test(rawDeviceId)) {
+    return errorResponse("invalid_device", "电脑设备信息无效。", 400);
+  }
+  const { data: device, error: deviceError } = await serviceClient
+    .from("devices")
+    .select("id")
+    .eq("id", rawDeviceId)
+    .eq("runtime_user_id", runtimeUserId)
+    .maybeSingle();
+  if (deviceError) throw deviceError;
+  if (!device) return errorResponse("device_not_found", "电脑设备不存在。", 404);
+  const { error } = await serviceClient
+    .from("device_pairings")
+    .update({ expires_at: new Date().toISOString() })
+    .eq("device_id", device.id)
+    .is("claimed_at", null);
+  if (error) throw error;
+  return jsonResponse({ ok: true });
 }
 
 // 真实账号（非匿名）请求 start：设备直接归属该账号并激活，跳过配对 token。
@@ -208,6 +326,24 @@ function createPairingToken() {
     .replaceAll("+", "-")
     .replaceAll("/", "_")
     .replaceAll("=", "");
+}
+
+async function savePairingToken(
+  serviceClient: ReturnType<typeof createClient>,
+  deviceId: string,
+  pairingToken: string
+) {
+  const tokenHash = await sha256(pairingToken);
+  const expiresAt = new Date(Date.now() + PAIRING_TTL_MS).toISOString();
+  const { error } = await serviceClient.from("device_pairings").upsert({
+    device_id: deviceId,
+    token_hash: tokenHash,
+    expires_at: expiresAt,
+    claimed_at: null,
+    created_at: new Date().toISOString()
+  });
+  if (error) throw error;
+  return expiresAt;
 }
 
 async function sha256(value: string) {

@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { buildLanState, createLanCodeWatcher } from './lanState.js';
+import { buildLanState, createLanCodeWatcher, isLanAllowedPlan } from './lanState.js';
 
 function fakeLanServer({ code = '123456', endpoints = [{ host: '192.168.1.5', port: 47001, httpPort: 47002 }] } = {}) {
   return {
@@ -8,6 +8,14 @@ function fakeLanServer({ code = '123456', endpoints = [{ host: '192.168.1.5', po
     getEndpoints: () => endpoints
   };
 }
+
+test('LAN is available only to Pro and Admin plans', () => {
+  assert.equal(isLanAllowedPlan('free'), false);
+  assert.equal(isLanAllowedPlan(null), false);
+  assert.equal(isLanAllowedPlan(undefined), false);
+  assert.equal(isLanAllowedPlan('pro'), true);
+  assert.equal(isLanAllowedPlan('admin'), true);
+});
 
 test('buildLanState reports a running LAN server with pairing code and endpoints', () => {
   const state = buildLanState(fakeLanServer());

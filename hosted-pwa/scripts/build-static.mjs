@@ -13,6 +13,11 @@ await mkdir(path.join(dist, ".openai"), { recursive: true });
 
 await verifyMirroredSources();
 await cp(publicDir, path.join(dist, "client"), { recursive: true });
+await mkdir(path.join(dist, "client", "vendor"), { recursive: true });
+await cp(
+  path.join(projectRoot, "node_modules", "@supabase", "supabase-js", "dist", "umd", "supabase.js"),
+  path.join(dist, "client", "vendor", "supabase.js")
+);
 await removeTestFiles(path.join(dist, "client"));
 await cp(path.join(root, "worker", "static.js"), path.join(dist, "server", "index.js"));
 await cp(
@@ -33,6 +38,7 @@ const REQUIRED_ASSETS = [
   "client/landing.js",
   "client/config.js",
   "client/manifest.json",
+  "client/vendor/supabase.js",
   "client/shared/protocol.js",
   "server/index.js",
   ".openai/hosting.json"

@@ -8,6 +8,7 @@ import {
   LanHealthWatch,
   buildLanUrl,
   buildLanWsUrl,
+  buildNativeLanBaseUrl,
   createPairingClient,
   isLanPageEnvironment,
   isLoopbackHostname,
@@ -224,6 +225,12 @@ test("lanTokenHeaders and buildLanWsUrl inject the persisted token", () => {
   plainHttp.location.host = "192.168.1.20:3001";
   plainHttp.localStorage.setItem(LAN_TOKEN_STORAGE_KEY, "t");
   assert.equal(buildLanWsUrl(plainHttp), "ws://192.168.1.20:3001/ws?token=t");
+
+  assert.equal(buildNativeLanBaseUrl(ENDPOINT_A), "http://192.168.1.10:3001");
+  assert.equal(
+    buildLanWsUrl(withToken, ENDPOINT_A),
+    "ws://192.168.1.10:3001/ws?token=abc-123"
+  );
 });
 
 test("createPairingClient reports status and exchanges a code for a stored token", async () => {

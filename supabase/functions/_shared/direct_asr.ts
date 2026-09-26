@@ -12,6 +12,7 @@ import { createTencentFlashRecognitionRequest, type TencentAsrConfig } from "./t
 export const DIRECT_ASR_SIGNATURE_TTL_SECONDS = 300;
 
 const PROVIDER = USAGE_PROVIDER_TENCENT_CLOUD;
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 export type DirectAsrEnv = {
   supabaseUrl: string;
@@ -27,12 +28,7 @@ export type DirectAsrServiceClient = {
     data: any;
     error: { message?: string } | null;
   }>;
-  from: (table: string) => {
-    insert: (row: Record<string, unknown>) => PromiseLike<{ error: unknown }>;
-    update: (cols: Record<string, unknown>) => {
-      eq: (col: string, value: unknown) => { eq: (col: string, value: unknown) => any };
-    };
-  };
+  from: (table: string) => any;
 };
 
 type IssueDeps = {
@@ -67,8 +63,8 @@ export function createIssueAsrHandler(deps: IssueDeps) {
       const env = deps.loadEnv();
       serviceClient = deps.createServiceClient();
 
-      userId = await deps.authenticate(req.headers.get("Authorization") || "", env) ?? "";
-      if (!userId) {
+      const authenticatedUserId = await deps.authenticate(req.headers.get("Authorization") || "", env) ?? "";
+      if (!authenticatedUserId) {
         return errorResponse("unauthorized", "请先登录后再使用云端语音识别。", 401);
       }
       timing.authAt = Date.now();
@@ -80,6 +76,10 @@ export function createIssueAsrHandler(deps: IssueDeps) {
       }
       durationMs = parsed.durationMs;
       audioSizeBytes = parsed.audioSizeBytes;
+      userId = await resolveAuthorizedUserId(serviceClient, authenticatedUserId, parsed.deviceId) ?? "";
+      if (!userId) {
+        return errorResponse("device_not_paired", "电脑设备尚未绑定当前账号，请重新扫码绑定。", 403);
+      }
       timing.bodyAt = Date.now();
 
       const reservation = await reserveAndGetPlan(serviceClient, {
@@ -180,8 +180,8 @@ export function createReportAsrHandler(deps: ReportDeps) {
     try {
       const env = deps.loadEnv();
       const serviceClient = deps.createServiceClient();
-      const userId = await deps.authenticate(req.headers.get("Authorization") || "", env) ?? "";
-      if (!userId) {
+      const authenticatedUserId = await deps.authenticate(req.headers.get("Authorization") || "", env) ?? "";
+      if (!authenticatedUserId) {
         return errorResponse("unauthorized", "请先登录后再使用云端语音识别。", 401);
       }
 
@@ -190,6 +190,14 @@ export function createReportAsrHandler(deps: ReportDeps) {
       const status = body?.status === "success" ? "success" : body?.status === "failed" ? "failed" : null;
       if (!requestId || !status) {
         return errorResponse("invalid_request", "请求参数不合法。", 400);
+      }
+      const deviceId = parseOptionalDeviceId(body);
+      if (deviceId === false) {
+        return errorResponse("invalid_request", "请求参数不合法。", 400);
+      }
+      const userId = await resolveAuthorizedUserId(serviceClient, authenticatedUserId, deviceId) ?? "";
+      if (!userId) {
+        return errorResponse("device_not_paired", "电脑设备尚未绑定当前账号，请重新扫码绑定。", 403);
       }
       const errorCode = typeof body?.error_code === "string" && body.error_code ? body.error_code : undefined;
       // 实际时长回写：预签名模式在录音开始时按上限预留，成功/失败上报时用
@@ -200,7 +208,7 @@ export function createReportAsrHandler(deps: ReportDeps) {
         ? Math.round(durationMs)
         : null;
 
-      // 只把 status=reserved 的行关掉；对已关闭的行是幂等 no-op（迟到上报不会
+      // 只把 status=processing 的行关掉；对已关闭的行是幂等 no-op（迟到上报不会
       // 覆盖第一次结果），并限定 user_id + request_id 防止跨用户写。
       await updateReservedUsage(serviceClient, { userId, requestId, status, errorCode, actualDurationMs });
       return jsonResponse({ ok: true });
@@ -219,12 +227,43 @@ async function readJsonBody(req: Request): Promise<any> {
   }
 }
 
-function parseIssueBody(body: any): { ok: false } | { ok: true; durationMs: number; audioSizeBytes: number } {
+function parseIssueBody(body: any): { ok: false } | { ok: true; durationMs: number; audioSizeBytes: number; deviceId: string | null } {
   const durationMs = Number(body?.duration_ms);
   const audioSizeBytes = Number(body?.audio_size_bytes);
+  const deviceId = parseOptionalDeviceId(body);
   if (!Number.isFinite(durationMs) || durationMs <= 0) return { ok: false };
   if (!Number.isFinite(audioSizeBytes) || audioSizeBytes <= 0) return { ok: false };
-  return { ok: true, durationMs, audioSizeBytes };
+  if (deviceId === false) return { ok: false };
+  return { ok: true, durationMs, audioSizeBytes, deviceId };
+}
+
+function parseOptionalDeviceId(body: any): string | null | false {
+  if (body?.device_id === undefined || body?.device_id === null || body?.device_id === "") return null;
+  return typeof body.device_id === "string" && UUID_PATTERN.test(body.device_id)
+    ? body.device_id
+    : false;
+}
+
+/**
+ * 手机云端请求没有 device_id，直接使用登录账号。桌面 LAN 请求携带 device_id，
+ * 必须由服务端确认该设备仍由当前匿名运行身份持有且已完成绑定，之后才可代理到
+ * 真实账号。客户端传入的套餐或 user_id 永远不参与授权。
+ */
+async function resolveAuthorizedUserId(
+  serviceClient: DirectAsrServiceClient,
+  authenticatedUserId: string,
+  deviceId: string | null
+): Promise<string | null> {
+  if (!deviceId) return authenticatedUserId;
+  const { data, error } = await serviceClient
+    .from("devices")
+    .select("user_id,paired_at")
+    .eq("id", deviceId)
+    .eq("runtime_user_id", authenticatedUserId)
+    .eq("status", "active")
+    .maybeSingle();
+  if (error) throw error;
+  return data?.paired_at && typeof data.user_id === "string" ? data.user_id : null;
 }
 
 async function reserveAndGetPlan(
@@ -271,7 +310,7 @@ function reservationError(reservation: { errorCode: string; maxAudioMs: number }
   return errorResponse(reservation.errorCode, message, 429);
 }
 
-// 与 transcribe 的 updateReservedUsage 同形；这里加上 status=reserved 过滤
+// 与 transcribe 的 updateReservedUsage 同形；这里只关闭 RPC 创建的 processing 行
 // 以实现 report-asr-result 的幂等性。
 async function updateReservedUsage(
   serviceClient: DirectAsrServiceClient,
@@ -292,7 +331,7 @@ async function updateReservedUsage(
     .update(cols)
     .eq("user_id", userId)
     .eq("request_id", requestId)
-    .eq("status", "reserved");
+    .eq("status", "processing");
   if (error) {
     console.error("Failed to update usage event:", error);
   }

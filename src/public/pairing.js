@@ -1,10 +1,11 @@
 import { t } from "./i18n/i18n.js";
+import { performNativeFeedback } from "./nativeFeedback.js";
 
 const config = window.__VB_CONFIG || {};
 const params = new URLSearchParams(window.location.search);
-const pairingToken = params.get("pairing_token") || "";
+let pairingToken = params.get("pairing_token") || "";
 const urlDeviceName = params.get("device") || "";
-const deviceName = urlDeviceName || t('pairing.defaultDeviceName');
+let deviceName = urlDeviceName || t('pairing.defaultDeviceName');
 const overlay = document.querySelector("#pairingOverlay");
 const deviceNameEl = document.querySelector("#pairingDeviceName");
 const confirmBtn = document.querySelector("#pairingConfirmBtn");
@@ -29,6 +30,32 @@ function updatePairingVisibility(session) {
   overlay.classList.toggle("hidden", !session);
   if (deviceNameEl) deviceNameEl.textContent = deviceName.slice(0, 120);
 }
+
+export function openPairingRequest({ token, name } = {}) {
+  const normalizedToken = typeof token === "string" ? token.trim() : "";
+  if (normalizedToken.length < 20 || normalizedToken.length > 200) {
+    throw new Error(t('pairing.invalidQr'));
+  }
+  pairingToken = normalizedToken;
+  deviceName = typeof name === "string" && name.trim()
+    ? name.trim().slice(0, 120)
+    : t('pairing.defaultDeviceName');
+  confirmBtn.disabled = false;
+  cancelBtn.disabled = false;
+  confirmBtn.textContent = t('pairing.confirm');
+  setMessage("");
+  updatePairingVisibility(window.VoiceBridgeAuth?.session || null);
+}
+
+window.addEventListener("voicebridge:pairing-scan", (event) => {
+  try {
+    openPairingRequest(event.detail || {});
+  } catch (error) {
+    window.dispatchEvent(new CustomEvent("voicebridge:pairing-error", {
+      detail: { message: error instanceof Error ? error.message : t('pairing.invalidQr') }
+    }));
+  }
+});
 
 window.addEventListener("voicebridge:auth", (event) => {
   updatePairingVisibility(event.detail?.session || null);
@@ -60,10 +87,15 @@ confirmBtn?.addEventListener("click", async () => {
       throw new Error(payload?.message || t('pairing.bindFailedRefresh'));
     }
     setMessage(t('pairing.bound', payload.device?.name || deviceName));
+    performNativeFeedback("success");
+    window.dispatchEvent(new CustomEvent("voicebridge:pairing-success", {
+      detail: { deviceId: payload.device?.id || "" }
+    }));
     clearPairingQuery();
     confirmBtn.textContent = t('pairing.success');
     setTimeout(() => overlay?.classList.add("hidden"), 1600);
   } catch (error) {
+    performNativeFeedback("error");
     setMessage(error instanceof Error ? error.message : t('pairing.failed'), true);
     confirmBtn.disabled = false;
     cancelBtn.disabled = false;

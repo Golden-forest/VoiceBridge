@@ -6,11 +6,13 @@ import { commandStore } from "./commandStore.js";
 import { isProtocolCompatible } from "./shared/protocol.js";
 import { PLAN_LIMITS, getPlanLimit, isAdminPlan } from "./shared/planLimits.js";
 import { t, getAvailableLocales, setLocale, getCurrentLocale, getIntlLocale } from "./i18n/i18n.js";
+import { performNativeFeedback } from "./nativeFeedback.js";
 import {
   LanProbe,
   LanHealthWatch,
   buildLanUrl,
   buildLanWsUrl,
+  buildNativeLanBaseUrl,
   createPairingClient,
   isLanPageEnvironment,
   lanTokenHeaders,
@@ -32,6 +34,7 @@ const billingActions = document.querySelector("#billingActions");
 const planBadge = document.querySelector("#planBadge");
 const accountDrawerBtn = document.querySelector("#accountDrawerBtn");
 const isCloudMode = appConfig.voicebridgeMode === "cloud";
+const isNativeApp = appConfig.nativeApp === true;
 // LAN 页面模式：页面由桌面端 LAN 服务直接提供（非云端、非本机回环）
 const isLanPage = !isCloudMode && isLanPageEnvironment({
   mode: appConfig.voicebridgeMode,
@@ -55,13 +58,33 @@ const lanCommandStore = {
 };
 const activeCommandStore = isCloudMode ? commandStore : lanCommandStore;
 let cloudRealtime = null;
+let cloudRealtimeSubscribed = false;
 let selectedCloudDeviceId = "";
 let cloudDesktopDevices = [];
+let nativeLanEndpoint = null;
 let activeCloudUserId = "";
 let activeCloudPhoneDeviceId = "";
+const LAST_CLOUD_DESKTOP_KEY = "voicebridge_last_cloud_desktop_id";
+
+function getLastCloudDesktopId() {
+  try {
+    return localStorage.getItem(LAST_CLOUD_DESKTOP_KEY) || "";
+  } catch {
+    return "";
+  }
+}
+
+function rememberCloudDesktopId(deviceId) {
+  if (!deviceId) return;
+  try {
+    localStorage.setItem(LAST_CLOUD_DESKTOP_KEY, deviceId);
+  } catch {
+    // Storage can be unavailable in private browsing; selection still works in-memory.
+  }
+}
 
 async function requestLanCommands(path, init = {}) {
-  const response = await fetch(path, {
+  const response = await fetch(lanApiUrl(path), {
     ...init,
     headers: { "Content-Type": "application/json", ...lanTokenHeaders(), ...(init.headers || {}) }
   });
@@ -99,13 +122,14 @@ function updateCloudLanEndpoints(desktopDevices) {
 }
 
 function scheduleLanAffordanceRefresh() {
+  if (isNativeLanActive()) return;
   if (lanAffordanceTimer) return;
   lanAffordanceTimer = setTimeout(async () => {
     lanAffordanceTimer = null;
     // 端点在探测期间可能已变化，重新读取当前列表。
     // 探测成功优先可达端点；探测失败（含 mixed-content 拦截）回退首个上报端点。
     const endpoint = await lanProbe.getSwitchTarget().catch(() => null);
-    if (!isCloudMode || !channelBadge) return;
+    if (!isCloudMode || !channelBadge || isNativeLanActive()) return;
     if (!endpoint) return; // 无上报端点时保持"云端"状态，静默
     // 真实手机上 https 页面探测 http 端点会被 mixed-content 拦截，探测基本
     // 必败。探测失败绝不亮"局域网可用"绿灯（手机可能根本不在同一网络），
@@ -123,9 +147,66 @@ function scheduleLanAffordanceRefresh() {
       channelBadge.title = t('lan.lanTryTitle');
     }
     channelBadge.onclick = () => {
-      location.assign(buildLanUrl(endpoint, location.origin));
+      if (isNativeApp) {
+        void activateNativeLan(endpoint);
+      } else {
+        location.assign(buildLanUrl(endpoint, location.origin));
+      }
     };
   }, 0);
+}
+
+function isNativeLanActive() {
+  return isNativeApp && nativeLanEndpoint !== null;
+}
+
+function lanApiUrl(path) {
+  if (!isNativeLanActive()) return path;
+  return `${buildNativeLanBaseUrl(nativeLanEndpoint)}${path}`;
+}
+
+function returnNativeAppToCloud() {
+  if (!isNativeLanActive()) return;
+  nativeLanEndpoint = null;
+  if (ws) {
+    ws.close(1000, "switch-to-cloud");
+    ws = null;
+  }
+  channelBadge.classList.remove("lan", "available", "try");
+  channelBadge.textContent = t('lan.channelCloud');
+  channelBadge.title = "";
+  channelBadge.onclick = null;
+  updateCloudLanEndpoints(cloudDesktopDevices);
+  syncCloudConnectionStatus();
+}
+
+async function finishNativeLanActivation(endpoint) {
+  nativeLanEndpoint = endpoint;
+  channelBadge.classList.remove("available", "try");
+  channelBadge.classList.add("lan");
+  channelBadge.textContent = t('lan.channelLan');
+  channelBadge.title = t('lan.backToCloud');
+  channelBadge.onclick = returnNativeAppToCloud;
+  setConnectionStatus("connecting", t('lan.connectingDirect'));
+  connectWebSocket();
+}
+
+async function activateNativeLan(endpoint) {
+  if (!isNativeApp || !endpoint) return;
+  const pairUrl = `${buildNativeLanBaseUrl(endpoint)}/api/lan/pair`;
+  const pairing = createPairingClient({ pairUrl, win: window });
+  try {
+    const { paired } = await pairing.status();
+    if (!paired) {
+      showLanPairingOverlay(pairing, {
+        onSuccess: () => finishNativeLanActivation(endpoint)
+      });
+      return;
+    }
+    await finishNativeLanActivation(endpoint);
+  } catch {
+    showToast(t('lan.lanLost'), true);
+  }
 }
 
 function initChannelBadge() {
@@ -147,7 +228,7 @@ function initChannelBadge() {
 
 // LAN 页面：配对门禁。未配对时展示配对码输入框（复用 pairing-overlay 样式），
 // 配对成功后 token 已写入 localStorage，刷新页面以加载带 token 的 WS / 请求。
-function showLanPairingOverlay(pairing) {
+function showLanPairingOverlay(pairing, { onSuccess } = {}) {
   const overlay = document.createElement("div");
   overlay.className = "pairing-overlay";
   const card = document.createElement("section");
@@ -182,7 +263,11 @@ function showLanPairingOverlay(pairing) {
       const result = await pairing.pair(code);
       if (result.ok) {
         message.textContent = t('lan.pairSuccess');
-        setTimeout(() => location.reload(), 800);
+        setTimeout(() => {
+          overlay.remove();
+          if (onSuccess) void onSuccess();
+          else location.reload();
+        }, 500);
         return;
       }
       message.textContent = t('lan.pairFailed');
@@ -300,6 +385,18 @@ function setConnectionStatus(state, message) {
   statusBadge.textContent = t(labelKeys[state] || "device.statusConnecting");
 }
 
+function syncCloudConnectionStatus() {
+  if (!isCloudMode || isNativeLanActive()) return;
+  const selected = cloudDesktopDevices.find((device) => device.deviceId === selectedCloudDeviceId);
+  if (cloudRealtimeSubscribed && selected) {
+    setConnectionStatus("connected", `${t('connection.cloudConnected')} · ${selected.name || selected.deviceId}`);
+  } else if (cloudRealtimeSubscribed) {
+    setConnectionStatus("error", t('device.waitingDesktop'));
+  } else {
+    setConnectionStatus("connecting", t('device.connecting'));
+  }
+}
+
 statusDot.addEventListener("click", () => {
   showToast(statusDot.title);
 });
@@ -308,6 +405,54 @@ pageRefreshButton?.addEventListener("click", () => {
   if (pageRefreshButton.classList.contains("is-reloading")) return;
   pageRefreshButton.classList.add("is-reloading");
   setTimeout(() => location.reload(), 600);
+});
+
+const nativePairButton = document.querySelector("#nativePairButton");
+if (isNativeApp) nativePairButton?.classList.remove("hidden");
+
+nativePairButton?.addEventListener("click", async () => {
+  performNativeFeedback("selection");
+  const scanner = window.Capacitor?.Plugins?.CapacitorBarcodeScanner;
+  if (!scanner?.scanBarcode) {
+    showToast(t('pairing.scanFailed'), true);
+    return;
+  }
+  try {
+    const result = await scanner.scanBarcode({
+      hint: 0,
+      scanInstructions: t('pairing.scanning'),
+      scanButton: false,
+      cameraDirection: 1,
+      scanOrientation: 1,
+      cancelButtonAccessibilityLabel: t('common.cancel')
+    });
+    const scanned = String(result?.ScanResult || "").trim();
+    if (!scanned) return;
+    const url = new URL(scanned);
+    const token = url.searchParams.get("pairing_token") || "";
+    const name = url.searchParams.get("device") || "";
+    if (token.length < 20 || token.length > 200) throw new Error(t('pairing.invalidQr'));
+    window.dispatchEvent(new CustomEvent("voicebridge:pairing-scan", {
+      detail: { token, name }
+    }));
+  } catch (error) {
+    performNativeFeedback("error");
+    showToast(error instanceof Error ? error.message : t('pairing.scanFailed'), true);
+  }
+});
+
+window.addEventListener("voicebridge:pairing-success", (event) => {
+  const deviceId = event.detail?.deviceId || "";
+  if (!deviceId) return;
+  selectedCloudDeviceId = deviceId;
+  rememberCloudDesktopId(deviceId);
+  if (cloudDeviceSelect) cloudDeviceSelect.value = deviceId;
+  cloudRealtime?.reconnectNow();
+  syncCloudConnectionStatus();
+});
+
+window.addEventListener("voicebridge:pairing-error", (event) => {
+  showToast(event.detail?.message || t('pairing.scanFailed'), true);
 });
 
 // AutoPaste 开关切换时，重新计算发送按钮的显隐
@@ -376,7 +521,7 @@ async function sendTextInput() {
 }
 
 async function sendTextToDesktop(text, { localSuccessMessage = t('status.sentToDesktop') } = {}) {
-  if ((window.__VB_CONFIG || {}).voicebridgeMode === "cloud") {
+  if ((window.__VB_CONFIG || {}).voicebridgeMode === "cloud" && !isNativeLanActive()) {
     if (!cloudRealtime || !selectedCloudDeviceId) {
       showToast(t('status.desktopNotOpen'), true);
       return false;
@@ -449,17 +594,36 @@ async function handleAuthState(event) {
   try {
     const sbAuth = window.VoiceBridgeAuth?.supabase;
     if (sbAuth) {
-      await sbAuth.from("devices").upsert({
-        id: phoneDeviceId,
-        user_id: user.id,
-        runtime_user_id: user.id,
-        name: "Phone",
-        device_type: "phone",
-        platform: "web",
-        app_version: navigator.userAgent,
-        status: "active",
-        last_seen_at: new Date().toISOString()
-      }, { onConflict: "id" });
+      const now = new Date().toISOString();
+      const { data: existingDevice, error: lookupError } = await sbAuth
+        .from("devices")
+        .select("id")
+        .eq("id", phoneDeviceId)
+        .maybeSingle();
+      if (lookupError) throw lookupError;
+      const writeResult = existingDevice
+        ? await sbAuth.from("devices").update({
+          name: "Phone",
+          platform: "web",
+          app_version: navigator.userAgent,
+          status: "active",
+          last_seen_at: now,
+          updated_at: now
+        }).eq("id", phoneDeviceId)
+        : await sbAuth.from("devices").insert({
+          id: phoneDeviceId,
+          user_id: user.id,
+          runtime_user_id: user.id,
+          name: "Phone",
+          device_type: "phone",
+          platform: "web",
+          app_version: navigator.userAgent,
+          status: "active",
+          paired_at: null,
+          last_seen_at: now,
+          updated_at: now
+        });
+      if (writeResult.error) throw writeResult.error;
     }
   } catch (error) {
     console.warn("Failed to register phone device:", error);
@@ -473,9 +637,11 @@ async function handleAuthState(event) {
       const desktopDevices = devices.filter((device) => isDesktopDeviceCandidate(device, phoneDeviceId));
       renderCloudDeviceOptions(desktopDevices);
       updateCloudLanEndpoints(desktopDevices);
+      syncCloudConnectionStatus();
     },
     onAck: (ack) => {
       if (ack.key) return;
+      performNativeFeedback(ack.status === "success" ? "success" : "error");
       showToast(ack.status === "success" ? t('status.sentToDesktopAck') : t('status.desktopExecFailed', ack.detail));
     },
     onStatus: (status) => {
@@ -483,11 +649,13 @@ async function handleAuthState(event) {
       // ack:* 是单次请求的超时/错误，不代表云端连接状态。
       if (text.startsWith("ack:")) return;
       if (text === "SUBSCRIBED") {
-        setConnectionStatus("connected", t('connection.cloudConnected'));
+        cloudRealtimeSubscribed = true;
+        syncCloudConnectionStatus();
       } else if (/CLOSED|CHANNEL_ERROR|TIMED_OUT/.test(text)) {
         // 通道异常立即降级显示；realtime-js 内部会自动 rejoin，
         // 恢复后会再次收到 SUBSCRIBED 纠正回 connected。
-        setConnectionStatus("error", t('connection.reconnecting'));
+        cloudRealtimeSubscribed = false;
+        if (!isNativeLanActive()) setConnectionStatus("error", t('connection.reconnecting'));
       }
     }
   });
@@ -530,6 +698,18 @@ window.addEventListener("voicebridge:auth", (event) => {
   void handleAuthState(event);
 });
 
+// Mobile browsers suspend sockets aggressively in the background. Rebuild the
+// Realtime channels immediately when the app becomes usable again instead of
+// waiting for the heartbeat timeout or requiring a full page refresh.
+window.addEventListener("online", () => {
+  cloudRealtime?.reconnectNow();
+});
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState === "visible") {
+    cloudRealtime?.reconnectNow();
+  }
+});
+
 if (window.VoiceBridgeAuth) {
   void handleAuthState({
     detail: {
@@ -541,7 +721,10 @@ if (window.VoiceBridgeAuth) {
 
 cloudDeviceSelect?.addEventListener("change", () => {
   selectedCloudDeviceId = cloudDeviceSelect.value;
+  rememberCloudDesktopId(selectedCloudDeviceId);
   syncDeviceSelectorLabel();
+  updateCloudLanEndpoints(cloudDesktopDevices);
+  syncCloudConnectionStatus();
 });
 
 // === 设备/窗口两行折叠交互 ===
@@ -605,6 +788,7 @@ document.addEventListener("click", (event) => {
 function renderCloudDeviceOptions(desktopDevices) {
   cloudDesktopDevices = desktopDevices;
   const previousDeviceId = selectedCloudDeviceId;
+  const rememberedDeviceId = getLastCloudDesktopId();
   const options = desktopDevices.length
     ? desktopDevices.map((device) => {
       const option = document.createElement("option");
@@ -620,10 +804,14 @@ function renderCloudDeviceOptions(desktopDevices) {
   if (desktopDevices.some((device) => device.deviceId === previousDeviceId)) {
     selectedCloudDeviceId = previousDeviceId;
     cloudDeviceSelect.value = previousDeviceId;
+  } else if (desktopDevices.some((device) => device.deviceId === rememberedDeviceId)) {
+    selectedCloudDeviceId = rememberedDeviceId;
+    cloudDeviceSelect.value = rememberedDeviceId;
   } else {
     selectedCloudDeviceId = desktopDevices[0]?.deviceId || "";
     cloudDeviceSelect.value = selectedCloudDeviceId;
   }
+  rememberCloudDesktopId(selectedCloudDeviceId);
 
   renderDeviceSelectorList(desktopDevices);
   syncDeviceSelectorLabel();
@@ -649,7 +837,10 @@ function renderDeviceSelectorList(desktopDevices) {
     btn.addEventListener("click", () => {
       selectedCloudDeviceId = device.deviceId;
       cloudDeviceSelect.value = device.deviceId;
+      rememberCloudDesktopId(selectedCloudDeviceId);
       syncDeviceSelectorLabel();
+      updateCloudLanEndpoints(cloudDesktopDevices);
+      syncCloudConnectionStatus();
       setDeviceSelectorOpen(false);
     });
     deviceSelectorList.appendChild(btn);
@@ -666,6 +857,7 @@ function createCloudPlaceholderOption() {
 async function stopCloudRealtime() {
   await cloudRealtime?.stop();
   cloudRealtime = null;
+  cloudRealtimeSubscribed = false;
   activeCloudUserId = "";
   activeCloudPhoneDeviceId = "";
 }
@@ -912,7 +1104,7 @@ class WindowSelector {
   }
 
   get targetWindow() {
-    if (isCloudMode && this.selectedWindow?.deviceId !== selectedCloudDeviceId) return null;
+    if (isCloudMode && !isNativeLanActive() && this.selectedWindow?.deviceId !== selectedCloudDeviceId) return null;
     return this.selectedWindow;
   }
 
@@ -953,7 +1145,7 @@ class WindowSelector {
   }
 
   async _fetchWindows() {
-    if (isCloudMode) {
+    if (isCloudMode && !isNativeLanActive()) {
       const windows = cloudDesktopDevices
         .find((device) => device.deviceId === selectedCloudDeviceId)
         ?.windows || [];
@@ -967,7 +1159,7 @@ class WindowSelector {
     }
     this.el.list.innerHTML = `<p class="window-list-loading">${t('common.loading')}</p>`;
     try {
-      const res = await fetch("/api/windows", { headers: lanTokenHeaders() });
+      const res = await fetch(lanApiUrl("/api/windows"), { headers: lanTokenHeaders() });
       if (!res.ok) {
         console.error("API error:", res.status, await res.text().catch(() => ""));
         this.el.list.innerHTML = `<p class="window-list-empty">${t('windowSelector.fetchFailed')}</p>`;
@@ -1617,7 +1809,7 @@ const escButton = document.querySelector("#escButton");
 const deleteButton = document.querySelector("#deleteButton");
 
 function sendKeyCommand(key, successMessage) {
-  if (isCloudMode) {
+  if (isCloudMode && !isNativeLanActive()) {
     if (!cloudRealtime || !selectedCloudDeviceId) {
       showToast(t('status.desktopNotOpen'), true);
       return;
@@ -1746,7 +1938,6 @@ const micSvg = '<svg viewBox="0 0 24 24"><rect x="9" y="2" width="6" height="12"
 const stopSvg = '<svg viewBox="0 0 24 24"><rect x="6" y="6" width="12" height="12" rx="2"/></svg>';
 
 let recorder = null;
-let chunks = [];
 let isRecording = false;
 let maxRecordTimer = null;
 let timerInterval = null;
@@ -1775,7 +1966,7 @@ function setActionButtonsDisabled(disabled) {
   deleteButton.disabled = disabled;
 }
 
-if (!navigator.mediaDevices?.getUserMedia || (isCloudMode ? !BrowserAudioContext : !window.MediaRecorder)) {
+if (!navigator.mediaDevices?.getUserMedia || !BrowserAudioContext) {
   showToast(t('record.recordUnsupported'), true);
   recordButton.disabled = true;
   fallbackButton.classList.remove("hidden");
@@ -1816,7 +2007,7 @@ function setRecordProcessing() {
 function currentMaxAudioMs() {
   // LAN 页面没有云端登录态，不查 plan；本地服务器只限制 25MB 文件大小，
   // 固定使用与付费档一致的 60 秒上限。
-  if (!isCloudMode) return PLAN_LIMITS.pro.maxAudioMs;
+  if (!isCloudMode || isNativeLanActive()) return PLAN_LIMITS.pro.maxAudioMs;
   return getPlanLimit(currentUserPlan).maxAudioMs;
 }
 
@@ -1826,6 +2017,7 @@ function beginRecordingState() {
   recordingStartedAt = performance.now();
   currentRecordingDurationMs = null;
   recordButton.classList.add("recording");
+  performNativeFeedback("recordStart");
   setRecordActive();
   setActionButtonsDisabled(true);
   setConnectionStatus(statusDot.className.includes("connected") ? "connected" : "connecting", t('record.recording'));
@@ -1853,37 +2045,29 @@ function beginRecordingState() {
 
 async function startRecording() {
   try {
-    if (isCloudMode) {
-      const maxMs = currentMaxAudioMs();
-      recorder = await recordWavUntilStopped({
-        onStopReady: async (blob) => uploadAudio(blob, "wav"),
-        maxDurationMs: maxMs,
-        onMaxDurationReached: () => {
-          void stopRecording().catch((error) => {
-            console.error("Auto-stop failed:", error);
-            finishUpload();
-          });
-        }
-      });
-      beginRecordingState();
+    if (isCloudMode && !isNativeLanActive() && !selectedCloudDeviceId) {
+      showToast(t('status.desktopNotOpen'), true);
+      return;
+    }
+    const maxMs = currentMaxAudioMs();
+    // 云端和 LAN 统一直接录制 16 kHz 单声道 WAV。LAN 上传后桌面可直接
+    // 透传给腾讯 ASR，避免 MediaRecorder(WebM/MP4) 再走一次 ffmpeg 转码。
+    recorder = await recordWavUntilStopped({
+      onStopReady: async (blob) => uploadAudio(blob, "wav"),
+      maxDurationMs: maxMs,
+      onMaxDurationReached: () => {
+        void stopRecording().catch((error) => {
+          console.error("Auto-stop failed:", error);
+          finishUpload();
+        });
+      }
+    });
+    beginRecordingState();
+    if (isCloudMode && !isNativeLanActive()) {
       // 录音开始即预取直连签名：跨境签名往返（含 Edge 冷启动）与录音并行，
       // 说完话直接上传腾讯。失败静默回退到原有的实时签名路径。
       prefetchedAsrIssue = prefetchDirectAsrSignature({ durationMs: maxMs });
-      return;
     }
-
-    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-    chunks = [];
-    const mimeType = pickMimeType();
-    recorder = mimeType ? new MediaRecorder(stream, { mimeType }) : new MediaRecorder(stream);
-    recorder.addEventListener("dataavailable", (dataEvent) => { if (dataEvent.data.size > 0) chunks.push(dataEvent.data); });
-    recorder.addEventListener("stop", async () => {
-      stream.getTracks().forEach((track) => track.stop());
-      const blob = new Blob(chunks, { type: recorder.mimeType || "audio/webm" });
-      await uploadAudio(blob, fileExtensionFor(blob.type));
-    });
-    recorder.start();
-    beginRecordingState();
   } catch (error) {
     showToast(t('record.micDenied', error.message), true);
   }
@@ -1898,19 +2082,16 @@ async function stopRecording() {
   clearTimeout(maxRecordTimer);
   clearInterval(timerInterval);
   recordButton.classList.remove("recording");
+  performNativeFeedback("recordStop");
   recordButton.disabled = true;
   setRecordProcessing();
   showToast(t('record.uploading'));
-  if (isCloudMode && typeof recorder.stop === "function") {
-    try {
-      await recorder.stop();
-    } catch (error) {
-      showToast(error.message || t('record.stopFailed'), true);
-      finishUpload();
-    }
-    return;
+  try {
+    await recorder.stop();
+  } catch (error) {
+    showToast(error.message || t('record.stopFailed'), true);
+    finishUpload();
   }
-  recorder.stop();
 }
 
 async function uploadAudio(blob, extension) {
@@ -1918,7 +2099,7 @@ async function uploadAudio(blob, extension) {
   try {
     if (!blob.size) { showToast(t('record.noVoice'), true); finishUpload(); return; }
     showToast(t('record.recognizing'));
-    if (isCloudMode) {
+    if (isCloudMode && !isNativeLanActive()) {
       console.info("[vb-timing] stop→encode+upload-ready", { ms: Math.round(performance.now() - stopStartedAt), bytes: blob.size });
       const payload = await transcribeCloudAudio({
         audio: blob,
@@ -1953,7 +2134,7 @@ async function uploadAudio(blob, extension) {
     }
     const controller = new AbortController();
     timeout = setTimeout(() => controller.abort(), 30_000);
-    const response = await fetch("/api/upload", {
+    const response = await fetch(lanApiUrl("/api/upload"), {
       method: "POST",
       body: formData,
       headers: lanTokenHeaders(),
@@ -1965,10 +2146,13 @@ async function uploadAudio(blob, extension) {
     if (!response.ok || !payload.ok) throw new Error(payload.error || t('record.uploadFailed'));
     const output = payload.output || {};
     if (output.buffered) {
+      performNativeFeedback("success");
       showToast(t('record.appendedToBuffer'));
     } else if (output.command) {
+      performNativeFeedback(output.keyError ? "error" : "success");
       showToast(output.keyError ? t('record.voiceCommandFailed') : t('record.voiceCommandExecuted'), Boolean(output.keyError));
     } else if (output.pasted) {
+      performNativeFeedback("success");
       showToast(t('record.copiedAndPasted'));
     } else if (output.copied) {
       showCopyToast(t('record.copiedToClipboard'), payload.text || "");
@@ -2007,7 +2191,8 @@ let wsVisibilityHandler = null;
 
 function connectWebSocket() {
   let wsRetryDelay = 1500;
-  ws = new WebSocket(buildLanWsUrl(window));
+  if (ws) ws.close(1000, "replace-connection");
+  ws = new WebSocket(buildLanWsUrl(window, isNativeLanActive() ? nativeLanEndpoint : null));
 
   ws.addEventListener("open", () => {
     wsRetryDelay = 1500;
@@ -2017,7 +2202,7 @@ function connectWebSocket() {
       document.removeEventListener("visibilitychange", wsVisibilityHandler);
       wsVisibilityHandler = null;
     }
-    setConnectionStatus("connected", t('connection.wsConnected'));
+    setConnectionStatus("connected", isNativeLanActive() ? t('lan.directConnected') : t('connection.wsConnected'));
   });
   ws.addEventListener("message", (event) => {
     try {
@@ -2072,11 +2257,6 @@ function connectWebSocket() {
     };
     document.addEventListener("visibilitychange", wsVisibilityHandler);
   });
-}
-
-function pickMimeType() {
-  const candidates = ["audio/webm;codecs=opus", "audio/webm", "audio/mp4", "audio/mpeg"];
-  return candidates.find((type) => MediaRecorder.isTypeSupported(type)) || "";
 }
 
 function fileExtensionFor(mimeType) {

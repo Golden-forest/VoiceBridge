@@ -76,6 +76,9 @@ test("PWA app.html retains manifest link and GitHub auth button", async () => {
   assert.match(html, /id="authGithubBtn"/);
   // Existing Chinese copy still present
   assert.match(html, /创建账号/);
+  assert.match(html, /<script src="\/vendor\/supabase\.js"><\/script>/);
+  assert.doesNotMatch(html, /esm\.sh/);
+  await access(new URL("client/vendor/supabase.js", distRoot));
 });
 
 // ---- Worker HTML_ROUTES ----------------------------------------------------

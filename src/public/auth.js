@@ -1,5 +1,6 @@
-import { createClient } from "@supabase/supabase-js";
 import { t } from "./i18n/i18n.js";
+
+const createClient = globalThis.supabase?.createClient;
 
 const config = window.__VB_CONFIG || {};
 const overlay = document.querySelector("#authOverlay");
@@ -15,7 +16,7 @@ const isCloudMode = config.voicebridgeMode === "cloud";
 
 let mode = "sign-in";
 
-export const supabase = config.supabaseUrl && config.supabaseAnonKey
+export const supabase = createClient && config.supabaseUrl && config.supabaseAnonKey
   ? createClient(config.supabaseUrl, config.supabaseAnonKey)
   : null;
 
@@ -53,6 +54,13 @@ function emitAuthReady(session) {
   }));
 }
 
+function buildAppRedirectUrl() {
+  const redirectTo = new URL(window.location.href);
+  redirectTo.pathname = "/app";
+  redirectTo.hash = "";
+  return redirectTo.href;
+}
+
 if (!isCloudMode) {
   overlay?.classList.add("hidden");
   emitAuthReady(null);
@@ -67,7 +75,7 @@ if (!isCloudMode) {
 
   supabase.auth.onAuthStateChange((event, session) => {
     overlay?.classList.toggle("hidden", Boolean(session));
-    if (!session && event !== "SIGNED_OUT") {
+    if (!session && event !== "SIGNED_OUT" && event !== "INITIAL_SESSION") {
       setMessage(t('status.sessionExpired'));
     }
     emitAuthReady(session);
@@ -84,7 +92,7 @@ githubBtn?.addEventListener("click", async () => {
   setMessage("");
   githubBtn.disabled = true;
   try {
-    const redirectTo = new URL("/app", window.location.href).href;
+    const redirectTo = buildAppRedirectUrl();
     const { error } = await supabase.auth.signInWithOAuth({
       provider: "github",
       options: { redirectTo }
@@ -153,7 +161,9 @@ resetBtn?.addEventListener("click", async () => {
   if (!email) return;
   resetBtn.disabled = true;
   try {
-    const { error } = await supabase.auth.resetPasswordForEmail(email);
+    const { error } = await supabase.auth.resetPasswordForEmail(email, {
+      redirectTo: buildAppRedirectUrl()
+    });
     if (error) {
       setMessage(error.message, true);
       return;

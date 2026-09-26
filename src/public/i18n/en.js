@@ -53,6 +53,8 @@ export default {
     pairSubmit: 'Pair',
     pairFailed: 'Incorrect pairing code, please try again.',
     pairSuccess: 'Paired, refreshing…',
+    connectingDirect: 'Connecting over LAN…',
+    directConnected: 'Connected to desktop over LAN',
     lanLost: 'LAN connection lost, returning to cloud…',
   },
 
@@ -315,6 +317,10 @@ export default {
     bound: (name) => `Paired with ${name}, desktop will come online.`,
     success: 'Paired successfully',
     failed: 'Pairing failed, please retry.',
+    scanDesktop: 'Scan desktop QR',
+    scanning: 'Scan the pairing QR shown on your desktop',
+    invalidQr: 'This is not a valid VoiceBridge pairing QR code.',
+    scanFailed: 'Could not scan the QR code. Please retry.',
   },
 
   // === Command Store ===

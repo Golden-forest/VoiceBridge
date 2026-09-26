@@ -12,8 +12,7 @@ const supabaseAnonKey = process.env.VOICEBRIDGE_DESKTOP_SUPABASE_ANON_KEY
   || existingConfig.supabaseAnonKey
   || "";
 const webAppUrl = process.env.VOICEBRIDGE_WEB_APP_URL
-  || existingConfig.webAppUrl
-  || "https://voicebridge-6kr.pages.dev";
+  || "https://voicebridge.heyflint.top/app";
 
 if (!supabaseUrl || !supabaseAnonKey) {
   console.error(

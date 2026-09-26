@@ -10,6 +10,7 @@ import {
 const BASE = "https://edge.test";
 const ANON = "anon-key";
 const TOKEN = "token-123";
+const DEVICE_ID = "11111111-1111-4111-8111-111111111111";
 const WAV = Buffer.from("RIFF-wav-bytes");
 
 function jsonResponse(payload, status = 200) {
@@ -48,6 +49,7 @@ function createFetchSpy(responses) {
 const baseCtx = () => ({
   wavBuffer: WAV,
   getAccessToken: async () => TOKEN,
+  deviceId: DEVICE_ID,
   supabaseUrl: BASE,
   supabaseAnonKey: ANON
 });
@@ -73,6 +75,7 @@ test("transcribeViaEdgeAsr happy path: issue -> tencent POST raw wav -> report s
   const issueBody = JSON.parse(issue.options.body);
   assert.equal(issueBody.audio_size_bytes, WAV.length);
   assert.ok(issueBody.duration_ms > 0);
+  assert.equal(issueBody.device_id, DEVICE_ID);
 
   const tencent = calls[1];
   assert.equal(tencent.url, "https://asr.tencentcloudapi.com/");
@@ -84,6 +87,7 @@ test("transcribeViaEdgeAsr happy path: issue -> tencent POST raw wav -> report s
   assert.deepEqual(JSON.parse(report.options.body), {
     request_id: "req-1",
     status: "success",
+    device_id: DEVICE_ID,
     text_length: "你好，世界".length
   });
 });
@@ -126,6 +130,19 @@ test("transcribeViaEdgeAsr throws when issue-asr-request fails, without touching
   assert.equal(calls.length, 1);
 });
 
+test("transcribeViaEdgeAsr retries one transient issue failure", async () => {
+  const { fetchImpl, calls } = createFetchSpy([
+    async () => { throw new Error("temporary network failure"); },
+    okIssue(),
+    tencentOk("你好"),
+    jsonResponse({ ok: true })
+  ]);
+  const text = await transcribeViaEdgeAsr({ ...baseCtx(), fetchImpl });
+  assert.equal(text, "你好");
+  await __waitForPendingAsrReportsForTests();
+  assert.equal(calls.filter((call) => call.url.endsWith("/issue-asr-request")).length, 2);
+});
+
 test("transcribeViaEdgeAsr reports failed and throws when tencent returns an error code", async () => {
   const { fetchImpl, calls } = createFetchSpy([
     okIssue({ requestId: "req-f" }),
@@ -144,6 +161,7 @@ test("transcribeViaEdgeAsr reports failed and throws when tencent returns an err
   assert.deepEqual(JSON.parse(report.options.body), {
     request_id: "req-f",
     status: "failed",
+    device_id: DEVICE_ID,
     error_code: "tencent_4001"
   });
 });
@@ -158,6 +176,7 @@ test("transcribeViaEdgeAsr reports failed and throws when tencent text is empty"
   assert.deepEqual(JSON.parse(calls[2].options.body), {
     request_id: "req-e",
     status: "failed",
+    device_id: DEVICE_ID,
     error_code: "empty_text"
   });
 });
@@ -203,6 +222,7 @@ test("transcribeViaEdgeAsr reports invalid/stale signature payloads as failed", 
   assert.deepEqual(JSON.parse(calls[1].options.body), {
     request_id: "req-s",
     status: "failed",
+    device_id: DEVICE_ID,
     error_code: "stale_signature"
   });
 });

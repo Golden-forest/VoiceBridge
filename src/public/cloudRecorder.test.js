@@ -1,6 +1,15 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
 import { recordWavUntilStopped } from "./cloudRecorder.js";
+
+const appSource = await readFile(new URL("./app.js", import.meta.url), "utf8");
+
+test("cloud and LAN modes share the direct WAV recorder path", () => {
+  assert.match(appSource, /recordWavUntilStopped/);
+  assert.match(appSource, /onStopReady:\s*async \(blob\) => uploadAudio\(blob, "wav"\)/);
+  assert.doesNotMatch(appSource, /new MediaRecorder/);
+});
 
 test("recordWavUntilStopped cleans up media resources when setup fails", async () => {
   const originalNavigator = globalThis.navigator;

@@ -21,6 +21,9 @@
           <h1 class="brand">VoiceBridge</h1>
           <div id="billingActions" class="billing-actions hidden" data-i18n-aria-label="header.account">
             <span id="planBadge" class="plan-badge hidden">Free</span>
+            <button id="nativePairButton" class="billing-button hidden" type="button" title="扫码连接电脑" aria-label="扫码连接电脑" data-i18n-title="pairing.scanDesktop" data-i18n-aria-label="pairing.scanDesktop">
+              <svg viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 8V4a1 1 0 0 1 1-1h4M16 3h4a1 1 0 0 1 1 1v4M21 16v4a1 1 0 0 1-1 1h-4M8 21H4a1 1 0 0 1-1-1v-4"/><path d="M7 12h10"/></svg>
+            </button>
             <button id="accountDrawerBtn" class="billing-button" type="button" data-i18n-aria-label="header.accountSettings">
               <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
             </button>
@@ -264,13 +267,7 @@
       </section>
     </div>
 
-    <script type="importmap">
-{
-  "imports": {
-    "@supabase/supabase-js": "https://esm.sh/@supabase/supabase-js@2"
-  }
-}
-    </script>
+    <script src="/vendor/supabase.js"></script>
     <script src="/config.js"></script>
     <!-- i18n 必须早于 app.js 加载：负责在 DOMContentLoaded 时扫描 data-i18n -->
     <script src="/i18n/i18n.js" type="module"></script>

@@ -39,6 +39,7 @@ function sweepStaleUploads(dir, now = Date.now()) {
  *
  * @param {object} [options]
  * @param {string} options.rootDir 项目根目录（public / shared 静态资源相对此目录，可为 asar 内只读路径）
+ * @param {string} [options.deviceId] 已绑定的桌面设备 ID；匿名运行会话凭此代理到真实账号
  * @param {object} [options.config] 已加载的配置（默认 loadConfig()）
  * @param {number} [options.port] HTTPS 端口（默认 config.port；0 = 随机分配）
  * @param {number} [options.httpPort] HTTP 探测/重定向端口（默认 HTTPS 端口 + 1）
@@ -54,6 +55,7 @@ function sweepStaleUploads(dir, now = Date.now()) {
  */
 export async function createLanServer({
   rootDir,
+  deviceId,
   config = loadConfig(),
   port,
   httpPort,
@@ -73,6 +75,7 @@ export async function createLanServer({
   const edgeAsr = (typeof getAccessToken === "function" && (supabaseUrl ?? config.supabaseUrl))
     ? {
       getAccessToken,
+      deviceId,
       supabaseUrl: supabaseUrl ?? config.supabaseUrl,
       supabaseAnonKey: supabaseAnonKey ?? config.supabaseAnonKey
     }
@@ -83,8 +86,9 @@ export async function createLanServer({
   await fs.mkdir(uploadTmpDir, { recursive: true });
   sweepStaleUploads(uploadTmpDir);
 
-  const localIp = getLocalIp();
-  const { key, cert } = await ensureCertificates(rootDir, { localIp, certsDir });
+  const localIps = listLocalIps();
+  const localIp = localIps[0] || getLocalIp();
+  const { key, cert } = await ensureCertificates(rootDir, { localIp, localIps, certsDir });
 
   // ---- HTTPS 主服务 ----
   const app = express();
@@ -93,6 +97,10 @@ export async function createLanServer({
   app.use(express.json());
   app.use(express.static(publicDir, { maxAge: "7d", etag: true }));
   app.use("/shared", express.static(path.join(rootDir, "src/shared")));
+  app.get("/vendor/supabase.js", (_req, res) => {
+    res.set("Cache-Control", "public, max-age=604800");
+    res.sendFile(path.join(rootDir, "node_modules/@supabase/supabase-js/dist/umd/supabase.js"));
+  });
 
   app.get("/config.js", (_req, res) => {
     res.type("application/javascript");
@@ -158,8 +166,32 @@ export async function createLanServer({
   // 云模式 PWA（https 页面）无法 fetch 自签名 HTTPS，但可以探测这个
   // 明文 HTTP 端口：/api/health 返回 200 证明桌面端可达。
   const redirectApp = express();
+  // 原生 App 从 capacitor://localhost 加载打包资源，局域网请求走这个明文
+  // HTTP 端口，避免 WKWebView 拒绝桌面端的自签名 HTTPS 证书。只给 Capacitor
+  // 本地 origin 开 CORS；普通浏览器访问页面仍重定向到 HTTPS，以保留录音所需
+  // 的 secure context。
+  const nativeOrigins = new Set(["capacitor://localhost", "http://localhost", "https://localhost"]);
+  redirectApp.use((req, res, next) => {
+    const origin = String(req.headers.origin || "");
+    if (nativeOrigins.has(origin)) {
+      res.set("Access-Control-Allow-Origin", origin);
+      res.set("Vary", "Origin");
+      res.set("Access-Control-Allow-Methods", "GET,POST,PUT,PATCH,DELETE,OPTIONS");
+      res.set("Access-Control-Allow-Headers", "Content-Type, x-vb-lan-token");
+    }
+    if (req.method === "OPTIONS") {
+      res.sendStatus(nativeOrigins.has(origin) ? 204 : 403);
+      return;
+    }
+    next();
+  });
   redirectApp.get("/api/health", (_req, res) => {
     res.json({ ok: true, app: "VoiceBridge", lan: true });
+  });
+  redirectApp.use("/api", (req, res) => {
+    // 保留原始 /api 前缀后交给同一套受 token 保护的 API 路由。
+    req.url = `/api${req.url}`;
+    app(req, res);
   });
   redirectApp.use((req, res) => {
     // 手机从 HTTP 探测端口进来时 Host 带的是 httpPort，不能拿它和
@@ -202,17 +234,30 @@ export async function createLanServer({
   const resolvedPort = await listen(tlsServer, requestedPort);
   // 注意：WS hub 必须在 TLS listen 成功之后再挂载；端口冲突时提前挂载会让
   // ws 触发第二次未被捕获的 EADDRINUSE（见 createLanServer.test.js）。
-  const wsHub = createWebSocketHub(tlsServer, {
+  const tlsWsHub = createWebSocketHub(tlsServer, {
     authorize: (req) => pairing.isAuthorizedRequest(req)
   });
+  let httpWsHub = null;
+  const wsHub = {
+    broadcast(payload) {
+      tlsWsHub.broadcast(payload);
+      httpWsHub?.broadcast(payload);
+    }
+  };
   app.use("/api", createUploadRouter({ config, wsHub, tmpDir: uploadTmpDir, edgeAsr }));
   let resolvedHttpPort;
   try {
     resolvedHttpPort = await listen(redirectServer, httpPort ?? resolvedPort + 1);
+    // 和 TLS hub 一样，只在 listen 成功后挂载，避免 EADDRINUSE 同时被
+    // WebSocketServer 转成未捕获异常。
+    httpWsHub = createWebSocketHub(redirectServer, {
+      authorize: (req) => pairing.isAuthorizedRequest(req)
+    });
   } catch (error) {
     // HTTP 端口被占用时不能留下已绑定的 TLS 服务和 WS hub —— 先关干净再抛出。
     try {
-      wsHub.close();
+      tlsWsHub.close();
+      httpWsHub?.close();
     } catch (closeError) {
       logger.error?.("LAN WebSocket hub close failed during abort:", closeError?.message || closeError);
     }
@@ -236,7 +281,8 @@ export async function createLanServer({
     },
     async close() {
       try {
-        wsHub.close();
+        tlsWsHub.close();
+        httpWsHub?.close();
       } catch (error) {
         logger.error?.("LAN WebSocket hub close failed:", error?.message || error);
       }

@@ -43,6 +43,8 @@ PWA_DIST="${PWA_DIR}/dist"
 EDGE_FUNCTIONS=(
   "transcribe:false"
   "device-pairing:false"
+  "issue-asr-request:false"
+  "report-asr-result:false"
   "billing-create-checkout-session:true"
   "billing-create-portal-session:true"
   "billing-get-client-context:true"

@@ -2,6 +2,10 @@
 // 成功配对后一次性重置）整形成可发给渲染进程的负载，并在配对码变化时推送。
 // 纯逻辑抽出为独立模块，便于用 node:test 覆盖（Electron 主进程本身不可直测）。
 
+export function isLanAllowedPlan(plan) {
+  return plan === 'pro' || plan === 'admin';
+}
+
 /**
  * 把 lanServer 实例（或 null）整形为渲染进程负载。
  * LAN 服务未运行时返回 running:false，渲染端据此隐藏局域网区块。

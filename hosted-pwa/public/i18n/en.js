@@ -53,6 +53,8 @@ export default {
     pairSubmit: 'Pair',
     pairFailed: 'Incorrect pairing code, please try again.',
     pairSuccess: 'Paired, refreshing…',
+    connectingDirect: 'Connecting over LAN…',
+    directConnected: 'Connected to desktop over LAN',
     lanLost: 'LAN connection lost, returning to cloud…',
   },
 
@@ -265,16 +267,6 @@ export default {
 
     logout: 'Sign out',
 
-    // Delete account
-    deleteAccount: 'Delete account',
-    deleteAccountConfirm: 'Are you sure you want to delete your account? All data will be permanently removed. This cannot be undone.',
-    deleteAccountTypeConfirm: 'Type "DELETE" to confirm',
-    deleteAccountHint: 'Account deletion is irreversible. All commands, devices, and usage records will be purged. Active subscriptions will be canceled.',
-    deleteAccountProgress: 'Deleting account…',
-    deleteAccountSuccess: 'Account deleted',
-    deleteAccountFailed: 'Failed to delete account, please try again later',
-    deleteAccountAdminProtected: 'Admin accounts cannot be deleted',
-
     languageTitle: 'Language',
     languageZhCN: '简体中文',
     languageEn: 'English',
@@ -325,6 +317,10 @@ export default {
     bound: (name) => `Paired with ${name}, desktop will come online.`,
     success: 'Paired successfully',
     failed: 'Pairing failed, please retry.',
+    scanDesktop: 'Scan desktop QR',
+    scanning: 'Scan the pairing QR shown on your desktop',
+    invalidQr: 'This is not a valid VoiceBridge pairing QR code.',
+    scanFailed: 'Could not scan the QR code. Please retry.',
   },
 
   // === Command Store ===

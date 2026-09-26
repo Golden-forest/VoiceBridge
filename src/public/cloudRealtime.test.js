@@ -618,9 +618,113 @@ test("CloudRealtime stop cancels stale subscription timeout without status mutat
   await new Promise((resolve) => setTimeout(resolve, 1));
   await realtime.stop();
 
-  await assert.rejects(startPromise, /订阅已取消/);
+  await startPromise;
   await new Promise((resolve) => setTimeout(resolve, 20));
   assert.deepEqual(statuses, []);
+});
+
+test("CloudRealtime rebuilds core channels after a subscribed channel closes", async () => {
+  const callbacks = new Map();
+  const createdTopics = [];
+  const supabase = {
+    channel(topic) {
+      createdTopics.push(topic);
+      const channel = {
+        on() {
+          return this;
+        },
+        async subscribe(callback) {
+          callbacks.set(`${topic}:${createdTopics.length}`, callback);
+          await callback?.("SUBSCRIBED");
+          return "ok";
+        },
+        async track() {
+          return "ok";
+        },
+        presenceState() {
+          return {};
+        },
+        async unsubscribe() {
+          return "ok";
+        }
+      };
+      return channel;
+    },
+    async removeChannel() {
+      return "ok";
+    }
+  };
+
+  const realtime = new CloudRealtime({
+    supabase,
+    user: { id: "user-1" },
+    phoneDeviceId: "phone-1",
+    reconnectBackoffMs: [1],
+    onDevices: () => {},
+    onAck: () => {},
+    onStatus: () => {}
+  });
+
+  await realtime.start();
+  const firstPresenceCallback = [...callbacks.entries()]
+    .find(([key]) => key.startsWith("user:user-1:presence:"))[1];
+  await firstPresenceCallback("CLOSED");
+  await waitFor(() => createdTopics.filter((topic) => topic === "user:user-1:presence").length === 2);
+
+  assert.equal(createdTopics.filter((topic) => topic === "device:user-1:phone-1").length, 2);
+  await realtime.stop();
+});
+
+test("CloudRealtime keeps retrying when the first connection attempt fails", async () => {
+  let ackAttempts = 0;
+  const statuses = [];
+  const supabase = {
+    channel(topic) {
+      return {
+        on() {
+          return this;
+        },
+        async subscribe(callback) {
+          if (topic === "device:user-1:phone-1") {
+            ackAttempts += 1;
+            await callback?.(ackAttempts === 1 ? "CHANNEL_ERROR" : "SUBSCRIBED");
+          } else {
+            await callback?.("SUBSCRIBED");
+          }
+          return "ok";
+        },
+        async track() {
+          return "ok";
+        },
+        presenceState() {
+          return {};
+        },
+        async unsubscribe() {
+          return "ok";
+        }
+      };
+    },
+    async removeChannel() {
+      return "ok";
+    }
+  };
+
+  const realtime = new CloudRealtime({
+    supabase,
+    user: { id: "user-1" },
+    phoneDeviceId: "phone-1",
+    reconnectBackoffMs: [1],
+    onDevices: () => {},
+    onAck: () => {},
+    onStatus: (status) => statuses.push(status)
+  });
+
+  await realtime.start();
+  await waitFor(() => ackAttempts === 2);
+
+  assert.equal(statuses.includes("ack:CHANNEL_ERROR"), true);
+  assert.equal(statuses.includes("SUBSCRIBED"), true);
+  await realtime.stop();
 });
 
 async function waitFor(predicate, timeoutMs = 100) {

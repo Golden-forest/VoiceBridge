@@ -19,7 +19,8 @@
       body {
         margin: 0;
         min-height: 100vh;
-        overflow: hidden;
+        overflow-x: hidden;
+        overflow-y: auto;
         background:
           radial-gradient(circle at 90% 0%, rgba(255, 178, 196, 0.26), transparent 34%),
           #f7f6f9;
@@ -122,6 +123,19 @@
         text-overflow: ellipsis;
         white-space: nowrap;
       }
+      .pairing-url {
+        width: 100%;
+        max-height: 52px;
+        overflow-y: auto;
+        overflow-wrap: anywhere;
+        border-radius: 10px;
+        padding: 8px 10px;
+        background: #f7f6f9;
+        color: #625766;
+        font-size: 10px;
+        line-height: 1.45;
+        text-align: left;
+      }
       button, a.button {
         display: inline-flex;
         min-height: 40px;
@@ -213,7 +227,7 @@
         <div>
           <p class="eyebrow">VOICEBRIDGE DESKTOP</p>
           <h1>连接你的手机</h1>
-          <p class="hint">扫码登录，无需在电脑输入密码</p>
+          <p class="hint">账号只需在手机登录，电脑无需输入密码</p>
         </div>
       </header>
 
@@ -222,31 +236,18 @@
         <span class="status-value">正在初始化</span>
       </section>
 
-      <section id="loginPanel" class="panel" hidden>
-        <h2>登录账号</h2>
-        <p class="hint">局域网功能需要会员账号。使用注册邮箱登录后自动上线。</p>
-        <form id="loginForm" style="display:grid;gap:10px;width:100%">
-          <input id="loginEmail" type="email" placeholder="邮箱" required
-            autocomplete="email" style="min-height:40px;border:1px solid #d9d3db;border-radius:12px;padding:9px 12px;font:inherit">
-          <input id="loginPassword" type="password" placeholder="密码"
-            autocomplete="current-password" style="min-height:40px;border:1px solid #d9d3db;border-radius:12px;padding:9px 12px;font:inherit">
-          <input id="loginOtp" type="text" inputmode="numeric" placeholder="邮箱验证码（6 位）" hidden
-            autocomplete="one-time-code" style="min-height:40px;border:1px solid #d9d3db;border-radius:12px;padding:9px 12px;font:inherit;letter-spacing:4px;text-align:center">
-          <button id="loginButton" type="submit">登录</button>
-          <button id="otpSwitchButton" type="button" class="secondary">使用邮箱验证码登录</button>
-        </form>
-        <p class="hint">没有账号？在手机网页注册后再回来登录。GitHub / 谷歌注册的账号请用验证码登录。</p>
-      </section>
-
       <section id="pairingPanel" class="panel" hidden>
         <h2>手机扫码绑定</h2>
         <img id="qrImage" alt="VoiceBridge 手机配对二维码">
         <p class="device-name" id="deviceName"></p>
         <p class="hint">扫码后可以登录或注册，再确认绑定。二维码 10 分钟内有效。</p>
+        <p id="pairingUrlText" class="pairing-url" aria-label="手机配对网址"></p>
         <div class="actions">
           <button id="refreshButton" type="button">刷新二维码</button>
-          <a id="phoneUrl" class="button" href="#" target="_blank" rel="noreferrer">打开手机网页</a>
+          <button id="copyPhoneUrlButton" class="secondary" type="button">复制手机网址</button>
         </div>
+        <button id="cancelPairingButton" class="secondary" type="button" hidden>返回在线状态</button>
+        <a id="phoneUrl" class="button" href="#" target="_blank" rel="noreferrer">在浏览器打开此配对页</a>
       </section>
 
       <section id="onlinePanel" class="panel" hidden>
@@ -267,17 +268,18 @@
           <span>向手机显示完整窗口标题</span>
           <input id="reportWindowTitles" type="checkbox">
         </label>
+        <button id="showPairingQrButton" type="button">连接另一台手机</button>
         <button id="unpairButton" class="secondary" type="button">解除绑定</button>
       </section>
 
       <footer class="footer">
         <p id="message" class="hint" role="status"></p>
         <p class="hint">
-          <a href="https://voicebridge-6kr.pages.dev/privacy.html" style="color:inherit;text-decoration:underline" target="_blank" rel="noopener">隐私政策</a>
+          <a href="https://voicebridge.heyflint.top/privacy.html" style="color:inherit;text-decoration:underline" target="_blank" rel="noopener">隐私政策</a>
           ·
-          <a href="https://voicebridge-6kr.pages.dev/terms.html" style="color:inherit;text-decoration:underline" target="_blank" rel="noopener">用户协议</a>
+          <a href="https://voicebridge.heyflint.top/terms.html" style="color:inherit;text-decoration:underline" target="_blank" rel="noopener">用户协议</a>
           ·
-          <a href="https://voicebridge-6kr.pages.dev/faq.html" style="color:inherit;text-decoration:underline" target="_blank" rel="noopener">常见问题</a>
+          <a href="https://voicebridge.heyflint.top/faq.html" style="color:inherit;text-decoration:underline" target="_blank" rel="noopener">常见问题</a>
           ·
           v<span id="version">…</span>
         </p>
@@ -286,24 +288,27 @@
 
     <script>
       const statusEl = document.querySelector('.status-value');
-      const loginPanel = document.querySelector('#loginPanel');
-      const loginForm = document.querySelector('#loginForm');
-      const loginButton = document.querySelector('#loginButton');
       const pairingPanel = document.querySelector('#pairingPanel');
       const onlinePanel = document.querySelector('#onlinePanel');
       const qrImage = document.querySelector('#qrImage');
       const deviceName = document.querySelector('#deviceName');
       const onlineDeviceName = document.querySelector('#onlineDeviceName');
       const refreshButton = document.querySelector('#refreshButton');
+      const cancelPairingButton = document.querySelector('#cancelPairingButton');
+      const showPairingQrButton = document.querySelector('#showPairingQrButton');
       const unpairButton = document.querySelector('#unpairButton');
       const reportWindowTitles = document.querySelector('#reportWindowTitles');
       const phoneUrl = document.querySelector('#phoneUrl');
+      const pairingUrlText = document.querySelector('#pairingUrlText');
+      const copyPhoneUrlButton = document.querySelector('#copyPhoneUrlButton');
       const messageEl = document.querySelector('#message');
       const lanSection = document.querySelector('#lanSection');
       const lanPairingCode = document.querySelector('#lanPairingCode');
       const lanIdleHint = document.querySelector('#lanIdleHint');
       const lanActiveHint = document.querySelector('#lanActiveHint');
       const lanMemberBlock = document.querySelector('#lanMemberBlock');
+      let currentPairingUrl = '';
+      let currentMode = '';
 
       function renderLanState(state) {
         lanSection.hidden = !state?.running;
@@ -325,18 +330,23 @@
       }
 
       function renderState(state) {
-        loginPanel.hidden = state?.mode !== 'login';
-        pairingPanel.hidden = state?.mode !== 'pairing';
+        currentMode = state?.mode || '';
+        const showingPairing = state?.mode === 'pairing' || state?.mode === 'additional-pairing';
+        pairingPanel.hidden = !showingPairing;
         onlinePanel.hidden = state?.mode !== 'online';
         lanMemberBlock.hidden = !(state?.mode === 'online' && state.lanAllowed === false);
-        if (state?.mode === 'login') {
-          setStatus('未登录', true);
-          setMessage('请登录后使用。');
-        } else if (state?.mode === 'pairing') {
-          setStatus('等待手机扫码');
+        if (showingPairing) {
+          const additional = state.mode === 'additional-pairing';
+          setStatus(additional ? '等待新手机扫码' : '等待手机扫码');
           qrImage.src = state.qrDataUrl;
           deviceName.textContent = state.deviceName || '';
-          setMessage('请用手机相机扫描二维码。');
+          currentPairingUrl = state.pairingUrl || '';
+          pairingUrlText.textContent = currentPairingUrl;
+          phoneUrl.href = currentPairingUrl || '#';
+          cancelPairingButton.hidden = !additional;
+          setMessage(additional
+            ? '请用已登录同一账号的 VoiceBridge 手机 App 扫码。'
+            : '请用手机相机扫描二维码。');
         } else if (state?.mode === 'online') {
           setStatus('已上线');
           onlineDeviceName.textContent = state.deviceName || '';
@@ -347,81 +357,8 @@
         }
       }
 
-      loginForm.addEventListener('submit', async (event) => {
-        event.preventDefault();
-        loginButton.disabled = true;
-        setStatus(otpMode ? '正在验证' : '正在登录');
-        try {
-          const email = document.querySelector('#loginEmail').value;
-          if (otpMode) {
-            renderState(await window.voicebridge.loginOtp({
-              email,
-              token: document.querySelector('#loginOtp').value.trim()
-            }));
-            document.querySelector('#loginOtp').value = '';
-          } else {
-            renderState(await window.voicebridge.login({
-              email,
-              password: document.querySelector('#loginPassword').value
-            }));
-            document.querySelector('#loginPassword').value = '';
-          }
-        } catch (error) {
-          setStatus('登录失败', true);
-          setMessage(error.message || '登录失败，请检查邮箱和密码。', true);
-        } finally {
-          loginButton.disabled = false;
-        }
-      });
-
-      // 邮箱验证码登录：GitHub / 谷歌 OAuth 注册的账号没有密码，用 Supabase
-      // 邮件 OTP 登录，与密码登录等效。
-      const loginPassword = document.querySelector('#loginPassword');
-      const loginOtp = document.querySelector('#loginOtp');
-      const otpSwitchButton = document.querySelector('#otpSwitchButton');
-      let otpMode = false;
-      otpSwitchButton.addEventListener('click', async () => {
-        otpMode = !otpMode;
-        loginPassword.hidden = otpMode;
-        loginOtp.hidden = !otpMode;
-        loginPassword.required = !otpMode;
-        loginOtp.required = otpMode;
-        otpSwitchButton.textContent = otpMode ? '使用密码登录' : '使用邮箱验证码登录';
-        loginButton.textContent = otpMode ? '验证并登录' : '登录';
-        if (otpMode) {
-          const email = document.querySelector('#loginEmail').value.trim();
-          if (!email) {
-            setMessage('请先填写邮箱，再获取验证码。', true);
-            otpMode = false;
-            loginPassword.hidden = false;
-            loginOtp.hidden = true;
-            otpSwitchButton.textContent = '使用邮箱验证码登录';
-            loginButton.textContent = '登录';
-            return;
-          }
-          otpSwitchButton.disabled = true;
-          try {
-            await window.voicebridge.otpSend(email);
-            setMessage('验证码已发送到邮箱，请在 10 分钟内输入。');
-            loginOtp.focus();
-          } catch (error) {
-            setMessage(error.message || '验证码发送失败。', true);
-            otpMode = false;
-            loginPassword.hidden = false;
-            loginOtp.hidden = true;
-            otpSwitchButton.textContent = '使用邮箱验证码登录';
-            loginButton.textContent = '登录';
-          } finally {
-            otpSwitchButton.disabled = false;
-          }
-        }
-      });
-
       window.voicebridge?.version().then((version) => {
         document.querySelector('#version').textContent = version;
-      });
-      window.voicebridge?.publicConfig().then((config) => {
-        phoneUrl.href = config.webAppUrl;
       });
       window.voicebridge?.onDesktopState(renderState);
       window.voicebridge?.onLanState(renderLanState);
@@ -453,12 +390,51 @@
         refreshButton.disabled = true;
         setStatus('正在刷新');
         try {
-          renderState(await window.voicebridge.refreshPairing());
+          renderState(await (currentMode === 'additional-pairing'
+            ? window.voicebridge.showPairingQr()
+            : window.voicebridge.refreshPairing()));
         } catch (error) {
           setStatus('刷新失败', true);
           setMessage(error.message || '刷新二维码失败。', true);
         } finally {
           refreshButton.disabled = false;
+        }
+      });
+
+      showPairingQrButton.addEventListener('click', async () => {
+        showPairingQrButton.disabled = true;
+        setStatus('正在生成二维码');
+        try {
+          renderState(await window.voicebridge.showPairingQr());
+        } catch (error) {
+          setStatus('二维码生成失败', true);
+          setMessage(error.message || '请稍后重试。', true);
+        } finally {
+          showPairingQrButton.disabled = false;
+        }
+      });
+
+      cancelPairingButton.addEventListener('click', async () => {
+        cancelPairingButton.disabled = true;
+        try {
+          renderState(await window.voicebridge.cancelPairingQr());
+        } catch (error) {
+          setMessage(error.message || '无法返回在线状态。', true);
+        } finally {
+          cancelPairingButton.disabled = false;
+        }
+      });
+
+      copyPhoneUrlButton.addEventListener('click', async () => {
+        if (!currentPairingUrl) return;
+        copyPhoneUrlButton.disabled = true;
+        try {
+          await window.voicebridge.copyText(currentPairingUrl);
+          setMessage('手机配对网址已复制。');
+        } catch (error) {
+          setMessage(error.message || '复制失败，请手动复制上方网址。', true);
+        } finally {
+          copyPhoneUrlButton.disabled = false;
         }
       });
 

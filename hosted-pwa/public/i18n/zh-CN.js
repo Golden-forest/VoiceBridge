@@ -53,6 +53,8 @@ export default {
     pairSubmit: '配对',
     pairFailed: '配对码错误，请检查后重试。',
     pairSuccess: '配对成功，正在刷新…',
+    connectingDirect: '正在连接局域网…',
+    directConnected: '已通过局域网连接电脑',
     lanLost: '局域网连接已断开，正在返回云端…',
   },
 
@@ -272,16 +274,6 @@ export default {
     // 退出登录
     logout: '退出登录',
 
-    // 删除账号
-    deleteAccount: '删除账号',
-    deleteAccountConfirm: '确定要删除账号吗？所有数据将被永久清除，此操作不可撤销。',
-    deleteAccountTypeConfirm: '请输入"删除"以确认',
-    deleteAccountHint: '账号删除后将无法恢复，所有指令、设备、用量记录将被清除。如已有订阅将自动取消。',
-    deleteAccountProgress: '正在删除账号…',
-    deleteAccountSuccess: '账号已删除',
-    deleteAccountFailed: '删除账号失败，请稍后重试',
-    deleteAccountAdminProtected: '管理员账号无法删除',
-
     // 语言（自引用 - 自身切换）
     languageTitle: '语言',
     languageZhCN: '简体中文',
@@ -333,6 +325,10 @@ export default {
     bound: (name) => `已绑定 ${name}，电脑将自动上线。`,
     success: '绑定成功',
     failed: '绑定失败，请稍后重试。',
+    scanDesktop: '扫码连接电脑',
+    scanning: '请扫描电脑端的配对二维码',
+    invalidQr: '这不是有效的 VoiceBridge 配对二维码。',
+    scanFailed: '扫码失败，请重试。',
   },
 
   // === 命令 Store ===

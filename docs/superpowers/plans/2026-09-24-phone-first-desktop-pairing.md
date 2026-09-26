@@ -22,12 +22,12 @@ Commits are intentionally omitted because repository instructions prohibit commi
 - Modify: `src/agent/electron/renderer.html`
 - Modify: `src/agent/electron/preload.cjs`
 
-- [ ] Change the shell assertions so the expected bundled URL is `https://voicebridge.heyflint.top/app`, `signInAnonymously` is required, and desktop password/OTP IPC and form controls are forbidden.
-- [ ] Run `node --test src/agent/electron/electronShell.test.js`; confirm it fails on the current password-login shell and Pages URL.
-- [ ] Change all desktop web-app defaults to `https://voicebridge.heyflint.top/app`.
-- [ ] Remove the desktop login panel, password/OTP renderer logic, preload bridges, and IPC handlers. Keep QR refresh, open-web, and unpair controls.
-- [ ] Show the exact phone URL plus a copy button in pairing mode; bind the button to `navigator.clipboard.writeText(state.pairingUrl)` with a visible success/error message.
-- [ ] Run `node --test src/agent/electron/electronShell.test.js`; confirm the shell tests pass.
+- [x] Change the shell assertions so the expected bundled URL is `https://voicebridge.heyflint.top/app`, `signInAnonymously` is required, and desktop password/OTP IPC and form controls are forbidden.
+- [x] Run `node --test src/agent/electron/electronShell.test.js`; confirm it fails on the current password-login shell and Pages URL.
+- [x] Change all desktop web-app defaults to `https://voicebridge.heyflint.top/app`.
+- [x] Remove the desktop login panel, password/OTP renderer logic, preload bridges, and IPC handlers. Keep QR refresh, open-web, and unpair controls.
+- [x] Show the exact phone URL plus a copy button in pairing mode; copy through a narrow Electron clipboard IPC bridge and show a visible success/error message.
+- [x] Run `node --test src/agent/electron/electronShell.test.js`; confirm the shell tests pass.
 
 ### Task 2: Restore anonymous desktop identity and migrate old real-user sessions
 
@@ -35,12 +35,12 @@ Commits are intentionally omitted because repository instructions prohibit commi
 - Modify: `src/agent/electron/electronShell.test.js`
 - Modify: `src/agent/electron/main.js`
 
-- [ ] Add source-level assertions for: anonymous sign-in on missing session, preservation of valid anonymous sessions, revocation of the local device before signing out a legacy real-user session, and recovery back to pairing rather than a login panel.
-- [ ] Run the focused shell test and confirm the new migration assertions fail.
-- [ ] In `getOrCreateDesktopClient`, validate an existing session. Clear only stale sessions; do not discard valid anonymous sessions.
-- [ ] In initialization, load the device first. If the session is a legacy real user, update this device to `status: 'revoked'`, sign out, create an anonymous session, and continue pairing. If there is no session, call `signInAnonymously()`.
-- [ ] Make `SIGNED_OUT` recovery recreate an anonymous session and pairing QR. Ensure intentional migration/sign-out does not race the auth lifecycle handler.
-- [ ] Run the focused shell test and confirm it passes.
+- [x] Add source-level assertions for: anonymous sign-in on missing session, preservation of valid anonymous sessions, revocation of the local device before signing out a legacy real-user session, and recovery back to pairing rather than a login panel.
+- [x] Run the focused shell test and confirm the new migration assertions fail.
+- [x] In `getOrCreateDesktopClient`, validate an existing session. Clear only stale sessions; do not discard valid anonymous sessions.
+- [x] In initialization, load the device first. If the session is a legacy real user, update this device to `status: 'revoked'`, sign out, create an anonymous session, and continue pairing. If there is no session, call `signInAnonymously()`.
+- [x] Make `SIGNED_OUT` recovery recreate an anonymous session and pairing QR. Ensure intentional migration/sign-out does not race the auth lifecycle handler.
+- [x] Run the focused shell test and confirm it passes.
 
 ### Task 3: Add secure pairing status and entitlement resolution
 
@@ -49,11 +49,11 @@ Commits are intentionally omitted because repository instructions prohibit commi
 - Modify: `supabase/functions/device-pairing/index.ts`
 - Modify: `src/agent/electron/main.js`
 
-- [ ] Add assertions that the Edge Function supports `action === "status"`, filters devices by both device ID and authenticated `runtime_user_id`, and returns normalized `free | pro | admin` without returning email or tokens.
-- [ ] Run `node --test supabase/functions/device-pairing/device-pairing.test.js`; confirm the status assertions fail.
-- [ ] Implement `getPairingStatus(serviceClient, runtimeUserId, rawDeviceId)`: validate UUID, fetch only the matching runtime device, return `paired: false` for absent/revoked/unclaimed devices, and resolve `admin` from `profiles.is_admin` before active/trialing `pro` subscription status.
-- [ ] Replace direct desktop table polling with authenticated `device-pairing` status requests. Pass returned `plan` into `goOnline`, removing anonymous reads of profiles/subscriptions.
-- [ ] Run the Edge Function test and focused Electron shell test; confirm both pass.
+- [x] Add assertions that the Edge Function supports `action === "status"`, filters devices by both device ID and authenticated `runtime_user_id`, and returns normalized `free | pro | admin` without returning email or tokens.
+- [x] Run `node --test supabase/functions/device-pairing/device-pairing.test.js`; confirm the status assertions fail.
+- [x] Implement `getPairingStatus(serviceClient, runtimeUserId, rawDeviceId)`: validate UUID, fetch only the matching runtime device, return `paired: false` for absent/revoked/unclaimed devices, and resolve `admin` from `profiles.is_admin` before active/trialing `pro` subscription status.
+- [x] Replace direct desktop table polling with authenticated `device-pairing` status requests. Pass returned `plan` into `goOnline`, removing anonymous reads of profiles/subscriptions.
+- [x] Run the Edge Function test and focused Electron shell test; confirm both pass.
 
 ### Task 4: Preserve claim flow and cover production URL behavior
 
@@ -64,20 +64,42 @@ Commits are intentionally omitted because repository instructions prohibit commi
 - Modify if needed: `src/public/pairing.js`
 - Mirror if needed: `hosted-pwa/public/pairing.js`
 
-- [ ] Add assertions that a signed-out phone keeps the pairing query through login, a signed-in phone can claim it, successful claim removes only pairing parameters, and the hosted app route remains `/app`.
-- [ ] Run `node --test src/public/auth.test.js hosted-pwa/public/auth.test.js`; confirm any missing behavior fails before production edits.
-- [ ] Make the smallest phone-side changes needed to preserve the token through authentication and show the existing confirmation overlay after login.
-- [ ] Run the focused phone tests and `cd hosted-pwa && npm test`; confirm mirrored sources and static build pass.
+- [x] Add assertions that a signed-out phone keeps the pairing query through login, a signed-in phone can claim it, successful claim removes only pairing parameters, and the hosted app route remains `/app`.
+- [x] Run `node --test src/public/auth.test.js hosted-pwa/public/auth.test.js`; confirm the missing redirect behavior fails before production edits.
+- [x] Make the smallest phone-side changes needed to preserve the token through authentication and show the existing confirmation overlay after login.
+- [x] Run the focused phone tests and `cd hosted-pwa && npm test`; confirm mirrored sources and static build pass.
 
-### Task 5: End-to-end verification and deployment readiness
+### Task 5: End-to-end verification and deployment
 
 **Files:**
 - Review: all modified files
 - Update: `docs/superpowers/plans/2026-09-24-phone-first-desktop-pairing.md`
 
-- [ ] Run `npm test` from the repository root.
-- [ ] Run `cd hosted-pwa && npm test`.
-- [ ] Run `npx supabase functions serve device-pairing --env-file .env` only if the local Supabase environment is available; otherwise record that live verification requires deployment.
-- [ ] Build the Electron package with `npm run package`; confirm bundled config uses `https://voicebridge.heyflint.top/app`.
-- [ ] Review `git diff --check`, `git diff --stat`, and the full scoped diff for accidental changes or secrets.
-- [ ] Do not deploy, publish, commit, or replace the currently installed desktop app unless the user separately authorizes those external actions.
+- [x] Run `npm test` from the repository root (322 tests passed).
+- [x] Run `cd hosted-pwa && npm test` (11 tests passed).
+- [x] Deploy `device-pairing` to the VoiceBridge Supabase project and verify the authenticated `status` action against production.
+- [x] Build the Electron package with `npm run package`; confirm both generated and packaged config use `https://voicebridge.heyflint.top/app`.
+- [x] Review `git diff --check`, `git diff --stat`, and the full scoped diff for accidental changes or secrets.
+- [x] After explicit user authorization, deploy the hosted PWA to the production Pages project, replace the installed macOS app with a verified matching build, and preserve a timestamped backup.
+- [x] Complete the live QR flow with the admin account; verify the desktop reaches `online` with admin/LAN entitlement.
+
+### Task 6: Align LAN ASR entitlement with the paired phone account
+
+**Files:**
+- Modify: `src/agent/electron/main.js`
+- Modify: `src/server/createLanServer.js`
+- Modify: `src/server/asr/directEdgeAsr.js`
+- Modify: `supabase/functions/_shared/direct_asr.ts`
+- Modify: `src/public/app.js`
+- Mirror: `hosted-pwa/public/app.js`
+- Update the corresponding focused tests.
+
+- [x] Send the bound desktop `device_id` with LAN ASR issue and result-report requests.
+- [x] Resolve the effective billing user only after the service-role Edge path verifies `device_id`, authenticated `runtime_user_id`, active status, and `paired_at`.
+- [x] Keep ordinary cloud requests unchanged: requests without `device_id` continue to use the authenticated phone account directly.
+- [x] Close the actual `processing` usage row on direct-ASR reports instead of filtering for the nonexistent `reserved` status.
+- [x] Retry one transient signing transport/5xx failure, while preserving deterministic 4xx entitlement errors.
+- [x] Record LAN audio directly as 16 kHz mono WAV so the desktop skips ffmpeg conversion.
+- [x] Run the complete root test suite (327 passed) and package the macOS arm64 app successfully.
+- [x] Inspect the packaged `app.asar`: custom-domain `/app` URL, device delegation, and LAN WAV path are present.
+- [x] Deploy `issue-asr-request` and `report-asr-result`, then install and verify the new desktop package against the production admin account.

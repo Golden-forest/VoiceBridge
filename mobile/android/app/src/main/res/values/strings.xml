@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">VoiceBridge</string>
+    <string name="title_activity_main">VoiceBridge</string>
+    <string name="package_name">com.heyflint.voicebridge</string>
+    <string name="custom_url_scheme">com.heyflint.voicebridge</string>
+</resources>

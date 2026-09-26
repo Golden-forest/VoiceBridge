@@ -53,6 +53,8 @@ export default {
     pairSubmit: '配对',
     pairFailed: '配对码错误，请检查后重试。',
     pairSuccess: '配对成功，正在刷新…',
+    connectingDirect: '正在连接局域网…',
+    directConnected: '已通过局域网连接电脑',
     lanLost: '局域网连接已断开，正在返回云端…',
   },
 
@@ -323,6 +325,10 @@ export default {
     bound: (name) => `已绑定 ${name}，电脑将自动上线。`,
     success: '绑定成功',
     failed: '绑定失败，请稍后重试。',
+    scanDesktop: '扫码连接电脑',
+    scanning: '请扫描电脑端的配对二维码',
+    invalidQr: '这不是有效的 VoiceBridge 配对二维码。',
+    scanFailed: '扫码失败，请重试。',
   },
 
   // === 命令 Store ===

@@ -47,6 +47,7 @@ export function resolveAsrChannel(config, edgeAsr) {
  * @param {object} params
  * @param {Buffer} params.wavBuffer 16kHz/16bit/mono WAV 字节（audioConverter 输出）
  * @param {() => Promise<string|null>} params.getAccessToken Supabase 会话 access token 提供者
+ * @param {string} [params.deviceId] 已绑定桌面设备 ID，用于把匿名运行身份映射到真实账号
  * @param {string} params.supabaseUrl Edge 所在的 Supabase 项目 URL
  * @param {string} params.supabaseAnonKey Supabase anon key（apikey 头）
  * @param {Function} [params.fetchImpl] 可注入的 fetch（测试用）
@@ -55,6 +56,7 @@ export function resolveAsrChannel(config, edgeAsr) {
 export async function transcribeViaEdgeAsr({
   wavBuffer,
   getAccessToken,
+  deviceId,
   supabaseUrl,
   supabaseAnonKey,
   fetchImpl = globalThis.fetch
@@ -70,26 +72,36 @@ export async function transcribeViaEdgeAsr({
     throw edgeError("电脑端尚未完成云端登录，无法使用语音识别。", 401);
   }
 
-  const issue = await postJson(fetchImpl, `${baseUrl}/functions/v1/issue-asr-request`, {
+  const issueUrl = `${baseUrl}/functions/v1/issue-asr-request`;
+  const issueHeaders = {
     apikey: supabaseAnonKey,
     Authorization: `Bearer ${accessToken}`
-  }, {
+  };
+  const issueBody = {
     duration_ms: Math.max(1, Math.round(wavBuffer.length / WAV_BYTES_PER_MS)),
-    audio_size_bytes: wavBuffer.length
-  }, ISSUE_TIMEOUT_MS).catch(() => null);
+    audio_size_bytes: wavBuffer.length,
+    ...(deviceId ? { device_id: deviceId } : {})
+  };
+  // 签发请求体很小；网络错误或 5xx 时立即重试一次，避免一次瞬时抖动让整段
+  // 已录好的音频作废。4xx（权限、额度、时长）属于确定性拒绝，不重试。
+  let issue = null;
+  for (let attempt = 0; attempt < 2; attempt++) {
+    issue = await postJson(fetchImpl, issueUrl, issueHeaders, issueBody, ISSUE_TIMEOUT_MS).catch(() => null);
+    if (issue && issue.response.status < 500) break;
+  }
 
   if (!issue || !issue.response.ok || !issue.payload?.ok) {
     const status = issue?.response.status;
     const message = issue?.payload?.message;
-    if (status === 429 || status === 413) {
-      throw edgeError(message || "云端语音识别请求被拒绝。", status);
-    }
-    throw edgeError(message || "云端签发识别请求失败，请稍后再重试。");
+    throw edgeError(
+      message || "云端签发识别请求失败，请稍后再重试。",
+      Number.isInteger(status) ? status : 502
+    );
   }
 
   const requestId = issue.payload.request_id;
   const report = (status, extra = {}) =>
-    reportAsrResult({ fetchImpl, baseUrl, supabaseAnonKey, accessToken, requestId, status, ...extra });
+    reportAsrResult({ fetchImpl, baseUrl, supabaseAnonKey, accessToken, deviceId, requestId, status, ...extra });
 
   const url = issue.payload.url;
   const headers = issue.payload.headers;
@@ -148,7 +160,7 @@ export async function __waitForPendingAsrReportsForTests() {
   await Promise.allSettled([...pendingReports]);
 }
 
-async function reportAsrResult({ fetchImpl, baseUrl, supabaseAnonKey, accessToken, requestId, status, errorCode, textLength }) {
+async function reportAsrResult({ fetchImpl, baseUrl, supabaseAnonKey, accessToken, deviceId, requestId, status, errorCode, textLength }) {
   if (!requestId) return;
   await postJson(fetchImpl, `${baseUrl}/functions/v1/report-asr-result`, {
     apikey: supabaseAnonKey,
@@ -156,6 +168,7 @@ async function reportAsrResult({ fetchImpl, baseUrl, supabaseAnonKey, accessToke
   }, {
     request_id: requestId,
     status,
+    ...(deviceId ? { device_id: deviceId } : {}),
     ...(errorCode ? { error_code: errorCode } : {}),
     ...(Number.isFinite(textLength) ? { text_length: textLength } : {})
   }, REPORT_TIMEOUT_MS).catch(() => {

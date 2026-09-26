@@ -186,6 +186,11 @@ export function buildLanUrl(endpoint, cloudOrigin) {
   return origin ? `${base}?cloud=${encodeURIComponent(origin)}` : base;
 }
 
+/** 原生 App 保持本地安全页面不跳转，只把 API/WS 指向桌面 HTTP 端口。 */
+export function buildNativeLanBaseUrl(endpoint) {
+  return `http://${formatLanHost(endpoint.host)}:${endpoint.httpPort}`;
+}
+
 /** LAN token 请求头（未配对时为空对象） */
 export function lanTokenHeaders(win = window) {
   try {
@@ -197,7 +202,15 @@ export function lanTokenHeaders(win = window) {
 }
 
 /** 带 token 的 WS 地址（token 走 query，浏览器 WS API 不支持自定义头） */
-export function buildLanWsUrl(win = window) {
+export function buildLanWsUrl(win = window, endpoint = null) {
+  if (endpoint) {
+    let token = "";
+    try {
+      token = win.localStorage.getItem(LAN_TOKEN_STORAGE_KEY) || "";
+    } catch { /* ignore */ }
+    const query = token ? `?token=${encodeURIComponent(token)}` : "";
+    return `ws://${formatLanHost(endpoint.host)}:${endpoint.httpPort}/ws${query}`;
+  }
   const protocol = win.location.protocol === "https:" ? "wss" : "ws";
   let token = "";
   try {

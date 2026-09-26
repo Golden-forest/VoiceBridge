@@ -32,6 +32,21 @@ function httpGet(port, pathname, headers = {}) {
   });
 }
 
+function httpGetJson(port, pathname, headers = {}) {
+  return new Promise((resolve, reject) => {
+    const req = http.get({ host: "127.0.0.1", port, path: pathname, agent: false, headers }, (res) => {
+      let body = "";
+      res.on("data", (chunk) => { body += chunk; });
+      res.on("end", () => resolve({
+        status: res.statusCode,
+        headers: res.headers,
+        body: JSON.parse(body)
+      }));
+    });
+    req.on("error", reject);
+  });
+}
+
 function portClosed(port) {
   return new Promise((resolve) => {
     const req = http.get({ host: "127.0.0.1", port, path: "/", agent: false }, () => resolve(false));
@@ -105,6 +120,22 @@ test("createLanServer notifies onPairingKnock when an unpaired phone probes the 
     // 手机（LAN 页面加载时的 status 探测）→ 敲门。
     await httpsGetJson(lan.port, "/api/lan/pair");
     assert.equal(knocks.length, 1);
+  } finally {
+    await lan.close();
+  }
+});
+
+test("createLanServer exposes token-protected APIs to the packaged native app over HTTP", async () => {
+  const rootDir = await fs.mkdtemp(path.join(os.tmpdir(), "voicebridge-lan-"));
+  const lan = await createLanServer({ rootDir, port: 0, config: {} });
+
+  try {
+    const response = await httpGetJson(lan.httpPort, "/api/lan/pair", {
+      Origin: "capacitor://localhost"
+    });
+    assert.equal(response.status, 200);
+    assert.deepEqual(response.body, { ok: true, paired: true });
+    assert.equal(response.headers["access-control-allow-origin"], "capacitor://localhost");
   } finally {
     await lan.close();
   }
@@ -371,6 +402,7 @@ test("createLanServer routes uploads through the edge-signed channel when local 
 
   const lan = await createLanServer({
     rootDir,
+    deviceId: "11111111-1111-4111-8111-111111111111",
     port: 0,
     config: { asrProvider: "tencent", tencentSecretId: "", tencentSecretKey: "" },
     supabaseUrl: `http://127.0.0.1:${stubPort}`,
@@ -394,10 +426,12 @@ test("createLanServer routes uploads through the edge-signed channel when local 
     assert.equal(stub.seen.issue.headers.authorization, "Bearer lan-token");
     assert.equal(stub.seen.issue.headers.apikey, "anon-test");
     assert.ok(stub.seen.issue.body.duration_ms > 0);
+    assert.equal(stub.seen.issue.body.device_id, "11111111-1111-4111-8111-111111111111");
     assert.ok(stub.seen.tencentBody && stub.seen.tencentBody.length > 44, "converted wav posted to signed tencent url");
     assert.deepEqual(stub.seen.report, {
       request_id: "req-lan-1",
       status: "success",
+      device_id: "11111111-1111-4111-8111-111111111111",
       text_length: "你好局域网".length
     });
   } finally {

@@ -9,7 +9,17 @@ import {
 } from "../shared/protocol.js";
 
 export class CloudRealtime {
-  constructor({ supabase, user, phoneDeviceId, onDevices, onAck, onStatus, ackTimeoutMs = 10000, subscribeTimeoutMs = 10000 }) {
+  constructor({
+    supabase,
+    user,
+    phoneDeviceId,
+    onDevices,
+    onAck,
+    onStatus,
+    ackTimeoutMs = 10000,
+    subscribeTimeoutMs = 10000,
+    reconnectBackoffMs = [1000, 2000, 5000, 10000, 30000]
+  }) {
     this.supabase = supabase;
     this.user = user;
     this.phoneDeviceId = phoneDeviceId;
@@ -24,11 +34,38 @@ export class CloudRealtime {
     this.pendingRequests = new Map();
     this.pendingSubscriptions = new Set();
     this.startGeneration = 0;
+    this.reconnectBackoffMs = reconnectBackoffMs;
+    this.reconnectAttempt = 0;
+    this.reconnectTimer = null;
+    this.healthResetTimer = null;
+    this.stopped = true;
   }
 
   async start() {
     await this.stop();
+    this.stopped = false;
+    this.reconnectAttempt = 0;
+    const generation = this.startGeneration;
+    try {
+      await this.connectCoreChannels(generation);
+    } catch (error) {
+      if (!this.stopped) {
+        this.onStatus(`reconnect:${error instanceof Error ? error.message : String(error)}`);
+        this.scheduleReconnect(this.startGeneration);
+      }
+    }
+  }
+
+  async connectCoreChannels(lifecycleGeneration) {
+    if (this.stopped || lifecycleGeneration !== this.startGeneration) return;
     const generation = ++this.startGeneration;
+    clearTimeout(this.healthResetTimer);
+    this.healthResetTimer = null;
+    for (const subscription of [...this.pendingSubscriptions]) {
+      subscription.cancel();
+    }
+    await this.removeActiveChannels();
+    if (this.stopped || generation !== this.startGeneration) return;
     this.presence = this.supabase.channel(presenceChannel(this.user.id), {
       config: { private: true }
     });
@@ -64,10 +101,10 @@ export class CloudRealtime {
         }
       }
     });
-    await this.subscribeChannel(ackChannel, "ack", null, generation);
-    await this.subscribeChannel(presence, "presence", async (status) => {
+    const subscriptions = [
+      this.subscribeChannel(ackChannel, "ack", null, generation),
+      this.subscribeChannel(presence, "presence", async (status) => {
       if (!this.isActiveGeneration(generation)) return;
-      this.onStatus(status);
       if (status === "SUBSCRIBED") {
         await presence.track({
           deviceId: this.phoneDeviceId,
@@ -78,7 +115,53 @@ export class CloudRealtime {
           status: "online"
         });
       }
-    }, generation);
+      }, generation)
+    ];
+    try {
+      await Promise.all(subscriptions);
+      if (!this.isActiveGeneration(generation)) return;
+      this.onStatus("SUBSCRIBED");
+      this.healthResetTimer = setTimeout(() => {
+        this.healthResetTimer = null;
+        if (this.isActiveGeneration(generation)) this.reconnectAttempt = 0;
+      }, 30000);
+      this.healthResetTimer.unref?.();
+    } catch (error) {
+      await Promise.allSettled(subscriptions);
+      throw error;
+    }
+  }
+
+  scheduleReconnect(generation = this.startGeneration) {
+    if (this.stopped || this.reconnectTimer || generation !== this.startGeneration) return;
+    const delay = this.reconnectBackoffMs[
+      Math.min(this.reconnectAttempt, this.reconnectBackoffMs.length - 1)
+    ] ?? 1000;
+    this.reconnectAttempt += 1;
+    this.reconnectTimer = setTimeout(() => {
+      this.reconnectTimer = null;
+      if (this.stopped || generation !== this.startGeneration) return;
+      void this.connectCoreChannels(generation).catch((error) => {
+        if (this.stopped) return;
+        this.onStatus(`reconnect:${error instanceof Error ? error.message : String(error)}`);
+        this.scheduleReconnect(this.startGeneration);
+      });
+    }, delay);
+    this.reconnectTimer.unref?.();
+  }
+
+  reconnectNow() {
+    if (this.stopped) return;
+    clearTimeout(this.reconnectTimer);
+    this.reconnectTimer = null;
+    clearTimeout(this.healthResetTimer);
+    this.healthResetTimer = null;
+    const generation = this.startGeneration;
+    void this.connectCoreChannels(generation).catch((error) => {
+      if (this.stopped) return;
+      this.onStatus(`reconnect:${error instanceof Error ? error.message : String(error)}`);
+      this.scheduleReconnect(this.startGeneration);
+    });
   }
 
   async sendText({ targetDeviceId, text, autoPaste, targetWindowId }) {
@@ -176,6 +259,11 @@ export class CloudRealtime {
       return channel;
     } catch (error) {
       this.targetChannels.delete(targetDeviceId);
+      try {
+        await channel.unsubscribe?.();
+      } finally {
+        await this.supabase.removeChannel?.(channel);
+      }
       throw error;
     }
   }
@@ -220,6 +308,9 @@ export class CloudRealtime {
           if (["CHANNEL_ERROR", "TIMED_OUT", "CLOSED"].includes(status)) {
             this.onStatus(`${label}:${status}`);
             settle(reject, new Error(`${label} 订阅失败：${status}`));
+            if ((label === "ack" || label === "presence") && this.isActiveGeneration(generation)) {
+              this.scheduleReconnect(generation);
+            }
           }
         });
       } catch (error) {
@@ -299,22 +390,35 @@ export class CloudRealtime {
 
   async stop() {
     this.startGeneration++;
+    this.stopped = true;
+    clearTimeout(this.reconnectTimer);
+    this.reconnectTimer = null;
     for (const subscription of [...this.pendingSubscriptions]) {
       subscription.cancel();
     }
+    await this.removeActiveChannels();
+    for (const requestId of this.pendingRequests.keys()) {
+      this.cancelPendingRequest(requestId);
+    }
+  }
+
+  async removeActiveChannels() {
     const channels = [
       this.presence,
       this.ackChannel,
       ...this.targetChannels.values()
     ].filter(Boolean);
 
-    await Promise.all(channels.map((channel) => channel.unsubscribe?.()));
+    await Promise.all(channels.map(async (channel) => {
+      try {
+        await channel.unsubscribe?.();
+      } finally {
+        await this.supabase.removeChannel?.(channel);
+      }
+    }));
     this.presence = null;
     this.ackChannel = null;
     this.targetChannels.clear();
-    for (const requestId of this.pendingRequests.keys()) {
-      this.cancelPendingRequest(requestId);
-    }
   }
 }
 

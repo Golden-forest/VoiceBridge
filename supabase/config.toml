@@ -4,6 +4,12 @@ verify_jwt = false
 [functions.device-pairing]
 verify_jwt = false
 
+[functions.issue-asr-request]
+verify_jwt = false
+
+[functions.report-asr-result]
+verify_jwt = false
+
 [functions.billing-create-checkout-session]
 verify_jwt = true
 

@@ -9,7 +9,7 @@ import {
 
 // === 测试脚手架：内存版 service client，模拟 usage_events 与 reserve_and_get_plan ===
 
-function createMockServiceClient({ reservation } = {}) {
+function createMockServiceClient({ reservation, devices = [] } = {}) {
   const rpcCalls = [];
   const updates = [];
   const inserts = [];
@@ -32,7 +32,7 @@ function createMockServiceClient({ reservation } = {}) {
           mode: params.p_mode,
           audio_duration_ms: params.p_audio_duration_ms,
           audio_size_bytes: params.p_audio_size_bytes,
-          status: "reserved",
+          status: "processing",
           error_code: null
         });
       }
@@ -42,6 +42,25 @@ function createMockServiceClient({ reservation } = {}) {
       };
     },
     from(table) {
+      if (table === "devices") {
+        return {
+          select() {
+            const filters = [];
+            return {
+              eq(col, value) {
+                filters.push([col, value]);
+                return this;
+              },
+              async maybeSingle() {
+                const data = devices.find((device) =>
+                  filters.every(([col, value]) => device[col] === value)
+                ) || null;
+                return { data, error: null };
+              }
+            };
+          }
+        };
+      }
       if (table !== "usage_events") throw new Error("unexpected table");
       return {
         insert(row) {
@@ -87,6 +106,8 @@ const BASE_ENV = {
   jwksJson: null,
   tencent: TENCENT_ENV
 };
+
+const DEVICE_ID = "11111111-1111-4111-8111-111111111111";
 
 function authedRequest(body) {
   return new Request("https://edge/functions/v1/issue-asr-request", {
@@ -188,16 +209,16 @@ test("issue: happy path returns url+headers+request_id and signs only after rese
   assert.equal(rpc.params.p_audio_size_bytes, 3200);
   assert.equal(rpc.params.p_request_id, payload.request_id);
 
-  // Reservation happened before signing, and the reserved row exists.
+  // Reservation happened before signing, and the processing row exists.
   assert.equal(signCalls.length, 1);
-  assert.equal(client.rows.get(payload.request_id).status, "reserved");
+  assert.equal(client.rows.get(payload.request_id).status, "processing");
   assert.equal(signCalls[0].config.appId, "123456");
 
   // expires_at = 签名时间戳 + 300。
   assert.equal(payload.expires_at, signCalls[0].timestamp + DIRECT_ASR_SIGNATURE_TTL_SECONDS);
 });
 
-test("issue: missing TENCENT_APP_ID -> direct_asr_unavailable and reserved row closed as failed", async () => {
+test("issue: missing TENCENT_APP_ID -> direct_asr_unavailable and processing row closed as failed", async () => {
   const client = createMockServiceClient();
   const env = { ...BASE_ENV, tencent: { ...TENCENT_ENV, appId: undefined } };
   const handler = buildIssueHandler(client, { env });
@@ -221,6 +242,48 @@ test("issue: invalid body -> 400 and no reservation", async () => {
   assert.equal(client.rpcCalls.length, 0);
 });
 
+test("issue: paired desktop runtime is billed as the owning admin account", async () => {
+  const client = createMockServiceClient({
+    devices: [{
+      id: DEVICE_ID,
+      runtime_user_id: "runtime-user",
+      user_id: "admin-user",
+      status: "active",
+      paired_at: "2026-09-25T00:00:00Z"
+    }]
+  });
+  const handler = buildIssueHandler(client, { userId: "runtime-user" });
+  const response = await handler(authedRequest({
+    duration_ms: 60_000,
+    audio_size_bytes: 1_920_000,
+    device_id: DEVICE_ID
+  }));
+  assert.equal(response.status, 200);
+  assert.equal(client.rpcCalls[0].params.p_user_id, "admin-user");
+});
+
+test("issue: desktop cannot delegate through an unpaired or foreign device", async () => {
+  const client = createMockServiceClient({
+    devices: [{
+      id: DEVICE_ID,
+      runtime_user_id: "another-runtime",
+      user_id: "admin-user",
+      status: "active",
+      paired_at: "2026-09-25T00:00:00Z"
+    }]
+  });
+  const handler = buildIssueHandler(client, { userId: "runtime-user" });
+  const response = await handler(authedRequest({
+    duration_ms: 1000,
+    audio_size_bytes: 32_000,
+    device_id: DEVICE_ID
+  }));
+  const payload = await response.json();
+  assert.equal(response.status, 403);
+  assert.equal(payload.code, "device_not_paired");
+  assert.equal(client.rpcCalls.length, 0);
+});
+
 // === report-asr-result ===
 
 function reportRequest(body) {
@@ -237,7 +300,7 @@ async function seedReserved(client) {
   return (await issued.json()).request_id;
 }
 
-test("report: closes reserved -> success", async () => {
+test("report: closes processing -> success", async () => {
   const client = createMockServiceClient();
   const requestId = await seedReserved(client);
   const handler = buildReportHandler(client);
@@ -249,7 +312,7 @@ test("report: closes reserved -> success", async () => {
   assert.equal(Object.keys(payload).length, 1); // 只回 {ok:true}，绝不回显文本。
 });
 
-test("report: closes reserved -> failed with error code", async () => {
+test("report: closes processing -> failed with error code", async () => {
   const client = createMockServiceClient();
   const requestId = await seedReserved(client);
   const handler = buildReportHandler(client);
@@ -272,7 +335,7 @@ test("report: second call on already-closed row is an idempotent no-op", async (
   assert.equal(row.error_code, null);
 });
 
-test("report: writes actual duration_ms over the reserved estimate", async () => {
+test("report: writes actual duration_ms over the processing estimate", async () => {
   // 预签名模式：录音开始按上限（如 60s）预留，上报时按实际时长结算配额。
   const client = createMockServiceClient();
   const issue = buildIssueHandler(client);
@@ -288,7 +351,7 @@ test("report: writes actual duration_ms over the reserved estimate", async () =>
   assert.equal(row.audio_duration_ms, 3200);
 });
 
-test("report: ignores invalid duration_ms and keeps the reserved value", async () => {
+test("report: ignores invalid duration_ms and keeps the processing value", async () => {
   const client = createMockServiceClient();
   const requestId = await seedReserved(client); // 预留 1000ms
   const handler = buildReportHandler(client);
@@ -312,4 +375,27 @@ test("report: no token -> 401", async () => {
     body: JSON.stringify({ request_id: "r1", status: "success" })
   }));
   assert.equal(response.status, 401);
+});
+
+test("report: paired desktop closes the owning account's processing row", async () => {
+  const client = createMockServiceClient({
+    devices: [{
+      id: DEVICE_ID,
+      runtime_user_id: "runtime-user",
+      user_id: "admin-user",
+      status: "active",
+      paired_at: "2026-09-25T00:00:00Z"
+    }]
+  });
+  const ownerIssue = buildIssueHandler(client, { userId: "admin-user" });
+  const issued = await ownerIssue(authedRequest({ duration_ms: 1000, audio_size_bytes: 100 }));
+  const requestId = (await issued.json()).request_id;
+  const handler = buildReportHandler(client, { userId: "runtime-user" });
+  const response = await handler(reportRequest({
+    request_id: requestId,
+    status: "success",
+    device_id: DEVICE_ID
+  }));
+  assert.equal(response.status, 200);
+  assert.equal(client.rows.get(requestId).status, "success");
 });

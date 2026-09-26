@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, net, powerMonitor } from 'electron';
+import { app, BrowserWindow, clipboard, ipcMain, net, powerMonitor } from 'electron';
 import { readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -7,12 +7,12 @@ import { createFileAuthStorage } from '../authStorage.js';
 import { createAgentLogger } from './agentLogger.js';
 import { loadOrCreateDevice } from '../deviceStore.js';
 import { createAgentClient, startRealtimeAgent } from '../realtimeAgent.js';
-import { buildLanState, createLanCodeWatcher } from './lanState.js';
+import { buildLanState, createLanCodeWatcher, isLanAllowedPlan } from './lanState.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 // 经自有域名（Cloudflare Worker 反代）访问 Supabase，规避大陆 SNI 阻断。
 const bundledSupabaseUrl = 'https://vb-api.heyflint.top';
-const bundledWebAppUrl = 'https://voicebridge-6kr.pages.dev';
+const bundledWebAppUrl = 'https://voicebridge.heyflint.top/app';
 const bundledDesktopConfig = loadBundledDesktopConfig();
 
 let mainWindow = null;
@@ -23,8 +23,11 @@ let initializing = null;
 let agentLogger = null;
 let lanServer = null;
 let lanWatcher = null;
+let lanEndpointSignature = '';
+let lanNetworkRefresh = null;
 // 当前登录账号的套餐：'free' | 'pro' | 'admin'。LAN 服务仅会员可用。
 let currentPlan = null;
+let suppressAuthRecovery = false;
 
 function log(event, detail) {
   agentLogger?.log(event, detail);
@@ -75,8 +78,14 @@ async function startLanServer() {
     // Edge 逐次签名直连识别（Task 5）：LAN 上传识别通过桌面端匿名会话向
     // Edge 申请一次性腾讯云签名，密钥永不出云端，也不打包进桌面安装包。
     const desktopConfig = getDesktopPublicConfig();
+    const deviceId = activeAgent?.device?.id;
+    if (!deviceId) {
+      log('lan-device-missing');
+      return null;
+    }
     lanServer = await createLanServer({
       rootDir,
+      deviceId,
       certsDir: join(userData, 'certs'),
       tmpDir: join(userData, 'tmp'),
       supabaseUrl: desktopConfig.supabaseUrl,
@@ -92,6 +101,7 @@ async function startLanServer() {
       },
       onPairingKnock: revealLanCode
     });
+    lanEndpointSignature = getLanEndpointSignature(lanServer);
     log('lan-started', { port: lanServer.port, httpPort: lanServer.httpPort, endpoints: lanServer.getEndpoints() });
     console.log(`VoiceBridge LAN pairing code: ${lanServer.pairingCode}`);
     startLanWatcher();
@@ -108,6 +118,7 @@ async function stopLanServer() {
   if (!lanServer) return;
   const server = lanServer;
   lanServer = null;
+  lanEndpointSignature = '';
   clearTimeout(lanCodeHideTimer);
   lanCodeHideTimer = null;
   lanCodeVisible = false;
@@ -120,6 +131,41 @@ async function stopLanServer() {
   } catch (error) {
     log('lan-stop-failed', { error: error instanceof Error ? error.message : String(error) });
   }
+}
+
+function getLanEndpointSignature(server) {
+  if (!server) return '';
+  try {
+    return server.getEndpoints()
+      .map(({ host }) => host)
+      .filter(Boolean)
+      .sort()
+      .join(',');
+  } catch {
+    return '';
+  }
+}
+
+async function refreshLanServerForNetworkChange() {
+  if (!lanServer || !activeAgent || lanNetworkRefresh) return lanNetworkRefresh;
+  const nextSignature = getLanEndpointSignature(lanServer);
+  if (!nextSignature || nextSignature === lanEndpointSignature) return null;
+  lanNetworkRefresh = (async () => {
+    log('lan-network-changed', { from: lanEndpointSignature, to: nextSignature });
+    await stopLanServer();
+    await startLanServer();
+    try {
+      await activeAgent?.runtime?.setLanEndpoints?.(lanServer ? lanServer.getEndpoints() : []);
+    } catch (error) {
+      log('lan-endpoints-refresh-failed', { error: error instanceof Error ? error.message : String(error) });
+    }
+  })();
+  try {
+    await lanNetworkRefresh;
+  } finally {
+    lanNetworkRefresh = null;
+  }
+  return null;
 }
 
 function getDesktopPublicConfig() {
@@ -208,41 +254,28 @@ async function getOrCreateDesktopClient() {
   if (sessionData.session) {
     // 会话可能已失效（刷新令牌吊销后不可恢复）。提前探测并清掉坏会话，
     // 否则 getUser 抛错会把应用锁死在"初始化失败"，用户无法自救。
-    // 存量安装里的旧匿名会话也一并清除：桌面端现在要求真实账号登录。
     const { data: userData, error: userError } = await desktopClient.auth.getUser();
     if (userError || !userData.user) {
       log('auth-stale-session', { error: userError?.message });
-      await desktopClient.auth.signOut();
-    } else if (userData.user.is_anonymous) {
-      log('auth-legacy-anonymous-session');
-      await desktopClient.auth.signOut();
+      suppressAuthRecovery = true;
+      try {
+        await desktopClient.auth.signOut();
+      } finally {
+        suppressAuthRecovery = false;
+      }
     }
   }
   return desktopClient;
 }
 
-// 桌面账号套餐判定：管理员 > 有效订阅 > 免费。与云端 reserve_and_get_plan
-// RPC 的语义保持一致（subscriptions active/trialing 记为 pro）。
-async function resolveDesktopPlan(supabase, userId) {
-  const [subscriptions, profiles] = await Promise.all([
-    supabase.from('subscriptions').select('status').eq('user_id', userId).maybeSingle(),
-    supabase.from('profiles').select('is_admin').eq('user_id', userId).maybeSingle()
-  ]);
-  if (profiles.error) throw new Error(`读取账号信息失败：${profiles.error.message}`);
-  if (profiles.data?.is_admin) return 'admin';
-  const status = subscriptions.data?.status;
-  if (status === 'active' || status === 'trialing') return 'pro';
-  return 'free';
-}
-
 // 会话失效（刷新令牌吊销、密码修改、用户被删）时，私有通道 join 会永远
 // 403，桌面端表现为"掉线直到重启"。这里监听 SIGNED_OUT，停掉所有服务并
-// 回到登录面板，让用户重新登录自愈。
+// 自动创建新的匿名运行会话并回到扫码状态，让设备自行恢复。
 function watchAuthLifecycle(supabase) {
   supabase.auth.onAuthStateChange((event, session) => {
     log('auth-event', { event, userId: session?.user?.id ?? null });
-    if (event === 'SIGNED_OUT' && activeAgent) {
-      log('auth-signed-out-recovery', { previousUserId: activeAgent.userId });
+    if (event === 'SIGNED_OUT' && !suppressAuthRecovery) {
+      log('auth-signed-out-recovery', { previousUserId: activeAgent?.userId ?? null });
       void recoverAfterSignOut().catch((error) => {
         log('auth-recovery-failed', { error: String(error) });
       });
@@ -255,7 +288,7 @@ async function recoverAfterSignOut() {
   await stopRealtimeOnly();
   await stopLanServer();
   currentPlan = null;
-  sendDesktopState({ mode: 'login' });
+  return await initializeDesktop();
 }
 
 async function initializeDesktop() {
@@ -269,46 +302,72 @@ async function initializeDesktop() {
 async function initializeDesktopInternal() {
   clearPairingPoll();
   const supabase = await getOrCreateDesktopClient();
-  // supabase-js 在无会话时 getUser() 会抛 "Auth session missing!"——
-  // 这是"未登录"而不是错误，先查本地会话再决定走登录面板。
-  const { data: sessionData } = await supabase.auth.getSession();
-  if (!sessionData.session) {
-    return sendDesktopState({ mode: 'login' });
-  }
-  const { data: userData, error: userError } = await supabase.auth.getUser();
-  if (userError) throw new Error(userError?.message || '登录状态无效。');
-  // 未登录（或旧匿名会话已被清除）→ 显示邮箱+密码登录面板。
-  if (!userData.user) {
-    return sendDesktopState({ mode: 'login' });
-  }
-  if (userData.user.is_anonymous) {
-    await supabase.auth.signOut();
-    return sendDesktopState({ mode: 'login' });
-  }
-  const runtimeUserId = userData.user.id;
   const device = await loadOrCreateDevice();
-  const { data: record, error: recordError } = await supabase
-    .from('devices')
-    .select('id,user_id,runtime_user_id,name,platform,status,paired_at')
-    .eq('id', device.id)
-    .maybeSingle();
-  if (recordError) throw new Error(`读取设备状态失败：${recordError.message}`);
-
-  // 设备已激活且归属明确：同账号自激活（user_id === runtime）与手机扫码
-  // claim（user_id !== runtime）两条路径都直接上线。
-  if (
-    record
-    && record.status === 'active'
-    && record.user_id
-    && record.paired_at
-  ) {
-    return await goOnline({ supabase, userId: record.user_id, device });
+  const runtimeUser = await ensureAnonymousSession(supabase);
+  if (!runtimeUser.is_anonymous) {
+    await migrateLegacyDesktopSession(supabase, device);
   }
-
-  return await startPairing({ supabase, runtimeUserId, device });
+  const status = await fetchPairingStatus({ supabase, deviceId: device.id });
+  if (status.paired) {
+    return await goOnline({
+      supabase,
+      userId: status.user_id,
+      device,
+      plan: status.plan
+    });
+  }
+  return await startPairing({ supabase, device });
 }
 
-async function startPairing({ supabase, runtimeUserId, device }) {
+async function ensureAnonymousSession(supabase) {
+  const { data: sessionData } = await supabase.auth.getSession();
+  if (sessionData.session?.user) return sessionData.session.user;
+  const { data, error } = await supabase.auth.signInAnonymously();
+  if (error || !data.user) throw new Error(error?.message || '无法创建电脑配对会话。');
+  return data.user;
+}
+
+async function migrateLegacyDesktopSession(supabase, device) {
+  const { error: revokeError } = await supabase.from('devices').update({
+    status: 'revoked',
+    updated_at: new Date().toISOString()
+  }).eq('id', device.id);
+  if (revokeError) throw new Error(`迁移旧版电脑登录失败：${revokeError.message}`);
+  suppressAuthRecovery = true;
+  try {
+    const { error: signOutError } = await supabase.auth.signOut();
+    if (signOutError) throw signOutError;
+  } finally {
+    suppressAuthRecovery = false;
+  }
+  const { data, error } = await supabase.auth.signInAnonymously();
+  if (error || !data.user) throw new Error(error?.message || '无法创建电脑配对会话。');
+  log('auth-legacy-session-migrated', { runtimeUserId: data.user.id });
+  return data.user;
+}
+
+async function fetchPairingStatus({ supabase, deviceId }) {
+  const config = getDesktopPublicConfig();
+  const { data: sessionData } = await supabase.auth.getSession();
+  const accessToken = sessionData.session?.access_token;
+  if (!accessToken) throw new Error('电脑配对会话已失效。');
+  const response = await fetch(`${config.supabaseUrl}/functions/v1/device-pairing`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      apikey: config.supabaseAnonKey,
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({ action: 'status', device_id: deviceId })
+  });
+  const payload = await response.json().catch(() => null);
+  if (!response.ok || !payload?.ok) {
+    throw new Error(payload?.message || '无法读取电脑配对状态。');
+  }
+  return payload;
+}
+
+async function startPairing({ supabase, device }) {
   await stopRealtimeOnly();
   const config = getDesktopPublicConfig();
   const { data: sessionData } = await supabase.auth.getSession();
@@ -351,28 +410,79 @@ async function startPairing({ supabase, runtimeUserId, device }) {
     deviceName: device.name,
     expiresAt: payload.expires_at
   });
-  schedulePairingPoll({ supabase, runtimeUserId, device });
+  schedulePairingPoll({ supabase, device });
   return state;
 }
 
-function schedulePairingPoll(context) {
+async function startAdditionalPairing() {
+  if (!activeAgent?.device || !desktopClient) {
+    throw new Error('电脑端尚未上线，请稍后再试。');
+  }
+  clearPairingPoll();
+  const config = getDesktopPublicConfig();
+  const { data: sessionData } = await desktopClient.auth.getSession();
+  const accessToken = sessionData.session?.access_token;
+  if (!accessToken) throw new Error('电脑配对会话已失效。');
+  const response = await fetch(`${config.supabaseUrl}/functions/v1/device-pairing`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      apikey: config.supabaseAnonKey,
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({
+      action: 'start_additional',
+      device_id: activeAgent.device.id
+    })
+  });
+  const payload = await response.json().catch(() => null);
+  if (!response.ok || !payload?.ok) {
+    throw new Error(payload?.message || '无法生成新的配对二维码。');
+  }
+
+  const pairingUrl = new URL(config.webAppUrl);
+  pairingUrl.searchParams.set('pairing_token', payload.pairing_token);
+  pairingUrl.searchParams.set('device', activeAgent.device.name);
+  const qrDataUrl = await QRCode.toDataURL(pairingUrl.href, {
+    width: 280,
+    margin: 1,
+    color: { dark: '#17202a', light: '#ffffff' }
+  });
+  const state = sendDesktopState({
+    mode: 'additional-pairing',
+    qrDataUrl,
+    pairingUrl: pairingUrl.href,
+    deviceName: activeAgent.device.name,
+    expiresAt: payload.expires_at
+  });
+  scheduleAdditionalPairingPoll();
+  return state;
+}
+
+function sendOnlineDesktopState() {
+  if (!activeAgent?.device) throw new Error('电脑端尚未上线。');
+  const settings = loadDesktopSettings();
+  return sendDesktopState({
+    mode: 'online',
+    deviceName: activeAgent.device.name,
+    reportWindowTitles: settings.reportWindowTitles,
+    plan: currentPlan,
+    lanAllowed: isLanAllowedPlan(currentPlan)
+  });
+}
+
+function scheduleAdditionalPairingPoll() {
   clearPairingPoll();
   const poll = async () => {
+    if (!activeAgent || !desktopClient) return;
     try {
-      const { data, error } = await context.supabase
-        .from('devices')
-        .select('user_id,runtime_user_id,status,paired_at')
-        .eq('id', context.device.id)
-        .maybeSingle();
-      if (error) throw error;
-      if (
-        data
-        && data.status === 'active'
-        && data.user_id
-        && data.paired_at
-      ) {
+      const status = await fetchPairingStatus({
+        supabase: desktopClient,
+        deviceId: activeAgent.device.id
+      });
+      if (!status.additional_pairing_pending) {
         clearPairingPoll();
-        await goOnline({ supabase: context.supabase, userId: data.user_id, device: context.device });
+        sendOnlineDesktopState();
         return;
       }
     } catch (error) {
@@ -383,7 +493,63 @@ function schedulePairingPoll(context) {
   pairingPollTimer = setTimeout(poll, 1000);
 }
 
-async function goOnline({ supabase, userId, device }) {
+async function cancelAdditionalPairing() {
+  clearPairingPoll();
+  if (activeAgent?.device && desktopClient) {
+    try {
+      const config = getDesktopPublicConfig();
+      const { data: sessionData } = await desktopClient.auth.getSession();
+      const accessToken = sessionData.session?.access_token;
+      if (accessToken) {
+        const response = await fetch(`${config.supabaseUrl}/functions/v1/device-pairing`, {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${accessToken}`,
+            apikey: config.supabaseAnonKey,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            action: 'cancel_additional',
+            device_id: activeAgent.device.id
+          })
+        });
+        if (!response.ok) log('additional-pairing-cancel-failed', { status: response.status });
+      }
+    } catch (error) {
+      // The desktop must still be able to leave the QR screen while offline.
+      log('additional-pairing-cancel-failed', { error: error instanceof Error ? error.message : String(error) });
+    }
+  }
+  return sendOnlineDesktopState();
+}
+
+function schedulePairingPoll(context) {
+  clearPairingPoll();
+  const poll = async () => {
+    try {
+      const status = await fetchPairingStatus({
+        supabase: context.supabase,
+        deviceId: context.device.id
+      });
+      if (status.paired) {
+        clearPairingPoll();
+        await goOnline({
+          supabase: context.supabase,
+          userId: status.user_id,
+          device: context.device,
+          plan: status.plan
+        });
+        return;
+      }
+    } catch (error) {
+      sendAgentStatus(`pairing:${error instanceof Error ? error.message : String(error)}`);
+    }
+    pairingPollTimer = setTimeout(poll, 1500);
+  };
+  pairingPollTimer = setTimeout(poll, 1000);
+}
+
+async function goOnline({ supabase, userId, device, plan = 'free' }) {
   await stopRealtimeOnly();
   const settings = loadDesktopSettings();
   const runtime = await startRealtimeAgent({
@@ -400,14 +566,8 @@ async function goOnline({ supabase, userId, device }) {
   // LAN 功能会员专属：登录账号 plan ∈ {pro, admin} 才启动内嵌 LAN 服务。
   // 套餐查询失败（网络瞬断）不能让整个上线失败——那会把用户锁死在
   // "初始化失败"且没有重试入口。降级为 LAN 不可用，云链路照常工作。
-  let lanAllowed = false;
-  try {
-    currentPlan = await resolveDesktopPlan(supabase, userId);
-    lanAllowed = currentPlan === 'pro' || currentPlan === 'admin';
-  } catch (error) {
-    currentPlan = null;
-    log('plan-resolve-failed', { error: error instanceof Error ? error.message : String(error) });
-  }
+  currentPlan = ['admin', 'pro', 'free'].includes(plan) ? plan : 'free';
+  const lanAllowed = isLanAllowedPlan(currentPlan);
   if (lanAllowed) {
     if (settings.lanMode && !lanServer) {
       await startLanServer();
@@ -421,13 +581,7 @@ async function goOnline({ supabase, userId, device }) {
   } catch (error) {
     log('lan-endpoints-track-failed', { error: error instanceof Error ? error.message : String(error) });
   }
-  return sendDesktopState({
-    mode: 'online',
-    deviceName: device.name,
-    reportWindowTitles: settings.reportWindowTitles,
-    plan: currentPlan,
-    lanAllowed
-  });
+  return sendOnlineDesktopState();
 }
 
 function clearPairingPoll() {
@@ -451,7 +605,12 @@ async function unpairDesktop() {
       status: 'revoked',
       updated_at: new Date().toISOString()
     }).eq('id', device.id);
-    await desktopClient.auth.signOut();
+    suppressAuthRecovery = true;
+    try {
+      await desktopClient.auth.signOut();
+    } finally {
+      suppressAuthRecovery = false;
+    }
     desktopClient = null;
   }
   return await initializeDesktop();
@@ -484,42 +643,14 @@ ipcMain.handle('voicebridge:public-config', () => {
 });
 ipcMain.handle('voicebridge:lan-state', () => buildLanState(lanServer, lanCodeVisible));
 ipcMain.handle('voicebridge:initialize', () => initializeDesktop());
-ipcMain.handle('voicebridge:login', async (_event, credentials) => {
-  const email = String(credentials?.email || '').trim();
-  const password = String(credentials?.password || '');
-  if (!email || !password) throw new Error('请输入邮箱和密码。');
-  const supabase = await getOrCreateDesktopClient();
-  const { error } = await supabase.auth.signInWithPassword({ email, password });
-  if (error) throw new Error(error.message);
-  log('auth-login', { email });
-  return await initializeDesktopInternal();
-});
-// 邮箱验证码登录（OTP）：GitHub / 谷歌 OAuth 注册的账号没有密码，走邮件
-// 验证码。shouldCreateUser:false 保证只允许已注册邮箱，不产生新账号。
-ipcMain.handle('voicebridge:otp-send', async (_event, email) => {
-  const normalized = String(email || '').trim();
-  if (!normalized) throw new Error('请输入邮箱。');
-  const supabase = await getOrCreateDesktopClient();
-  const { error } = await supabase.auth.signInWithOtp({
-    email: normalized,
-    options: { shouldCreateUser: false }
-  });
-  if (error) throw new Error(error.message);
-  log('auth-otp-send', { email: normalized });
+ipcMain.handle('voicebridge:refresh-pairing', () => initializeDesktopInternal());
+ipcMain.handle('voicebridge:show-pairing-qr', () => startAdditionalPairing());
+ipcMain.handle('voicebridge:cancel-pairing-qr', () => cancelAdditionalPairing());
+ipcMain.handle('voicebridge:unpair', () => unpairDesktop());
+ipcMain.handle('voicebridge:copy-text', (_event, value) => {
+  clipboard.writeText(String(value || ''));
   return { ok: true };
 });
-ipcMain.handle('voicebridge:login-otp', async (_event, credentials) => {
-  const email = String(credentials?.email || '').trim();
-  const token = String(credentials?.token || '').trim();
-  if (!email || !token) throw new Error('请输入邮箱和验证码。');
-  const supabase = await getOrCreateDesktopClient();
-  const { error } = await supabase.auth.verifyOtp({ email, token, type: 'email' });
-  if (error) throw new Error(error.message);
-  log('auth-login-otp', { email });
-  return await initializeDesktopInternal();
-});
-ipcMain.handle('voicebridge:refresh-pairing', () => initializeDesktopInternal());
-ipcMain.handle('voicebridge:unpair', () => unpairDesktop());
 ipcMain.handle('voicebridge:update-settings', async (_event, updates) => {
   const settings = {
     ...loadDesktopSettings(),
@@ -558,6 +689,7 @@ function wireLifecycleEvents() {
       log('network-online');
       activeAgent?.runtime?.forceReconnect?.('network-online');
     }
+    if (online) void refreshLanServerForNetworkChange();
     wasOnline = online;
   }, 5000);
   networkTimer.unref?.();
