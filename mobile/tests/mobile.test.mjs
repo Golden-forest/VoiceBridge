@@ -22,6 +22,8 @@ test("mobile bundle starts the VoiceBridge app from local packaged assets", asyn
   assert.match(appJs, /url\.hostname !== "pair"/);
   assert.match(appJs, /activateNativeLan/);
   assert.match(appJs, /performNativeFeedback/);
+  assert.match(appJs, /closest\('button, \[role="button"\], input\[type="checkbox"\], select'\)/);
+  assert.match(appJs, /control\.id === "recordButton"/);
   await access(new URL("www/nativeFeedback.js", mobileRoot));
   await access(new URL("www/vendor/supabase.js", mobileRoot));
 });

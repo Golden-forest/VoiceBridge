@@ -66,6 +66,16 @@ let activeCloudUserId = "";
 let activeCloudPhoneDeviceId = "";
 const LAST_CLOUD_DESKTOP_KEY = "voicebridge_last_cloud_desktop_id";
 
+document.addEventListener("click", (event) => {
+  const control = event.target instanceof Element
+    ? event.target.closest('button, [role="button"], input[type="checkbox"], select')
+    : null;
+  if (!control || control.disabled) return;
+  // These controls emit stronger, purpose-specific feedback themselves.
+  if (control.id === "recordButton" || control.id === "nativePairButton") return;
+  performNativeFeedback("selection");
+}, true);
+
 function getLastCloudDesktopId() {
   try {
     return localStorage.getItem(LAST_CLOUD_DESKTOP_KEY) || "";
