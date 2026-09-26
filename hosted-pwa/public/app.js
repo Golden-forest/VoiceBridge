@@ -1,7 +1,8 @@
 import { CloudRealtime, getPhoneDeviceId, isDesktopDeviceCandidate } from "./cloudRealtime.js";
 import { createBillingSession, invokeBillingFunction } from "./billing.js";
 import { recordWavUntilStopped } from "./cloudRecorder.js";
-import { transcribeCloudAudio, prefetchDirectAsrSignature } from "./cloudTranscribe.js";
+import { transcribeCloudAudio, prefetchDirectAsrSignature, setAsrTimingListener } from "./cloudTranscribe.js";
+import { createRecordingTimingStore } from "./timingRecorder.js";
 import { commandStore } from "./commandStore.js";
 import { isProtocolCompatible } from "./shared/protocol.js";
 import { PLAN_LIMITS, getPlanLimit, isAdminPlan } from "./shared/planLimits.js";
@@ -14,8 +15,12 @@ import {
   buildLanWsUrl,
   buildNativeLanBaseUrl,
   createPairingClient,
+  findMatchingLanEndpoint,
+  forgetNativeLanEndpoint,
+  getStoredNativeLanEndpoint,
   isLanPageEnvironment,
   lanTokenHeaders,
+  rememberNativeLanEndpoint,
   resolveCloudOrigin
 } from "./lanMode.js";
 
@@ -65,6 +70,11 @@ let nativeLanEndpoint = null;
 let activeCloudUserId = "";
 let activeCloudPhoneDeviceId = "";
 const LAST_CLOUD_DESKTOP_KEY = "voicebridge_last_cloud_desktop_id";
+
+// 录音链路耗时观测：识别段由 cloudTranscribe 打点汇入，发送/编码段在各流程
+// 补记，账户抽屉展示最近一次快照（延迟问题肉眼可定位：通道直连/中转等）。
+const recordingTiming = createRecordingTimingStore();
+setAsrTimingListener((fields) => recordingTiming.note(fields));
 
 document.addEventListener("click", (event) => {
   const control = event.target instanceof Element
@@ -128,7 +138,27 @@ function updateCloudLanEndpoints(desktopDevices) {
     lanProbe.bindWindow(window);
   }
   lanProbe.setEndpoints(endpoints);
+  void maybeRestoreNativeLan(endpoints);
   if (endpoints.length > 0) scheduleLanAffordanceRefresh();
+}
+
+// 原生 App 冷启动自动恢复 LAN：iOS 常态化杀后台，重开 App 永远从云端模式
+// 开始——PWA 时代 LAN 页面常驻桌面 origin 没有这个问题。这里在端点上报后
+// 静默恢复：记忆端点仍在桌面上报列表里且配对 token 有效 → 直接直连；未配对
+// / 不可达 → 静默留在云端（绝不自动弹配对码浮层）。会话内只尝试一次。
+let nativeLanRestoreAttempted = false;
+
+async function maybeRestoreNativeLan(endpoints) {
+  if (!isNativeApp || !isCloudMode || nativeLanRestoreAttempted || isNativeLanActive()) return;
+  const stored = getStoredNativeLanEndpoint(window.localStorage);
+  const match = stored && findMatchingLanEndpoint(stored, endpoints);
+  if (!match) return; // 桌面离线 / 换了网络：留云端，下次冷启动再试
+  nativeLanRestoreAttempted = true;
+  try {
+    await activateNativeLan(match, { silent: true });
+  } catch {
+    // 恢复失败（桌面瞬断等）：静默，云端链路继续工作。
+  }
 }
 
 function scheduleLanAffordanceRefresh() {
@@ -178,6 +208,8 @@ function lanApiUrl(path) {
 function returnNativeAppToCloud() {
   if (!isNativeLanActive()) return;
   nativeLanEndpoint = null;
+  // 用户主动切回云端：清除记忆端点，冷启动不再自动进 LAN。
+  forgetNativeLanEndpoint(window.localStorage);
   if (ws) {
     ws.close(1000, "switch-to-cloud");
     ws = null;
@@ -192,6 +224,7 @@ function returnNativeAppToCloud() {
 
 async function finishNativeLanActivation(endpoint) {
   nativeLanEndpoint = endpoint;
+  rememberNativeLanEndpoint(endpoint, window.localStorage);
   channelBadge.classList.remove("available", "try");
   channelBadge.classList.add("lan");
   channelBadge.textContent = t('lan.channelLan');
@@ -201,13 +234,14 @@ async function finishNativeLanActivation(endpoint) {
   connectWebSocket();
 }
 
-async function activateNativeLan(endpoint) {
+async function activateNativeLan(endpoint, { silent = false } = {}) {
   if (!isNativeApp || !endpoint) return;
   const pairUrl = `${buildNativeLanBaseUrl(endpoint)}/api/lan/pair`;
   const pairing = createPairingClient({ pairUrl, win: window });
   try {
     const { paired } = await pairing.status();
     if (!paired) {
+      if (silent) return; // 自动恢复路径绝不弹配对码浮层，静默留云端
       showLanPairingOverlay(pairing, {
         onSuccess: () => finishNativeLanActivation(endpoint)
       });
@@ -215,7 +249,7 @@ async function activateNativeLan(endpoint) {
     }
     await finishNativeLanActivation(endpoint);
   } catch {
-    showToast(t('lan.lanLost'), true);
+    if (!silent) showToast(t('lan.lanLost'), true);
   }
 }
 
@@ -552,7 +586,9 @@ async function sendTextToDesktop(text, { localSuccessMessage = t('status.sentToD
       showToast(t('status.sending'));
       const sendStartedAt = performance.now();
       await sendPromise;
-      console.info("[vb-timing] send→ack", { ms: Math.round(performance.now() - sendStartedAt) });
+      const sendAckMs = Math.round(performance.now() - sendStartedAt);
+      console.info("[vb-timing] send→ack", { ms: sendAckMs });
+      recordingTiming.note({ sendAckMs });
       return true;
     } catch (error) {
       showToast(error.message || t('connection.sendFailed'), true);
@@ -653,7 +689,12 @@ async function handleAuthState(event) {
       syncCloudConnectionStatus();
     },
     onAck: (ack) => {
-      if (ack.key) return;
+      if (ack.key) {
+        // 按键回执（Enter/Paste/Undo 等）：给完成触感；toast 由 sendKeyCommand
+        // 的 then/catch 负责，这里不重复弹。
+        performNativeFeedback(ack.status === "success" ? "success" : "error");
+        return;
+      }
       performNativeFeedback(ack.status === "success" ? "success" : "error");
       showToast(ack.status === "success" ? t('status.sentToDesktopAck') : t('status.desktopExecFailed', ack.detail));
     },
@@ -2075,11 +2116,16 @@ async function startRecording() {
         });
       }
     });
+    recordingTiming.reset();
     beginRecordingState();
     if (isCloudMode && !isNativeLanActive()) {
       // 录音开始即预取直连签名：跨境签名往返（含 Edge 冷启动）与录音并行，
       // 说完话直接上传腾讯。失败静默回退到原有的实时签名路径。
       prefetchedAsrIssue = prefetchDirectAsrSignature({ durationMs: maxMs });
+    } else if (ws && ws.readyState === WebSocket.OPEN) {
+      // LAN 模式（LAN 页面 / 原生 App 直连）：通知桌面端预取识别签名，
+      // 上传到达后免掉停止录音的签发等待。旧桌面端收到未知消息只 warn。
+      ws.send(JSON.stringify({ type: "asr-prefetch", duration_ms: maxMs }));
     }
   } catch (error) {
     showToast(t('record.micDenied', error.message), true);
@@ -2113,7 +2159,9 @@ async function uploadAudio(blob, extension) {
     if (!blob.size) { showToast(t('record.noVoice'), true); finishUpload(); return; }
     showToast(t('record.recognizing'));
     if (isCloudMode && !isNativeLanActive()) {
-      console.info("[vb-timing] stop→encode+upload-ready", { ms: Math.round(performance.now() - stopStartedAt), bytes: blob.size });
+      const encodeMs = Math.round(performance.now() - stopStartedAt);
+      console.info("[vb-timing] stop→encode+upload-ready", { ms: encodeMs, bytes: blob.size });
+      recordingTiming.note({ encodeMs, bytes: blob.size });
       const payload = await transcribeCloudAudio({
         audio: blob,
         filename: `voicebridge.${extension}`,
@@ -2121,7 +2169,9 @@ async function uploadAudio(blob, extension) {
         prefetchedIssue: prefetchedAsrIssue
       });
       prefetchedAsrIssue = null;
-      console.info("[vb-timing] stop→transcribed", { ms: Math.round(performance.now() - stopStartedAt) });
+      const transcribedMs = Math.round(performance.now() - stopStartedAt);
+      console.info("[vb-timing] stop→transcribed", { ms: transcribedMs });
+      recordingTiming.note({ transcribedMs });
       const text = (payload.text || "").trim();
       if (!text) throw new Error(t('record.noTranscriptText'));
       // 识别结果先放入文本框（与 Lan 版本对齐：可见、可编辑、可收藏）
@@ -2145,6 +2195,7 @@ async function uploadAudio(blob, extension) {
       formData.append("targetAppName", windowSelector.targetWindow.appName);
       formData.append("targetWindowTitle", windowSelector.targetWindow.windowTitle);
     }
+    recordingTiming.note({ lan: true, encodeMs: Math.round(performance.now() - stopStartedAt) });
     const controller = new AbortController();
     timeout = setTimeout(() => controller.abort(), 30_000);
     const response = await fetch(lanApiUrl("/api/upload"), {
@@ -2156,21 +2207,25 @@ async function uploadAudio(blob, extension) {
     clearTimeout(timeout);
     timeout = null;
     const payload = await response.json();
+    recordingTiming.note({ totalMs: Math.round(performance.now() - stopStartedAt) });
     if (!response.ok || !payload.ok) throw new Error(payload.error || t('record.uploadFailed'));
     const output = payload.output || {};
-    if (output.buffered) {
-      performNativeFeedback("success");
-      showToast(t('record.appendedToBuffer'));
-    } else if (output.command) {
-      performNativeFeedback(output.keyError ? "error" : "success");
-      showToast(output.keyError ? t('record.voiceCommandFailed') : t('record.voiceCommandExecuted'), Boolean(output.keyError));
-    } else if (output.pasted) {
-      performNativeFeedback("success");
-      showToast(t('record.copiedAndPasted'));
-    } else if (output.copied) {
-      showCopyToast(t('record.copiedToClipboard'), payload.text || "");
-    } else {
-      showToast(t('record.clipboardFailed'), true);
+    // WS 在线时，桌面端的 output 广播是结果提示与触感的单一反馈点（本函数
+    // 不再重复触发，修掉 HTTP 响应 + 广播的双重提示竞态）；WS 掉线时退化为
+    // 这里的 HTTP 响应提示（仅文字，无触感，可接受的降级）。
+    const wsFeedbackExpected = ws && ws.readyState === WebSocket.OPEN;
+    if (!wsFeedbackExpected) {
+      if (output.buffered) {
+        showToast(t('record.appendedToBuffer'));
+      } else if (output.command) {
+        showToast(output.keyError ? t('record.voiceCommandFailed') : t('record.voiceCommandExecuted'), Boolean(output.keyError));
+      } else if (output.pasted) {
+        showToast(t('record.copiedAndPasted'));
+      } else if (output.copied) {
+        showCopyToast(t('record.copiedToClipboard'), payload.text || "");
+      } else {
+        showToast(t('record.clipboardFailed'), true);
+      }
     }
   } catch (error) {
     if (timeout) clearTimeout(timeout);
@@ -2220,6 +2275,12 @@ function connectWebSocket() {
   ws.addEventListener("message", (event) => {
     try {
       const payload = JSON.parse(event.data);
+      if (payload.type === "ack" && payload.key) {
+        // LAN 按键回执：成功/失败触感（比按下时的 selection 更明确）。
+        performNativeFeedback(payload.status === "success" ? "success" : "error");
+        if (payload.status !== "success") showToast(t('status.keyCommandFailed'), true);
+        return;
+      }
       if (payload.type === "result" && payload.text) {
         if (!commandLibrary.editingId) {
           textInput.value = payload.text;
@@ -2230,6 +2291,9 @@ function connectWebSocket() {
         showToast(payload.message, payload.type === "error");
       }
       if (payload.type === "output") {
+        // LAN 完成反馈的唯一入口：语音结果、快捷指令、手动发送、缓冲 flush
+        // 都走这里（uploadAudio 的 HTTP 响应路径不再重复给反馈）。
+        performNativeFeedback(payload.keyError ? "error" : "success");
         if (payload.buffered) {
           showToast(t('record.appendedToBuffer'));
         } else if (payload.command) {
@@ -2329,6 +2393,7 @@ class AccountDrawer {
         this._renderPlan(data),
         this._renderPricing(data),
         this._renderUsage(data),
+        this._renderTiming(),
         this._renderSubscription(data),
         this._renderProfile(data),
         this._renderDevices(data),
@@ -2337,8 +2402,58 @@ class AccountDrawer {
       const errP = document.createElement("p");
       errP.style.cssText = "text-align:center;color:var(--danger)";
       errP.textContent = error.message || t('account.loadFailed');
-      body.replaceChildren(errP);
+      // 未登录（LAN 页面/直连模式）也能看耗时：诊断面板不依赖云端数据。
+      body.replaceChildren(errP, this._renderTiming());
     }
+  }
+
+  // 上次录音的链路耗时（延迟诊断）：通道（直连/中转/局域网）、编码、识别、
+  // 发送确认各段。数据来自 recordingTiming 打点；从未录音则整节隐藏。
+  _renderTiming() {
+    const section = document.createElement("div");
+    section.className = "account-section";
+    const timing = recordingTiming.get();
+    if (!timing) {
+      section.style.display = "none";
+      return section;
+    }
+
+    const title = document.createElement("p");
+    title.className = "account-section-title";
+    title.textContent = t('account.timingTitle');
+    section.appendChild(title);
+
+    const rows = document.createElement("div");
+    rows.className = "account-row";
+    rows.style.cssText = "flex-direction:column;gap:4px;font-size:12px;color:var(--text-muted)";
+
+    const channelLabel = timing.lan
+      ? t('account.timingChannelLan')
+      : timing.channel === "relay"
+        ? t('account.timingChannelRelay')
+        : timing.channel === "direct"
+          ? t('account.timingChannelDirect')
+          : "—";
+    const items = [
+      [t('account.timingChannel'), channelLabel],
+      [t('account.timingEncode'), timing.encodeMs != null ? `${timing.encodeMs} ms` : "—"],
+      [t('account.timingAsr'), timing.asrMs != null ? `${timing.asrMs} ms` : "—"],
+      [t('account.timingSendAck'), timing.sendAckMs != null ? `${timing.sendAckMs} ms` : "—"],
+      [t('account.timingTotal'), timing.totalMs != null ? `${timing.totalMs} ms` : (timing.transcribedMs != null ? `${timing.transcribedMs} ms` : "—")]
+    ];
+    for (const [label, value] of items) {
+      const line = document.createElement("div");
+      line.style.cssText = "display:flex;justify-content:space-between;gap:12px";
+      const labelEl = document.createElement("span");
+      labelEl.textContent = label;
+      const valueEl = document.createElement("span");
+      valueEl.style.color = "var(--text)";
+      valueEl.textContent = value;
+      line.append(labelEl, valueEl);
+      rows.appendChild(line);
+    }
+    section.appendChild(rows);
+    return section;
   }
 
   _renderLanguage() {

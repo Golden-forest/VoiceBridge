@@ -6,10 +6,11 @@ import express from "express";
 import multer from "multer";
 
 import { transcribeAudio } from "../asr/transcriber.js";
+import { resolveAsrChannel } from "../asr/directEdgeAsr.js";
 import { createAsrTextOutputBuffer } from "../input/asrTextOutputBuffer.js";
 import { resolveAutoPaste } from "./uploadOptions.js";
 
-export function createUploadRouter({ config, wsHub, tmpDir, edgeAsr }) {
+export function createUploadRouter({ config, wsHub, tmpDir, edgeAsr, asrPrefetch }) {
   const router = express.Router();
   const asrOutputBuffer = createAsrTextOutputBuffer({
     onFlush: ({ text, output }) => {
@@ -71,7 +72,14 @@ export function createUploadRouter({ config, wsHub, tmpDir, edgeAsr }) {
         message: "正在识别..."
       });
 
-      const rawText = await transcribeAudio({ filePath, tmpDir }, config, edgeAsr);
+      // 录音期间预取的签名（手机 record-start 时经 WS 通知桌面申请）：
+      // 只在 edge 通道消费——本地凭证通道用不到签名，不 consume 的话
+      // 预取缓存里的预留行由看门狗按过期关闭，不会泄漏配额。
+      const prefetchedIssue = asrPrefetch && resolveAsrChannel(config, edgeAsr) === "edge"
+        ? asrPrefetch.consume()
+        : null;
+
+      const rawText = await transcribeAudio({ filePath, tmpDir, prefetchedIssue }, config, edgeAsr);
       const bufferResult = await asrOutputBuffer.handleText(rawText, {
         autoPaste,
         targetWindow,

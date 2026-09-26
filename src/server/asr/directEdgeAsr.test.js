@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 
 import {
   __waitForPendingAsrReportsForTests,
+  createAsrPrefetchCache,
   resolveAsrChannel,
   transcribeViaEdgeAsr
 } from "./directEdgeAsr.js";
@@ -88,7 +89,8 @@ test("transcribeViaEdgeAsr happy path: issue -> tencent POST raw wav -> report s
     request_id: "req-1",
     status: "success",
     device_id: DEVICE_ID,
-    text_length: "你好，世界".length
+    text_length: "你好，世界".length,
+    duration_ms: 1 // 13 字节 WAV ≈ 0.4ms，向上取整为结算下限 1ms
   });
 });
 
@@ -162,7 +164,8 @@ test("transcribeViaEdgeAsr reports failed and throws when tencent returns an err
     request_id: "req-f",
     status: "failed",
     device_id: DEVICE_ID,
-    error_code: "tencent_4001"
+    error_code: "tencent_4001",
+    duration_ms: 1
   });
 });
 
@@ -177,7 +180,8 @@ test("transcribeViaEdgeAsr reports failed and throws when tencent text is empty"
     request_id: "req-e",
     status: "failed",
     device_id: DEVICE_ID,
-    error_code: "empty_text"
+    error_code: "empty_text",
+    duration_ms: 1
   });
 });
 
@@ -223,7 +227,8 @@ test("transcribeViaEdgeAsr reports invalid/stale signature payloads as failed", 
     request_id: "req-s",
     status: "failed",
     device_id: DEVICE_ID,
-    error_code: "stale_signature"
+    error_code: "stale_signature",
+    duration_ms: 1
   });
 });
 
@@ -255,4 +260,212 @@ test("resolveAsrChannel returns none without a token provider or supabase config
     resolveAsrChannel({ tencentSecretId: "", tencentSecretKey: "" }, { getAccessToken: async () => "t" }),
     "none"
   );
+});
+
+
+// --- 录音期间签名预取（LAN 延迟优化） ---
+
+test("transcribeViaEdgeAsr uses a fresh prefetched issue and skips the issue round-trip", async () => {
+  const prefetched = {
+    ok: true,
+    request_id: "req-pre",
+    url: "https://asr.tencentcloudapi.com/",
+    headers: { Authorization: "TC3 pre-signed" },
+    expires_at: Math.floor(Date.now() / 1000) + 300
+  };
+  // 没有实时签发请求：第一条 fetch 就是直传腾讯。
+  const { fetchImpl, calls } = createFetchSpy([
+    tencentOk("预取成功"),
+    jsonResponse({ ok: true })
+  ]);
+
+  const text = await transcribeViaEdgeAsr({ ...baseCtx(), fetchImpl, prefetchedIssue: prefetched });
+
+  assert.equal(text, "预取成功");
+  await __waitForPendingAsrReportsForTests();
+  assert.equal(calls[0].url, "https://asr.tencentcloudapi.com/", "no issue round-trip before tencent");
+  assert.deepEqual(JSON.parse(calls[1].options.body), {
+    request_id: "req-pre",
+    status: "success",
+    device_id: DEVICE_ID,
+    text_length: "预取成功".length,
+    duration_ms: 1
+  });
+});
+
+test("transcribeViaEdgeAsr accepts a prefetched issue as a promise", async () => {
+  const prefetched = {
+    ok: true,
+    request_id: "req-pre-p",
+    url: "https://asr.tencentcloudapi.com/",
+    headers: {},
+    expires_at: Math.floor(Date.now() / 1000) + 300
+  };
+  const { fetchImpl, calls } = createFetchSpy([
+    tencentOk("异步预取"),
+    jsonResponse({ ok: true })
+  ]);
+  const text = await transcribeViaEdgeAsr({
+    ...baseCtx(), fetchImpl, prefetchedIssue: Promise.resolve(prefetched)
+  });
+  assert.equal(text, "异步预取");
+  assert.equal(calls.filter((call) => call.url.endsWith("/issue-asr-request")).length, 0);
+});
+
+test("transcribeViaEdgeAsr closes a stale prefetched reservation then issues fresh", async () => {
+  const stalePrefetched = {
+    ok: true,
+    request_id: "req-stale",
+    url: "https://asr.tencentcloudapi.com/",
+    headers: {},
+    expires_at: Math.floor(Date.now() / 1000) - 10
+  };
+  const { fetchImpl, calls } = createFetchSpy([
+    // 顺序：stale 关闭上报 -> 实时签发 -> 腾讯 -> 成功上报
+    jsonResponse({ ok: true }),
+    okIssue({ requestId: "req-fresh" }),
+    tencentOk("过期回退"),
+    jsonResponse({ ok: true })
+  ]);
+
+  const text = await transcribeViaEdgeAsr({
+    ...baseCtx(), fetchImpl, prefetchedIssue: stalePrefetched
+  });
+
+  assert.equal(text, "过期回退", "stale prefetch falls back to a fresh issue, not failure");
+  await __waitForPendingAsrReportsForTests();
+  const staleReport = JSON.parse(calls[0].options.body);
+  assert.equal(staleReport.request_id, "req-stale");
+  assert.equal(staleReport.status, "failed");
+  assert.equal(staleReport.error_code, "stale_signature");
+  assert.equal(staleReport.duration_ms, 1, "stale settle carries actual duration");
+});
+
+test("transcribeViaEdgeAsr ignores a rejected prefetch promise and issues fresh", async () => {
+  const { fetchImpl, calls } = createFetchSpy([
+    okIssue({ requestId: "req-fresh2" }),
+    tencentOk("失败回退"),
+    jsonResponse({ ok: true })
+  ]);
+  const text = await transcribeViaEdgeAsr({
+    ...baseCtx(), fetchImpl, prefetchedIssue: Promise.reject(new Error("prefetch blew up"))
+  });
+  assert.equal(text, "失败回退");
+  assert.equal(calls.filter((call) => call.url.endsWith("/issue-asr-request")).length, 1);
+});
+
+// --- createAsrPrefetchCache ---
+
+function fakeTimers() {
+  const timers = [];
+  return {
+    setTimeoutImpl: (fn, ms) => { const id = { fn, ms }; timers.push(id); return id; },
+    clearTimeoutImpl: (id) => { const i = timers.indexOf(id); if (i !== -1) timers.splice(i, 1); },
+    run: () => { const t = timers.shift(); if (t) t.fn(); },
+    pending: () => timers.length
+  };
+}
+
+test("prefetch cache: begin issues with clamped max duration and consume is one-shot", async () => {
+  const { fetchImpl, calls } = createFetchSpy([
+    okIssue({ requestId: "req-cache" })
+  ]);
+  const cache = createAsrPrefetchCache({ ...baseCtx(), fetchImpl });
+
+  const pending = cache.begin(120_000); // clamp 到 60s
+  assert.ok(pending);
+  const issue = await pending;
+  assert.equal(issue.request_id, "req-cache");
+  const issueBody = JSON.parse(calls[0].options.body);
+  assert.equal(issueBody.duration_ms, 60_000);
+  assert.equal(issueBody.audio_size_bytes, 60_000 * 32);
+
+  assert.equal(await cache.consume(), issue, "consume returns the resolved issue");
+  assert.equal(cache.consume(), null, "second consume yields null (serial fallback)");
+});
+
+test("prefetch cache: begin dedupes concurrent callers", async () => {
+  const { fetchImpl, calls } = createFetchSpy([okIssue({ requestId: "req-dedupe" })]);
+  const cache = createAsrPrefetchCache({ ...baseCtx(), fetchImpl });
+  const first = cache.begin(30_000);
+  const second = cache.begin(30_000);
+  assert.equal(first, second, "concurrent begin reuses the same reservation");
+  await first;
+  assert.equal(calls.filter((call) => call.url.endsWith("/issue-asr-request")).length, 1);
+});
+
+test("prefetch cache: failed begin clears the slot for a retry", async () => {
+  const { fetchImpl, calls } = createFetchSpy([
+    jsonResponse({ ok: false }, 500),
+    okIssue({ requestId: "req-retry" })
+  ]);
+  const cache = createAsrPrefetchCache({ ...baseCtx(), fetchImpl });
+  assert.equal(await cache.begin(30_000), null, "failed prefetch resolves null");
+  const retried = await cache.begin(30_000);
+  assert.equal(retried?.request_id, "req-retry", "next begin starts a fresh reservation");
+});
+
+test("prefetch cache: watchdog closes an unconsumed reservation after expiry", async () => {
+  let clock = Date.now();
+  const timers = fakeTimers();
+  const { fetchImpl, calls } = createFetchSpy([
+    okIssue({ requestId: "req-watch", expiresAt: Math.floor(clock / 1000) + 60 }),
+    jsonResponse({ ok: true })
+  ]);
+  const cache = createAsrPrefetchCache({
+    ...baseCtx(),
+    fetchImpl,
+    now: () => clock,
+    setTimeoutImpl: timers.setTimeoutImpl,
+    clearTimeoutImpl: timers.clearTimeoutImpl
+  });
+
+  await cache.begin(60_000);
+  assert.equal(timers.pending(), 1, "watchdog armed when the signature arrives");
+
+  // 无人消费：看门狗触发后关闭预留。
+  timers.run();
+  await new Promise((resolve) => setImmediate(resolve));
+  const report = calls[1];
+  assert.equal(report.url, `${BASE}/functions/v1/report-asr-result`);
+  assert.deepEqual(JSON.parse(report.options.body), {
+    request_id: "req-watch",
+    status: "failed",
+    device_id: DEVICE_ID,
+    error_code: "stale_signature"
+  });
+  assert.equal(cache.consume(), null, "slot cleared after watchdog");
+});
+
+test("prefetch cache: consume cancels the watchdog; close cancels and settles reservations", async () => {
+  let clock = Date.now();
+  const timers = fakeTimers();
+  const { fetchImpl, calls } = createFetchSpy([
+    okIssue({ requestId: "req-first", expiresAt: Math.floor(clock / 1000) + 60 }),
+    okIssue({ requestId: "req-close", expiresAt: Math.floor(clock / 1000) + 60 }),
+    jsonResponse({ ok: true })
+  ]);
+  const cache = createAsrPrefetchCache({
+    ...baseCtx(),
+    fetchImpl,
+    now: () => clock,
+    setTimeoutImpl: timers.setTimeoutImpl,
+    clearTimeoutImpl: timers.clearTimeoutImpl
+  });
+
+  await cache.begin(60_000);
+  cache.consume();
+  assert.equal(timers.pending(), 0, "consume cancels the watchdog");
+  timers.run(); // 无事发生：看门狗已取消
+  assert.equal(calls.filter((call) => call.url.endsWith("/report-asr-result")).length, 0);
+
+  // 新的一轮预取未消费就 close（网络切换重建服务）。
+  const second = await cache.begin(60_000);
+  assert.equal(second?.request_id, "req-close");
+  await cache.close();
+  assert.equal(timers.pending(), 0, "close cancels the watchdog");
+  await new Promise((resolve) => setImmediate(resolve)); // close 的上报是脱离链，flush 微任务
+  const report = calls.find((call) => call.url.endsWith("/report-asr-result"));
+  assert.equal(JSON.parse(report.options.body).error_code, "canceled");
+  assert.equal(JSON.parse(report.options.body).request_id, "req-close", "unconsumed reservation closed");
 });

@@ -11,6 +11,7 @@ import { createUploadRouter } from "./routes/upload.js";
 import { createCommandsRouter } from "./routes/commands.js";
 import { createWebSocketHub } from "./ws.js";
 import { createLanPairing } from "./lanPairing.js";
+import { createAsrPrefetchCache, resolveAsrChannel } from "./asr/directEdgeAsr.js";
 import { ensureCertificates } from "./certs.js";
 import { listWindows } from "./input/windowManager.js";
 
@@ -45,6 +46,9 @@ function sweepStaleUploads(dir, now = Date.now()) {
  * @param {number} [options.httpPort] HTTP 探测/重定向端口（默认 HTTPS 端口 + 1）
  * @param {string} [options.certsDir] 证书目录（可写路径；默认 rootDir/certs。Electron 打包后必须传 userData 下的目录）
  * @param {string} [options.tmpDir] 上传临时目录（可写路径；默认 rootDir/tmp。Electron 打包后必须传 userData 下的目录）
+ * @param {string} [options.pairingTokensPath] 配对 token 持久化 JSON（可写路径；不传则纯内存——
+ *   服务重启后需要重新输配对码。Electron 内嵌模式必须传 userData 下的路径：asar 只读，
+ *   且 token 属于与登录态同信任级的本机凭证，不应放进应用包目录）
  * @param {() => Promise<string|null>} [options.getAccessToken] Supabase 会话 access token 提供者
  *   （Electron 内嵌时来自 agent 匿名会话）。提供后，本地缺少腾讯云凭证时上传识别
  *   改走 Edge 逐次签名直连通道（密钥永不出云端）。
@@ -61,6 +65,7 @@ export async function createLanServer({
   httpPort,
   certsDir,
   tmpDir,
+  pairingTokensPath,
   getAccessToken,
   supabaseUrl,
   supabaseAnonKey,
@@ -79,6 +84,11 @@ export async function createLanServer({
       supabaseUrl: supabaseUrl ?? config.supabaseUrl,
       supabaseAnonKey: supabaseAnonKey ?? config.supabaseAnonKey
     }
+    : null;
+  // LAN 签名预取只服务 Edge 通道。本地腾讯凭证通道已经由电脑直接签名，
+  // 不应再创建云端配额预留或发起无用的跨境请求。
+  const asrPrefetch = resolveAsrChannel(config, edgeAsr) === "edge"
+    ? createAsrPrefetchCache({ ...edgeAsr })
     : null;
 
   const publicDir = path.join(rootDir, "src/public");
@@ -121,7 +131,45 @@ export async function createLanServer({
   // ---- 局域网配对门禁 ----
   // /api/health 与配对接口本身保持开放；其余 /api 路由和 WS 需要配对 token
   //（本机回环访问免配对，本地开发不受影响）。手机端在 LAN 页面输入配对码。
-  const pairing = createLanPairing();
+  // pairingTokensPath 提供时 token 落盘（滑动 TTL，续期防抖写回，close 时
+  // flush），服务重启（网络切换重建 / App 更新）不再要求手机重新输码。
+  const loadInitialTokens = async () => {
+    if (!pairingTokensPath) return null;
+    try {
+      const parsed = JSON.parse(await fs.readFile(pairingTokensPath, "utf8"));
+      return Array.isArray(parsed?.tokens) ? parsed.tokens : null;
+    } catch {
+      return null; // 首次运行或文件损坏：按无历史 token 处理
+    }
+  };
+  const initialTokens = await loadInitialTokens();
+  let pairingSaveTimer = null;
+  const persistPairingTokens = async () => {
+    if (!pairingTokensPath) return;
+    try {
+      await fs.writeFile(
+        pairingTokensPath,
+        `${JSON.stringify({ tokens: pairing.exportTokens() }, null, 2)}\n`,
+        "utf8"
+      );
+    } catch (error) {
+      // 持久化失败只影响重启后的配对状态，不影响本次会话的门禁。
+      logger.warn?.(`LAN pairing token persist failed: ${error?.message || error}`);
+    }
+  };
+  const schedulePersistPairingTokens = () => {
+    if (!pairingTokensPath) return;
+    if (pairingSaveTimer) return;
+    pairingSaveTimer = setTimeout(() => {
+      pairingSaveTimer = null;
+      void persistPairingTokens();
+    }, 5000);
+    pairingSaveTimer.unref?.();
+  };
+  const pairing = createLanPairing({
+    ...(initialTokens ? { initialTokens } : {}),
+    ...(pairingTokensPath ? { onTokensChanged: schedulePersistPairingTokens } : {})
+  });
   app.get("/api/lan/pair", (req, res) => {
     const paired = pairing.isAuthorizedRequest(req);
     res.json({ ok: true, paired });
@@ -235,7 +283,8 @@ export async function createLanServer({
   // 注意：WS hub 必须在 TLS listen 成功之后再挂载；端口冲突时提前挂载会让
   // ws 触发第二次未被捕获的 EADDRINUSE（见 createLanServer.test.js）。
   const tlsWsHub = createWebSocketHub(tlsServer, {
-    authorize: (req) => pairing.isAuthorizedRequest(req)
+    authorize: (req) => pairing.isAuthorizedRequest(req),
+    onAsrPrefetch: (durationMs) => asrPrefetch?.begin(durationMs)
   });
   let httpWsHub = null;
   const wsHub = {
@@ -244,20 +293,22 @@ export async function createLanServer({
       httpWsHub?.broadcast(payload);
     }
   };
-  app.use("/api", createUploadRouter({ config, wsHub, tmpDir: uploadTmpDir, edgeAsr }));
+  app.use("/api", createUploadRouter({ config, wsHub, tmpDir: uploadTmpDir, edgeAsr, asrPrefetch }));
   let resolvedHttpPort;
   try {
     resolvedHttpPort = await listen(redirectServer, httpPort ?? resolvedPort + 1);
     // 和 TLS hub 一样，只在 listen 成功后挂载，避免 EADDRINUSE 同时被
     // WebSocketServer 转成未捕获异常。
     httpWsHub = createWebSocketHub(redirectServer, {
-      authorize: (req) => pairing.isAuthorizedRequest(req)
+      authorize: (req) => pairing.isAuthorizedRequest(req),
+      onAsrPrefetch: (durationMs) => asrPrefetch?.begin(durationMs)
     });
   } catch (error) {
     // HTTP 端口被占用时不能留下已绑定的 TLS 服务和 WS hub —— 先关干净再抛出。
     try {
       tlsWsHub.close();
       httpWsHub?.close();
+      await asrPrefetch?.close();
     } catch (closeError) {
       logger.error?.("LAN WebSocket hub close failed during abort:", closeError?.message || closeError);
     }
@@ -287,6 +338,19 @@ export async function createLanServer({
         logger.error?.("LAN WebSocket hub close failed:", error?.message || error);
       }
       await Promise.all([closeServer(tlsServer), closeServer(redirectServer)]);
+      // 关闭未消费的签名预留（网络切换重建服务等场景），避免配额行悬挂。
+      try {
+        await asrPrefetch?.close();
+      } catch (error) {
+        logger.warn?.(`ASR prefetch close failed: ${error?.message || error}`);
+      }
+      // 网络切换等场景会 stop/start 重建服务：挂起的防抖写盘必须先落下去，
+      // 否则重建后的新实例读不到刚续期过的 token。
+      if (pairingSaveTimer) {
+        clearTimeout(pairingSaveTimer);
+        pairingSaveTimer = null;
+      }
+      await persistPairingTokens();
     }
   };
 }

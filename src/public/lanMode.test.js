@@ -10,6 +10,11 @@ import {
   buildLanWsUrl,
   buildNativeLanBaseUrl,
   createPairingClient,
+  findMatchingLanEndpoint,
+  forgetNativeLanEndpoint,
+  getStoredNativeLanEndpoint,
+  NATIVE_LAN_ENDPOINT_STORAGE_KEY,
+  rememberNativeLanEndpoint,
   isLanPageEnvironment,
   isLoopbackHostname,
   lanTokenHeaders,
@@ -342,4 +347,56 @@ test("LanHealthWatch resets the failure counter after a successful poll", async 
   assert.equal(fallbacks, 0, "success reset the counter — single later failure does not trigger");
   watch.stop();
   assert.equal(timers.length, 0);
+});
+
+// --- 原生 App LAN 自动恢复 ---
+
+function fakeStorage(initial = {}) {
+  const store = new Map(Object.entries(initial));
+  return {
+    getItem: (key) => (store.has(key) ? store.get(key) : null),
+    setItem: (key, value) => { store.set(key, String(value)); },
+    removeItem: (key) => { store.delete(key); }
+  };
+}
+
+test("native LAN endpoint storage round-trips and guards malformed data", () => {
+  const storage = fakeStorage();
+  rememberNativeLanEndpoint(ENDPOINT_A, storage);
+  assert.deepEqual(getStoredNativeLanEndpoint(storage), ENDPOINT_A);
+
+  forgetNativeLanEndpoint(storage);
+  assert.equal(getStoredNativeLanEndpoint(storage), null);
+
+  // 畸形 / 半结构数据：返回 null 而不是抛错
+  storage.setItem(NATIVE_LAN_ENDPOINT_STORAGE_KEY, "{not json");
+  assert.equal(getStoredNativeLanEndpoint(storage), null);
+  storage.setItem(NATIVE_LAN_ENDPOINT_STORAGE_KEY, JSON.stringify({ host: "x" }));
+  assert.equal(getStoredNativeLanEndpoint(storage), null, "incomplete endpoint rejected");
+
+  // storage 不可用（隐私模式等）不抛错
+  rememberNativeLanEndpoint(ENDPOINT_A, null);
+  forgetNativeLanEndpoint(null);
+  assert.equal(getStoredNativeLanEndpoint(null), null);
+});
+
+test("findMatchingLanEndpoint prefers exact match then falls back to host+httpPort", () => {
+  const drifted = { host: "192.168.1.10", port: 3050, httpPort: 3001 };
+  assert.equal(
+    findMatchingLanEndpoint(ENDPOINT_A, [ENDPOINT_B, ENDPOINT_A]),
+    ENDPOINT_A,
+    "exact match wins regardless of order"
+  );
+  assert.equal(
+    findMatchingLanEndpoint(ENDPOINT_A, [ENDPOINT_B, drifted]),
+    drifted,
+    "https port drift still matches on host+httpPort"
+  );
+  assert.equal(
+    findMatchingLanEndpoint(ENDPOINT_A, [ENDPOINT_B]),
+    null,
+    "different host never matches"
+  );
+  assert.equal(findMatchingLanEndpoint(null, [ENDPOINT_A]), null);
+  assert.equal(findMatchingLanEndpoint(ENDPOINT_A, []), null);
 });

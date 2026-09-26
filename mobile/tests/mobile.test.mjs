@@ -24,7 +24,14 @@ test("mobile bundle starts the VoiceBridge app from local packaged assets", asyn
   assert.match(appJs, /performNativeFeedback/);
   assert.match(appJs, /closest\('button, \[role="button"\], input\[type="checkbox"\], select'\)/);
   assert.match(appJs, /control\.id === "recordButton"/);
+  // LAN 自动恢复 + 预取 + 按键回执 + 耗时观测（回归修复包）。
+  assert.match(appJs, /maybeRestoreNativeLan/);
+  assert.match(appJs, /rememberNativeLanEndpoint/);
+  assert.match(appJs, /asr-prefetch/);
+  assert.match(appJs, /payload\.type === "ack" && payload\.key/);
+  assert.match(appJs, /createRecordingTimingStore/);
   await access(new URL("www/nativeFeedback.js", mobileRoot));
+  await access(new URL("www/timingRecorder.js", mobileRoot));
   await access(new URL("www/vendor/supabase.js", mobileRoot));
 });
 

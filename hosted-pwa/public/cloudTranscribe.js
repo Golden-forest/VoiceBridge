@@ -6,6 +6,22 @@ const TRANSCRIBE_TIMEOUT_MS = 30_000;
 const DIRECT_TENCENT_TIMEOUT_MS = 10_000;
 const DIRECT_REPORT_TIMEOUT_MS = 5_000;
 
+// 耗时观测（延迟诊断）：app.js 注册监听，把各段耗时汇入界面可见的快照。
+// console.info("[vb-timing] ...") 原样保留（外部工具可能解析）。
+let asrTimingListener = null;
+
+export function setAsrTimingListener(listener) {
+  asrTimingListener = typeof listener === "function" ? listener : null;
+}
+
+function noteAsrTiming(fields) {
+  try {
+    asrTimingListener?.(fields);
+  } catch {
+    // 观测绝不影响识别主流程。
+  }
+}
+
 // 测试专用：清理 token 缓存。生产代码不应调用。
 export function __clearAccessTokenCacheForTests() {
   cachedAccessToken = null;
@@ -110,6 +126,7 @@ export function prefetchDirectAsrSignature({
       const issue = await parseJson(response);
       if (!response.ok || !issue?.ok) return null;
       console.info("[vb-timing] presign (during recording)", { ms: null, expires_at: issue.expires_at });
+      noteAsrTiming({ presignedDuringRecording: true });
       return issue;
     } catch {
       return null;
@@ -230,6 +247,7 @@ function logDirectTiming(t0, issueMs, directAsrMs) {
     direct_asr_ms: directAsrMs,
     total_ms: Date.now() - t0
   });
+  noteAsrTiming({ channel: "direct", issueMs, asrMs: directAsrMs, totalMs: Date.now() - t0 });
 }
 
 // 结果上报：尽力而为（keepalive + 自身超时 + 吞掉所有错误），绝不影响识别结果或 UI。
@@ -300,6 +318,7 @@ async function transcribeViaRelay({ baseUrl, anonKey, accessToken, audio, filena
     server_ms: uploadDoneAt - t0,
     total_ms: Date.now() - t0
   });
+  noteAsrTiming({ channel: "relay", asrMs: uploadDoneAt - t0, totalMs: Date.now() - t0 });
 
   if (!response.ok || !payload?.ok) {
     throw new Error(payload?.message || payload?.error || "云端语音识别失败，请稍后重试。");

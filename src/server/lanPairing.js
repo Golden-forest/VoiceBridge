@@ -8,16 +8,19 @@ import crypto from "node:crypto";
 // 不引入新加密方案：配对码 = 随机数字，token = crypto.randomUUID()，仅做
 // 服务端字符串比对（brief 批准的取舍：明文比对不是常数时间，理论上可计时
 // 逐位探测；6 位码 + 按 IP 指数退避 + 短 TTL 轮换已把该风险压到可忽略）。
-// 服务重启后 token 失效，需要重新输入配对码。
+// token 支持通过 initialTokens / exportTokens 导入导出：Electron 内嵌模式把
+// 它们持久化到 userData，服务重启（网络切换、App 更新）不再要求重新配对。
+// TTL 为滑动窗口：每次通过校验即续期，长期不用才过期。
 //
 // 暴力破解防护：
 // - 配对码轮换：每次成功配对后立即重置，且最长 codeTtlMs（默认 10 分钟）过期重置。
 // - 按 IP 指数退避：连续失败 maxFails 次后，该 IP 需等待 1s 起步、每次翻倍、
-//   上限 backoffCapMs（默认 60s）才能再次尝试。成功后计数清零。状态仅存内存。
+//   上限 backoffCapMs（默认 60s）才能再次尝试。成功后计数清零。状态仅存内存
+//  （防破解相关状态刻意不落盘）。
 
 const LAN_TOKEN_HEADER = "x-vb-lan-token";
 const LOOPBACK_ADDRESSES = new Set(["127.0.0.1", "::1", "::ffff:127.0.0.1"]);
-const DEFAULT_TOKEN_TTL_MS = 7 * 24 * 60 * 60 * 1000;
+const DEFAULT_TOKEN_TTL_MS = 30 * 24 * 60 * 60 * 1000;
 const DEFAULT_CODE_TTL_MS = 10 * 60 * 1000;
 const DEFAULT_MAX_FAILS = 5;
 const DEFAULT_BACKOFF_BASE_MS = 1000;
@@ -46,13 +49,25 @@ export function createLanPairing({
   maxFails = DEFAULT_MAX_FAILS,
   backoffBaseMs = DEFAULT_BACKOFF_BASE_MS,
   backoffCapMs = DEFAULT_BACKOFF_CAP_MS,
-  now = Date.now
+  now = Date.now,
+  initialTokens = null,
+  onTokensChanged = null
 } = {}) {
   let code = generateCode(codeLength);
   let codeExpiresAt = now() + codeTtlMs;
   const tokens = new Map(); // token -> expiry ms
   const failsByIp = new Map(); // ip -> consecutive failed attempts
   const blockedUntilByIp = new Map(); // ip -> blocked-until ms
+
+  // 导入持久化 token：过期的直接剪枝（历史遗留行不复活）。
+  if (Array.isArray(initialTokens)) {
+    for (const entry of initialTokens) {
+      if (typeof entry?.token === "string" && entry.token.length > 0 &&
+          Number.isFinite(entry.expiresAt) && entry.expiresAt > now()) {
+        tokens.set(entry.token, entry.expiresAt);
+      }
+    }
+  }
 
   const rotateCode = () => {
     code = generateCode(codeLength);
@@ -106,6 +121,7 @@ export function createLanPairing({
       blockedUntilByIp.delete(ip);
       const token = crypto.randomUUID();
       tokens.set(token, now() + tokenTtlMs);
+      onTokensChanged?.();
       rotateCode(); // 一次性配对码：用后即换
       return token;
     },
@@ -114,9 +130,26 @@ export function createLanPairing({
       if (typeof token !== "string" || !tokens.has(token)) return false;
       if (tokens.get(token) <= now()) {
         tokens.delete(token);
+        onTokensChanged?.();
         return false;
       }
+      // 滑动续期：每次通过校验（中间件 / WS 鉴权 / 配对状态探测）都刷新
+      // 过期时间。频繁使用的手机永远不需要重新配对，闲置才自然过期。
+      const refreshedAt = now() + tokenTtlMs;
+      if (refreshedAt > tokens.get(token)) {
+        tokens.set(token, refreshedAt);
+        onTokensChanged?.();
+      }
       return true;
+    },
+
+    /** 导出未过期 token（createLanServer 持久化用）：token -> 绝对过期毫秒 */
+    exportTokens() {
+      const entries = [];
+      for (const [token, expiresAt] of tokens) {
+        if (expiresAt > now()) entries.push({ token, expiresAt });
+      }
+      return entries;
     },
 
     /** 请求是否已通过门禁（本机免配对；否则校验 token） */

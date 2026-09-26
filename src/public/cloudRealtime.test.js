@@ -736,3 +736,41 @@ async function waitFor(predicate, timeoutMs = 100) {
     await new Promise((resolve) => setTimeout(resolve, 1));
   }
 }
+
+test("CloudRealtime timeout ack for key commands carries the key metadata", async () => {
+  const supabase = {
+    channel() {
+      return {
+        topic: "t",
+        on() { return this; },
+        async subscribe(callback) { await callback?.("SUBSCRIBED"); return "ok"; },
+        async track() { return "ok"; },
+        async send() { return "ok"; },
+        async unsubscribe() { return "ok"; }
+      };
+    }
+  };
+
+  const acks = [];
+  const realtime = new CloudRealtime({
+    supabase,
+    user: { id: "user-1" },
+    phoneDeviceId: "phone-1",
+    ackTimeoutMs: 5,
+    onDevices: () => {},
+    onAck: (ack) => acks.push(ack),
+    onStatus: () => {}
+  });
+
+  await realtime.start();
+  const sendPromise = realtime.sendKey({ targetDeviceId: "desktop-1", key: "enter" });
+  const rejection = assert.rejects(sendPromise, /桌面端未确认/);
+  await new Promise((resolve) => setTimeout(resolve, 20));
+  await rejection;
+
+  // 超时合成的 ack 必须带 key：手机端 onAck 据此走按键分支（触感反馈），
+  // 不会误入文本分支双弹 toast。
+  assert.equal(acks.length, 1);
+  assert.equal(acks[0].key, "enter");
+  assert.equal(acks[0].status, "failed");
+});

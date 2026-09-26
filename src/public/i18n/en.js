@@ -113,6 +113,7 @@ export default {
     sessionExpired: 'Session expired, please sign in again',
     sentToDesktopAck: 'Sent to desktop.',
     desktopExecFailed: (detail) => `Desktop execution failed: ${detail}`,
+    keyCommandFailed: 'Key command failed, check the desktop connection.',
     protocolTooOld: 'Desktop client is outdated, please reopen the latest VoiceBridge Agent.',
   },
 
@@ -228,6 +229,17 @@ export default {
     rejectedCount: 'Rejected',
     secondsValue: (sec) => `${sec.toLocaleString()} sec`,
     timesValue: (n) => `${n} times`,
+
+    // Last recording timing (latency diagnostics)
+    timingTitle: 'Last recording timing',
+    timingChannel: 'Channel',
+    timingChannelDirect: 'Phone direct',
+    timingChannelRelay: 'Cloud relay',
+    timingChannelLan: 'LAN',
+    timingEncode: 'Stop→ready',
+    timingAsr: 'Speech recognition',
+    timingSendAck: 'Send ack',
+    timingTotal: 'Total',
 
     subscriptionTitle: 'Subscription',
     noSubscription: 'No active subscription',

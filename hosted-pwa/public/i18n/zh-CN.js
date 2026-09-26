@@ -113,6 +113,7 @@ export default {
     sessionExpired: '会话已过期，请重新登录',
     sentToDesktopAck: '已发送到桌面端。',
     desktopExecFailed: (detail) => `桌面端执行失败：${detail}`,
+    keyCommandFailed: '按键执行失败，请检查电脑端连接。',
     protocolTooOld: '电脑客户端版本过旧，请重新打开最新的 VoiceBridge Agent。',
   },
 
@@ -231,6 +232,17 @@ export default {
     rejectedCount: '拒绝次数',
     secondsValue: (sec) => `${sec.toLocaleString()} 秒`,
     timesValue: (n) => `${n} 次`,
+
+    // 上次录音耗时（延迟诊断）
+    timingTitle: '上次录音耗时',
+    timingChannel: '通道',
+    timingChannelDirect: '手机直连',
+    timingChannelRelay: '云端中转',
+    timingChannelLan: '局域网',
+    timingEncode: '录音结束→就绪',
+    timingAsr: '语音识别',
+    timingSendAck: '发送确认',
+    timingTotal: '总耗时',
 
     // 订阅管理
     subscriptionTitle: '订阅管理',

@@ -8,6 +8,8 @@ import { createAgentLogger } from './agentLogger.js';
 import { loadOrCreateDevice, rotateDeviceIdentity } from '../deviceStore.js';
 import { createAgentClient, startRealtimeAgent } from '../realtimeAgent.js';
 import { buildLanState, createLanCodeWatcher, isLanAllowedPlan } from './lanState.js';
+import { loadConfig as loadServerConfig } from '../../server/config.js';
+import { loadLocalAsrCredentials } from '../../server/asrCredentials.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 // 经自有域名（Cloudflare Worker 反代）访问 Supabase，规避大陆 SNI 阻断。
@@ -83,11 +85,21 @@ async function startLanServer() {
       log('lan-device-missing');
       return null;
     }
+    // 可选本地腾讯凭证（userData/voicebridge.env）：存在即恢复本地签名直连
+    // 通道（自用最快路径）；不存在则保持 Edge 逐次签名通道（密钥不出云端）。
+    const localAsrCredentials = await loadLocalAsrCredentials(userData);
+    if (localAsrCredentials) {
+      log('lan-local-asr-credentials-active', { region: localAsrCredentials.tencentAsrRegion || null });
+    }
     lanServer = await createLanServer({
       rootDir,
       deviceId,
+      ...(localAsrCredentials ? { config: { ...loadServerConfig(), ...localAsrCredentials } } : {}),
       certsDir: join(userData, 'certs'),
       tmpDir: join(userData, 'tmp'),
+      // 配对 token 落盘（userData 在 asar 外可写）：网络切换重建服务 / App
+      // 重启后手机不需要重新输入配对码。TTL 滑动续期，长期不用才过期。
+      pairingTokensPath: join(userData, 'lan-pairing.json'),
       supabaseUrl: desktopConfig.supabaseUrl,
       supabaseAnonKey: desktopConfig.supabaseAnonKey,
       getAccessToken: async () => {

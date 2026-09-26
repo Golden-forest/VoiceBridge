@@ -6,7 +6,26 @@ import { MESSAGE_TYPES } from "../shared/protocol.js";
 
 const MAX_BUFFER_SIZE = 64 * 1024;
 
-export function createWebSocketHub(server, { authorize } = {}) {
+// 默认按键动作（可注入替换，测试用）。
+export const DEFAULT_KEY_HANDLERS = Object.freeze({
+  "enter": pressEnter,
+  "undo": pressUndo,
+  "ctrl-c": pressCtrlC,
+  "escape": pressEscape,
+  "delete": pressDelete,
+  "paste": pasteClipboard,
+  "arrow-up": () => pressArrow("up"),
+  "arrow-down": () => pressArrow("down"),
+  "arrow-left": () => pressArrow("left"),
+  "arrow-right": () => pressArrow("right")
+});
+
+export function createWebSocketHub(server, {
+  authorize,
+  keyHandlers = DEFAULT_KEY_HANDLERS,
+  output = outputText,
+  onAsrPrefetch
+} = {}) {
   const wss = new WebSocketServer({ server, path: "/ws", maxPayload: 1024 * 1024 });
   const clients = new Set();
 
@@ -29,29 +48,40 @@ export function createWebSocketHub(server, { authorize } = {}) {
         const payload = JSON.parse(data);
         switch (payload.type) {
           case MESSAGE_TYPES.KEY: {
-            switch (payload.key) {
-              case "enter": await pressEnter(); break;
-              case "undo": await pressUndo(); break;
-              case "ctrl-c": await pressCtrlC(); break;
-              case "escape": await pressEscape(); break;
-              case "delete": await pressDelete(); break;
-              case "paste": await pasteClipboard(); break;
-              case "arrow-up": await pressArrow("up"); break;
-              case "arrow-down": await pressArrow("down"); break;
-              case "arrow-left": await pressArrow("left"); break;
-              case "arrow-right": await pressArrow("right"); break;
-              default:
-                console.warn("Unknown key message:", payload.key);
+            // 按键回执（只回请求方）：手机端凭它给成功/失败触感反馈。
+            // send() 自带 readyState 防护，执行期间连接断开只是无回执，不报错。
+            const handler = keyHandlers[payload.key];
+            if (typeof handler !== "function") {
+              send(socket, { type: "ack", key: payload.key, status: "failed", detail: "unknown_key" });
+              break;
+            }
+            try {
+              await handler();
+              send(socket, { type: "ack", key: payload.key, status: "success", detail: `key:${payload.key}` });
+            } catch (error) {
+              send(socket, {
+                type: "ack",
+                key: payload.key,
+                status: "failed",
+                detail: error instanceof Error ? error.message : String(error)
+              });
             }
             break;
           }
           case "phrase":
             if (typeof payload.text === "string" && payload.text.length <= 10000) {
-              const result = await outputText(payload.text, {
+              const result = await output(payload.text, {
                 autoPaste: Boolean(payload.autoPaste),
                 targetWindow: payload.targetWindow || null
               });
               if (socket.readyState === WebSocket.OPEN) broadcast({ type: "output", ...result });
+            }
+            break;
+          // 录音开始即预取识别签名（LAN 延迟优化）：与录音并行做跨境签名往返，
+          // 说完话上传音频时直接识别。fire-and-forget，不回复。
+          case "asr-prefetch":
+            if (Number.isFinite(payload.duration_ms) && payload.duration_ms > 0) {
+              onAsrPrefetch?.(payload.duration_ms);
             }
             break;
           default:

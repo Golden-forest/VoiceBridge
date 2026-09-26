@@ -29,9 +29,8 @@ test("tokens expire after tokenTtlMs", () => {
   let clock = 1000;
   const pairing = createLanPairing({ tokenTtlMs: 5000, now: () => clock });
   const token = pairing.pair(pairing.code);
-  clock += 4999;
-  assert.equal(pairing.isValidToken(token), true);
-  clock += 2;
+  // 滑动 TTL：不使用的 token 在"最后一次续期 + TTL"后硬过期。
+  clock += 5000 + 1;
   assert.equal(pairing.isValidToken(token), false, "token should be expired");
   assert.equal(pairing.isValidToken(token), false, "expired token stays deleted");
 });
@@ -144,4 +143,81 @@ test("backoff doubles with each re-offense up to the cap", () => {
     pairing.pair("000000", req);
     assert.equal(pairing.getRetryAfterMs(req), expected);
   }
+});
+
+// --- token 持久化（服务重启免重配） ---
+
+test("initialTokens imports unexpired tokens and prunes expired ones", () => {
+  let clock = 1000;
+  const pairing = createLanPairing({
+    now: () => clock,
+    initialTokens: [
+      { token: "alive", expiresAt: clock + 5000 },
+      { token: "dead", expiresAt: clock - 1 },
+      { token: "malformed" },
+      "not-an-object"
+    ]
+  });
+  assert.equal(pairing.isValidToken("alive"), true);
+  assert.equal(pairing.isValidToken("dead"), false);
+  assert.equal(pairing.isValidToken("malformed"), false);
+});
+
+test("token TTL slides forward on each successful validation", () => {
+  let clock = 1000;
+  const pairing = createLanPairing({ tokenTtlMs: 10_000, now: () => clock });
+  const token = pairing.pair(pairing.code);
+  const firstExpiry = pairing.exportTokens()[0].expiresAt;
+  assert.equal(firstExpiry, 1000 + 10_000);
+
+  clock += 4000;
+  assert.equal(pairing.isValidToken(token), true);
+  const refreshedExpiry = pairing.exportTokens()[0].expiresAt;
+  assert.equal(refreshedExpiry, 1000 + 4000 + 10_000, "expiry slides to last use + TTL");
+
+  // 一直不用：滑动窗口之外仍然硬过期
+  clock = refreshedExpiry + 1;
+  assert.equal(pairing.isValidToken(token), false);
+});
+
+test("onTokensChanged fires on pair, refresh and expiry, not on failed checks", () => {
+  let clock = 1000;
+  let changes = 0;
+  const pairing = createLanPairing({
+    tokenTtlMs: 10_000,
+    now: () => clock,
+    onTokensChanged: () => { changes++; }
+  });
+
+  const token = pairing.pair(pairing.code);
+  assert.equal(changes, 1, "pair fires change");
+
+  assert.equal(pairing.isValidToken("forged"), false);
+  assert.equal(changes, 1, "failed check does not fire change");
+
+  clock += 1000;
+  pairing.isValidToken(token);
+  assert.equal(changes, 2, "refresh fires change");
+
+  clock = 1000 + 1000 + 10_000 + 1;
+  assert.equal(pairing.isValidToken(token), false);
+  assert.equal(changes, 3, "expiry cleanup fires change");
+});
+
+test("exportTokens round-trips through a fresh instance (restart survival)", () => {
+  let clock = 1000;
+  const first = createLanPairing({ tokenTtlMs: 60_000, now: () => clock });
+  const token = first.pair(first.code);
+
+  clock += 1000; // "服务重启"耗时
+  const second = createLanPairing({
+    tokenTtlMs: 60_000,
+    now: () => clock,
+    initialTokens: first.exportTokens()
+  });
+  assert.equal(second.isValidToken(token), true, "token survives restart via export/import");
+  assert.equal(
+    second.isAuthorizedRequest(fakeRequest({ headers: { "x-vb-lan-token": token } })),
+    true
+  );
 });

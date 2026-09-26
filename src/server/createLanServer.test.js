@@ -234,6 +234,44 @@ test("createLanServer rotates the pairing code on use and rate-limits brute forc
   await lan.close();
 });
 
+test("createLanServer persists pairing tokens across close and recreate", async () => {
+  const rootDir = await fs.mkdtemp(path.join(os.tmpdir(), "voicebridge-lan-"));
+  const tokensPath = path.join(rootDir, "lan-pairing.json");
+
+  let token;
+  {
+    const lan = await createLanServer({ rootDir, port: 0, config: {}, pairingTokensPath: tokensPath });
+    token = (await httpsPostJson(lan.port, "/api/lan/pair", { code: lan.pairingCode })).body.token;
+    assert.equal(typeof token, "string");
+    await lan.close();
+  }
+
+  // close() flush：配对 token 立即落盘（不依赖 5s 防抖），服务重建后可恢复。
+  const persisted = JSON.parse(await fs.readFile(tokensPath, "utf8"));
+  assert.ok(Array.isArray(persisted.tokens) && persisted.tokens.some((entry) => entry.token === token));
+
+  {
+    const lan = await createLanServer({ rootDir, port: 0, config: {}, pairingTokensPath: tokensPath });
+    // 重建后的实例正常工作（配对码独立、健康检查可达）。
+    const health = await httpsGetJson(lan.port, "/api/health");
+    assert.equal(health.body.ok, true);
+    await lan.close();
+    // 再次落盘不丢历史 token。
+    const repersisted = JSON.parse(await fs.readFile(tokensPath, "utf8"));
+    assert.ok(repersisted.tokens.some((entry) => entry.token === token));
+  }
+
+  // 不传 pairingTokensPath：纯内存行为，绝不写文件。
+  {
+    const memDir = await fs.mkdtemp(path.join(os.tmpdir(), "voicebridge-lan-"));
+    const memTokensPath = path.join(memDir, "lan-pairing.json");
+    const lan = await createLanServer({ rootDir: memDir, port: 0, config: {}, pairingTokensPath: undefined });
+    await httpsPostJson(lan.port, "/api/lan/pair", { code: lan.pairingCode });
+    await lan.close();
+    await assert.rejects(fs.readFile(memTokensPath, "utf8"), /ENOENT/);
+  }
+});
+
 test("createLanServer closes the HTTPS server when the HTTP port is taken", async () => {
   const rootDir = await fs.mkdtemp(path.join(os.tmpdir(), "voicebridge-lan-"));
   const blocker = http.createServer();
@@ -432,7 +470,8 @@ test("createLanServer routes uploads through the edge-signed channel when local 
       request_id: "req-lan-1",
       status: "success",
       device_id: "11111111-1111-4111-8111-111111111111",
-      text_length: "你好局域网".length
+      text_length: "你好局域网".length,
+      duration_ms: 101 // makeSilenceWav 的固定时长，随上报结算实际用量
     });
   } finally {
     await lan.close();

@@ -13,7 +13,9 @@ const TENCENT_MAX_AUDIO_BYTES = 3 * 1024 * 1024;
 // edgeAsr（可选）：{ getAccessToken, supabaseUrl, supabaseAnonKey }。本地缺少
 // 腾讯云凭证时（Electron 内嵌 LAN 服务场景），改走 Edge 逐次签名直连通道，
 // 密钥永不出云端。凭证存在（.env 开发场景）时保持原本地路径。
-export async function transcribeAudio({ filePath, tmpDir }, config, edgeAsr) {
+// prefetchedIssue（可选）：录音期间预取的签名（edge 通道专用），有效则跳过
+// 停止录音后的实时签发往返。
+export async function transcribeAudio({ filePath, tmpDir, prefetchedIssue = null }, config, edgeAsr) {
   if (config.asrProvider !== "tencent") {
     const error = new Error(`Unsupported ASR provider: ${config.asrProvider}`);
     error.statusCode = 500;
@@ -54,7 +56,7 @@ export async function transcribeAudio({ filePath, tmpDir }, config, edgeAsr) {
       });
     } else {
       const wavBuffer = await fs.readFile(converted.path);
-      raw = await transcribeViaEdgeAsr({ wavBuffer, ...edgeAsr });
+      raw = await transcribeViaEdgeAsr({ wavBuffer, ...edgeAsr, prefetchedIssue });
     }
     return removeFillerWords(raw);
   } finally {

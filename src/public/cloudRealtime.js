@@ -220,7 +220,7 @@ export class CloudRealtime {
       ...message,
       created_at: new Date().toISOString()
     };
-    const ackPromise = this.addPendingRequest(message.request_id, targetDeviceId);
+    const ackPromise = this.addPendingRequest(message.request_id, targetDeviceId, { key });
     let sendStatus;
     try {
       sendStatus = await channel.send({
@@ -330,7 +330,7 @@ export class CloudRealtime {
     });
   }
 
-  addPendingRequest(requestId, targetDeviceId) {
+  addPendingRequest(requestId, targetDeviceId, meta = {}) {
     return new Promise((resolve, reject) => {
       const timer = setTimeout(() => {
         if (!this.pendingRequests.has(requestId)) return;
@@ -342,7 +342,10 @@ export class CloudRealtime {
           source_device_id: targetDeviceId,
           target_device_id: this.phoneDeviceId,
           status: "failed",
-          detail: "桌面端未确认，请确认客户端在线。"
+          detail: "桌面端未确认，请确认客户端在线。",
+          // 展开请求元数据（如按键指令的 key）：超时合成的 ack 走与真实 ack
+          // 相同的分支，按键超时不会误入文本 ack 路径双弹 toast。
+          ...meta
         };
         try {
           this.onAck(ack);

@@ -9,6 +9,9 @@
 
 export const LAN_TOKEN_STORAGE_KEY = "voicebridge_lan_token";
 export const CLOUD_ORIGIN_STORAGE_KEY = "voicebridge_cloud_origin";
+// 原生 App 最近一次成功直连的桌面端点：冷启动（iOS 杀后台后重开）时据此
+// 自动恢复 LAN 模式，用户不需要每次手动点"局域网"入口。
+export const NATIVE_LAN_ENDPOINT_STORAGE_KEY = "voicebridge_native_lan_endpoint";
 export const LAN_TOKEN_HEADER = "x-vb-lan-token";
 export const PROBE_TIMEOUT_MS = 500;
 export const PROBE_CACHE_TTL_MS = 30_000;
@@ -189,6 +192,54 @@ export function buildLanUrl(endpoint, cloudOrigin) {
 /** 原生 App 保持本地安全页面不跳转，只把 API/WS 指向桌面 HTTP 端口。 */
 export function buildNativeLanBaseUrl(endpoint) {
   return `http://${formatLanHost(endpoint.host)}:${endpoint.httpPort}`;
+}
+
+/** 记住最近一次成功直连的桌面端点（原生 App 冷启动自动恢复用） */
+export function rememberNativeLanEndpoint(endpoint, storage) {
+  try {
+    storage?.setItem(
+      NATIVE_LAN_ENDPOINT_STORAGE_KEY,
+      JSON.stringify({ host: endpoint?.host, port: endpoint?.port, httpPort: endpoint?.httpPort })
+    );
+  } catch { /* storage 不可用时静默：下次冷启动回云端模式 */ }
+}
+
+/** 读出记住的端点；结构不完整（旧版本数据/损坏）返回 null */
+export function getStoredNativeLanEndpoint(storage) {
+  try {
+    const raw = storage?.getItem(NATIVE_LAN_ENDPOINT_STORAGE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    const [endpoint] = normalizeEndpoints([parsed]);
+    return endpoint || null;
+  } catch {
+    return null;
+  }
+}
+
+/** 用户手动切回云端时清除：冷启动不再自动进 LAN（用户意图优先） */
+export function forgetNativeLanEndpoint(storage) {
+  try {
+    storage?.removeItem(NATIVE_LAN_ENDPOINT_STORAGE_KEY);
+  } catch { /* ignore */ }
+}
+
+/**
+ * 在桌面端上报的端点列表里找到记忆端点对应的当前端点：
+ * 精确匹配（host+port+httpPort）优先；HTTPS 端口漂移（桌面端重启随机分配）
+ * 时回退 host+httpPort 匹配。找不到返回 null（桌面离线 / 换了网络）。
+ */
+export function findMatchingLanEndpoint(stored, endpoints) {
+  const valid = normalizeEndpoints(endpoints);
+  if (!stored) return null;
+  const exact = valid.find((endpoint) =>
+    endpoint.host === stored.host &&
+    endpoint.port === stored.port &&
+    endpoint.httpPort === stored.httpPort);
+  if (exact) return exact;
+  return valid.find((endpoint) =>
+    endpoint.host === stored.host &&
+    endpoint.httpPort === stored.httpPort) || null;
 }
 
 /** LAN token 请求头（未配对时为空对象） */
