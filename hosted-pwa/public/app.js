@@ -29,7 +29,6 @@ const appConfig = window.__VB_CONFIG || {};
 const statusDot = document.querySelector("#statusDot");
 const statusBadge = document.querySelector("#statusBadge");
 const textInput = document.querySelector("#textInput");
-const charCount = document.querySelector("#charCount");
 const autoPasteEl = document.querySelector("#autoPaste");
 const toastEl = document.querySelector("#toast");
 const pageRefreshButton = document.querySelector("#pageRefreshButton");
@@ -433,6 +432,7 @@ function syncCloudConnectionStatus() {
   if (!isCloudMode || isNativeLanActive()) return;
   const selected = cloudDesktopDevices.find((device) => device.deviceId === selectedCloudDeviceId);
   if (cloudRealtimeSubscribed && selected) {
+    // 状态徽章只显示状态词；设备名进入圆点提示（点击状态圆点可查看）
     setConnectionStatus("connected", `${t('connection.cloudConnected')} · ${selected.name || selected.deviceId}`);
   } else if (cloudRealtimeSubscribed) {
     setConnectionStatus("error", t('device.waitingDesktop'));
@@ -510,7 +510,6 @@ autoPasteEl?.addEventListener("change", () => {
 // === Text Input ===
 function updateTextInputState() {
   const text = textInput.value.trim();
-  if (charCount) charCount.textContent = t('input.charCount', textInput.value.length, 2000);
   const saveBtn = document.querySelector("#savePhraseBtn");
   const sendBtn = document.querySelector("#sendTextBtn");
 
@@ -783,6 +782,7 @@ cloudDeviceSelect?.addEventListener("change", () => {
   syncDeviceSelectorLabel();
   updateCloudLanEndpoints(cloudDesktopDevices);
   syncCloudConnectionStatus();
+  renderDeviceSelectorList(cloudDesktopDevices);
 });
 
 // === 设备/窗口两行折叠交互 ===
@@ -886,12 +886,19 @@ function renderDeviceSelectorList(desktopDevices) {
     return;
   }
   for (const device of desktopDevices) {
+    const isSelected = device.deviceId === selectedCloudDeviceId;
     const btn = document.createElement("button");
     btn.type = "button";
-    btn.className = "window-list-item";
+    btn.className = "window-item" + (isSelected ? " selected" : "");
     btn.dataset.deviceId = device.deviceId;
+    btn.setAttribute("aria-selected", String(isSelected));
+    btn.appendChild(dropdownIconEl(monitorIconSvg));
     const name = device.name || device.deviceId;
-    btn.textContent = isProtocolCompatible(device.protocolVersion) ? name : t('libraryExtra.needUpdate', name);
+    const title = document.createElement("span");
+    title.className = "window-item-title";
+    title.textContent = isProtocolCompatible(device.protocolVersion) ? name : t('libraryExtra.needUpdate', name);
+    btn.appendChild(title);
+    if (isSelected) btn.appendChild(dropdownIconEl(checkIconSvg, "window-item-check"));
     btn.addEventListener("click", () => {
       selectedCloudDeviceId = device.deviceId;
       cloudDeviceSelect.value = device.deviceId;
@@ -899,6 +906,7 @@ function renderDeviceSelectorList(desktopDevices) {
       syncDeviceSelectorLabel();
       updateCloudLanEndpoints(cloudDesktopDevices);
       syncCloudConnectionStatus();
+      renderDeviceSelectorList(cloudDesktopDevices);
       setDeviceSelectorOpen(false);
     });
     deviceSelectorList.appendChild(btn);
@@ -1124,6 +1132,19 @@ function pollSubscriptionActivation() {
 // === SVG Icons ===
 const starSvg = '<svg viewBox="0 0 24 24" width="14" height="14"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>';
 
+// 下拉菜单的线性小图标（与主界面 stroke 图标同一语言，替代文本字符 ✓/▾）
+const checkIconSvg = '<svg viewBox="0 0 24 24"><path d="M20 6L9 17l-5-5"/></svg>';
+const monitorIconSvg = '<svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="12" rx="2"/><path d="M2 20h20"/></svg>';
+const appWindowIconSvg = '<svg viewBox="0 0 24 24"><rect x="4" y="6" width="16" height="12" rx="2"/><path d="M4 10h16"/></svg>';
+const textCursorIconSvg = '<svg viewBox="0 0 24 24"><path d="M6 4h12"/><path d="M6 20h12"/><path d="M12 4v16"/></svg>';
+
+function dropdownIconEl(svg, className = "window-item-icon") {
+  const el = document.createElement("span");
+  el.className = className;
+  el.innerHTML = svg;
+  return el;
+}
+
 // === Record Button ===
 const recordButton = document.querySelector("#recordButton");
 const enterButton = document.querySelector("#enterButton");
@@ -1245,14 +1266,12 @@ class WindowSelector {
     const cursorSelected = !this.selectedWindow;
     if (cursorSelected) cursorBtn.classList.add("selected");
     cursorBtn.setAttribute("aria-selected", String(cursorSelected));
-    const cursorCheck = document.createElement("span");
-    cursorCheck.className = "window-item-check";
-    cursorCheck.textContent = cursorSelected ? "✓" : "";
-    cursorBtn.appendChild(cursorCheck);
+    cursorBtn.appendChild(dropdownIconEl(textCursorIconSvg));
     const cursorTitle = document.createElement("span");
     cursorTitle.className = "window-item-title";
     cursorTitle.textContent = t('device.cursorPosition');
     cursorBtn.appendChild(cursorTitle);
+    if (cursorSelected) cursorBtn.appendChild(dropdownIconEl(checkIconSvg, "window-item-check"));
     cursorBtn.addEventListener("click", (e) => {
       e.stopPropagation();
       this.selectedWindow = null;
@@ -1275,14 +1294,12 @@ class WindowSelector {
         const isSelected = this.selectedWindow && this.selectedWindow.appName === group.appName && this.selectedWindow.windowTitle === win.title;
         if (isSelected) btn.classList.add("selected");
         btn.setAttribute("aria-selected", String(isSelected));
-        const check = document.createElement("span");
-        check.className = "window-item-check";
-        check.textContent = isSelected ? "✓" : "";
-        btn.appendChild(check);
+        btn.appendChild(dropdownIconEl(appWindowIconSvg));
         const title = document.createElement("span");
         title.className = "window-item-title";
         title.textContent = win.title;
         btn.appendChild(title);
+        if (isSelected) btn.appendChild(dropdownIconEl(checkIconSvg, "window-item-check"));
         btn.addEventListener("click", (e) => {
           e.stopPropagation();
           if (isSelected) this.selectedWindow = null;
@@ -1324,13 +1341,12 @@ class WindowSelector {
       : !this.selectedWindow;
     if (isSelected) btn.classList.add("selected");
     btn.setAttribute("aria-selected", String(isSelected));
-    const check = document.createElement("span");
-    check.className = "window-item-check";
-    check.textContent = isSelected ? "✓" : "";
+    btn.appendChild(dropdownIconEl(win ? appWindowIconSvg : textCursorIconSvg));
     const title = document.createElement("span");
     title.className = "window-item-title";
     title.textContent = label;
-    btn.append(check, title);
+    btn.appendChild(title);
+    if (isSelected) btn.appendChild(dropdownIconEl(checkIconSvg, "window-item-check"));
     btn.addEventListener("click", (event) => {
       event.stopPropagation();
       this.selectedWindow = win

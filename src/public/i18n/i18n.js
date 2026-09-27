@@ -2,7 +2,7 @@
 // 使用：
 //   import { t, getCurrentLocale, setLocale, applyTranslations } from './i18n/i18n.js';
 //   t('common.save')                        // → '保存' / 'Save'
-//   t('input.charCount', 123, 2000)         // 函数型 key 自动调用
+//   t('time.minutesAgo', 5)                 // 函数型 key 自动调用
 //   setLocale('en')                         // 切换语言 → 重渲染
 //
 // HTML 静态文案：加 data-i18n / data-i18n-placeholder / data-i18n-title / data-i18n-aria-label

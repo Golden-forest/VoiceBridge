@@ -41,8 +41,8 @@ export default {
   // === 局域网页面模式 ===
   lan: {
     channelCloud: '云端',
-    channelLanAvailable: '局域网可用',
-    channelLanTry: '试试局域网直连',
+    channelLanAvailable: '局域网',
+    channelLanTry: '局域网',
     channelLan: '局域网',
     switchToLan: '切换到局域网模式，速度更快',
     lanTryTitle: '电脑端已开启局域网直连；需与电脑连接同一 Wi-Fi 才能使用',
@@ -66,7 +66,6 @@ export default {
     textInputAria: '文字输入',
     savePhrase: '收藏',
     sendToDesktop: '发送',
-    charCount: (cur, max) => `${cur}/${max}`,
     textTooLong: '文本过长，最多支持 2000 个字符',
     autoSentNotice: '该文本已通过语音自动发送。',
   },
