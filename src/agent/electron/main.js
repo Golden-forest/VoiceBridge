@@ -1,4 +1,5 @@
 import { app, BrowserWindow, clipboard, ipcMain, net, powerMonitor } from 'electron';
+import { isAuthApiError } from '@supabase/supabase-js';
 import { readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -266,7 +267,25 @@ async function getOrCreateDesktopClient() {
   if (sessionData.session) {
     // 会话可能已失效（刷新令牌吊销后不可恢复）。提前探测并清掉坏会话，
     // 否则 getUser 抛错会把应用锁死在"初始化失败"，用户无法自救。
+    // 但只有服务器明确拒绝（401/403 且刷新令牌也换不动新 token）才算
+    // 失效；网络抖动（fetch failed / 5xx）绝不能签出——跨境路径下一次
+    // fetch 失败就把用户踢下线（2026-09-27 实测发生过）。
     const { data: userData, error: userError } = await desktopClient.auth.getUser();
+    const rejectedByServer = Boolean(
+      userError && isAuthApiError(userError) && [401, 403].includes(userError.status)
+    );
+    if (rejectedByServer) {
+      const { error: refreshError } = await desktopClient.auth.refreshSession();
+      if (!refreshError || !isAuthApiError(refreshError)) {
+        log('auth-token-refreshed-on-probe', { original: userError.message });
+        return desktopClient;
+      }
+    }
+    if (userError && !rejectedByServer) {
+      // 网络/服务端瞬时故障：保留会话继续上线，realtime 失败会自行重试。
+      log('auth-probe-network-failed', { error: userError.message });
+      return desktopClient;
+    }
     if (userError || !userData.user) {
       log('auth-stale-session', { error: userError?.message });
       suppressAuthRecovery = true;
