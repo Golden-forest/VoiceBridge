@@ -36,3 +36,9 @@ supabase/.temp/
 preview-*.png
 paddle-overlay-*.png
 paddle-checkout-*.png
+
+# 内部说明/设计/计划文档仅保留本地，不随仓库发布
+/CLAUDE.md
+/DESIGN-STYLE-PROMPT.md
+/PADDLE-PAYMENT-ARCHITECTURE-PROMPT.md
+/docs/
