@@ -17,7 +17,11 @@ const isCloudMode = config.voicebridgeMode === "cloud";
 let mode = "sign-in";
 
 export const supabase = createClient && config.supabaseUrl && config.supabaseAnonKey
-  ? createClient(config.supabaseUrl, config.supabaseAnonKey)
+  ? createClient(config.supabaseUrl, config.supabaseAnonKey, {
+    // 心跳默认 25s：跨境路径静默黑洞（server→client 单向断流，2026-09 实测）
+    // 要等 25-60s 才被心跳超时发现。压到 15s 把盲区缩到 15-45s。
+    realtime: { heartbeatIntervalMs: 15000 }
+  })
   : null;
 
 window.VoiceBridgeAuth = {

@@ -137,35 +137,31 @@ test("handleDesktopMessage does not type when the selected window cannot be acti
   assert.equal(result.ack.detail, "window closed");
 });
 
-test("startRealtimeAgent backs off across flaps instead of resetting to 1s on transient health", async () => {
+test("startRealtimeAgent lets phoenix heal CHANNEL_ERROR without rebuilding channels", async () => {
+  // 2026-09-27 重构回归：socket 级异常（CHANNEL_ERROR/TIMED_OUT，如跨境路径
+  // 静默黑洞导致的心跳超时）由 phoenix 自愈——不 purge 通道、不重建、不排
+  // 定时器。旧实现每次都全量重建，purge 的 leave() 又触发 CLOSED 排下一轮，
+  // 形成 70% 调度都是自我回声的风暴。
   const statuses = [];
-  let messageSubscribers = [];
-  let presenceSubscribers = [];
-  const channelStore = new Map();
+  let messageCb = null;
+  const createdTopics = [];
   const supabase = {
     channel(topic) {
-      if (!channelStore.has(topic)) {
-        channelStore.set(topic, {
-          topic,
-          removed: false,
-          on() { return this; },
-          async subscribe(callback) {
-            if (topic.endsWith("desktop-1")) messageSubscribers.push(callback);
-            if (topic.endsWith("presence")) presenceSubscribers.push(callback);
-            await callback?.("SUBSCRIBED");
-            return "ok";
-          },
-          async track() { return "ok"; },
-          async send() { return "ok"; },
-          async unsubscribe() { return "ok"; }
-        });
-      }
-      return channelStore.get(topic);
+      createdTopics.push(topic);
+      return {
+        topic,
+        on() { return this; },
+        async subscribe(callback) {
+          if (topic.endsWith("desktop-1")) messageCb = callback;
+          await callback?.("SUBSCRIBED");
+          return "ok";
+        },
+        async track() { return "ok"; },
+        async send() { return "ok"; },
+        async unsubscribe() { return "ok"; }
+      };
     },
-    async removeChannel(channel) {
-      channel.removed = true;
-      channelStore.delete(channel.topic);
-    }
+    async removeChannel() { return "ok"; }
   };
 
   const agent = await startRealtimeAgent({
@@ -177,52 +173,54 @@ test("startRealtimeAgent backs off across flaps instead of resetting to 1s on tr
   });
 
   try {
-    // 第一次断开：退避 1s
-    messageSubscribers.at(-1)("CLOSED");
-    assert.ok(statuses.some((s) => s === "reconnect:scheduled:message:CLOSED:1000ms"));
-
-    // 等 1s 退避结束、重建成功（瞬时 SUBSCRIBED 不应清零重连计数）
-    await new Promise((resolve) => setTimeout(resolve, 1200));
     assert.equal(agent.getHealth().online, true);
 
-    // 第二次断开：退避必须增长到 2s，而不是又回到 1s
-    messageSubscribers = messageSubscribers.filter((cb) => !channelStore.get("device:user-1:desktop-1")?.removed);
-    const latestMessageCb = messageSubscribers.at(-1);
-    latestMessageCb("CLOSED");
-    assert.ok(
-      statuses.some((s) => s === "reconnect:scheduled:message:CLOSED:2000ms"),
-      `expected 2000ms backoff, got: ${statuses.filter((s) => s.startsWith("reconnect:scheduled")).join(", ")}`
-    );
+    // socket 级异常：只降级显示，通道对象不动。
+    messageCb("CHANNEL_ERROR");
+    assert.equal(agent.getHealth().online, false);
+    assert.ok(statuses.includes("health:degraded"));
+
+    // phoenix 自动 rejoin：同一个回调再报 SUBSCRIBED，健康恢复。
+    messageCb("SUBSCRIBED");
+    assert.equal(agent.getHealth().online, true);
+    assert.ok(statuses.includes("health:online"));
+
+    // 没有任何重建发生：每个核心通道只创建过一次。
+    assert.equal(createdTopics.filter((topic) => topic === "device:user-1:desktop-1").length, 1);
+    assert.equal(createdTopics.filter((topic) => topic === "user:user-1:presence").length, 1);
+    assert.ok(!statuses.some((s) => s.startsWith("rebuild:")), `unexpected rebuilds: ${statuses.join(", ")}`);
   } finally {
     await agent.stop();
   }
 });
 
-test("startRealtimeAgent cancels pending reconnect when phoenix rejoins channels", async () => {
-  // 回归：通道 CLOSED 排了退避重连，但 phoenix 在定时器到期前就自动 rejoin
-  // 成功。挂起的定时器必须被取消——否则它会在 30s 后主动 purge 健康通道，
-  // 形成每 30s 一次的"上线→重连"死循环（2026-08 桌面端日志实测）。
+test("startRealtimeAgent rebuilds only the server-closed channel and ignores purge echoes", async () => {
+  // 服务端 phx_close（CLOSED）的通道 phoenix 永不 rejoin，必须重建；
+  // 但 purge 旧通道时 leave() 触发的 CLOSED 是回声，不得引发连锁重建。
   const statuses = [];
-  let messageCb = null;
-  let presenceCb = null;
+  let messageSubscribers = [];
+  let presenceSubscribers = [];
+  const createdTopics = [];
   const channelStore = new Map();
+  const makeChannel = (topic) => ({
+    topic,
+    removed: false,
+    on() { return this; },
+    async subscribe(callback) {
+      if (topic.endsWith("desktop-1")) messageSubscribers.push(callback);
+      if (topic.endsWith("presence")) presenceSubscribers.push(callback);
+      await callback?.("SUBSCRIBED");
+      return "ok";
+    },
+    async track() { return "ok"; },
+    async send() { return "ok"; },
+    async unsubscribe() { return "ok"; }
+  });
   const supabase = {
     channel(topic) {
-      if (!channelStore.has(topic)) {
-        channelStore.set(topic, {
-          topic,
-          removed: false,
-          on() { return this; },
-          async subscribe(callback) {
-            if (topic.endsWith("desktop-1")) messageCb = callback;
-            if (topic.endsWith("presence")) presenceCb = callback;
-            await callback?.("SUBSCRIBED");
-            return "ok";
-          },
-          async track() { return "ok"; },
-          async send() { return "ok"; },
-          async unsubscribe() { return "ok"; }
-        });
+      createdTopics.push(topic);
+      if (!channelStore.has(topic) || channelStore.get(topic).removed) {
+        channelStore.set(topic, makeChannel(topic));
       }
       return channelStore.get(topic);
     },
@@ -241,23 +239,88 @@ test("startRealtimeAgent cancels pending reconnect when phoenix rejoins channels
   });
 
   try {
-    // 真实断开：排 1s 退避重连。
-    messageCb("CLOSED");
-    assert.ok(statuses.some((s) => s === "reconnect:scheduled:message:CLOSED:1000ms"));
-
-    // phoenix 在退避到期前自动 rejoin 成功（不经过我们的 reconnect()）。
-    messageCb("SUBSCRIBED");
-    presenceCb("SUBSCRIBED");
     assert.equal(agent.getHealth().online, true);
 
-    // 等待远超 1s 退避：挂起的定时器必须已被取消，不得 purge 健康通道。
-    await new Promise((resolve) => setTimeout(resolve, 1300));
-    const scheduledAfterRecovery = statuses
-      .filter((s) => s.startsWith("reconnect:scheduled"))
-      .length;
-    assert.equal(scheduledAfterRecovery, 1, `unexpected extra reconnects: ${statuses.join(", ")}`);
+    // 服务端关闭 message 通道。
+    messageSubscribers.at(-1)("CLOSED");
+    await waitForAgent(() => createdTopics.filter((topic) => topic === "device:user-1:desktop-1").length === 2);
+
+    // 只有 message 通道被重建；presence 通道原封不动。
+    assert.equal(createdTopics.filter((topic) => topic === "user:user-1:presence").length, 1);
     assert.equal(agent.getHealth().online, true);
-    assert.ok(!channelStore.get("device:user-1:desktop-1")?.removed);
+
+    // 旧通道的 purge 回声（迟到的 CLOSED）不会再触发重建。
+    const staleCallback = messageSubscribers[0];
+    staleCallback("CLOSED");
+    await new Promise((resolve) => setTimeout(resolve, REBUILD_ECHO_WAIT_MS));
+    assert.equal(createdTopics.filter((topic) => topic === "device:user-1:desktop-1").length, 2);
+  } finally {
+    await agent.stop();
+  }
+});
+
+test("startRealtimeAgent watchdog rebuilds everything when healing stalls", async () => {
+  // 看门狗兜底：message 通道连续不健康超过阈值（phoenix 自愈应远早于此），
+  // 全量重建一次。节奏慢到不可能自我维持。
+  const statuses = [];
+  let messageCb = null;
+  const createdTopics = [];
+  const channelStore = new Map();
+  const makeChannel = (topic) => ({
+    topic,
+    removed: false,
+    on() { return this; },
+    async subscribe(callback) {
+      // 看门狗场景：message 通道第一次订阅成功，重建后的订阅永远失败。
+      if (topic.endsWith("desktop-1")) {
+        messageCb = callback;
+        if (createdTopics.filter((t) => t === topic).length === 1) {
+          await callback?.("SUBSCRIBED");
+        } else {
+          await callback?.("CHANNEL_ERROR");
+        }
+      } else {
+        await callback?.("SUBSCRIBED");
+      }
+      return "ok";
+    },
+    async track() { return "ok"; },
+    async send() { return "ok"; },
+    async unsubscribe() { return "ok"; }
+  });
+  const supabase = {
+    channel(topic) {
+      createdTopics.push(topic);
+      if (!channelStore.has(topic) || channelStore.get(topic).removed) {
+        channelStore.set(topic, makeChannel(topic));
+      }
+      return channelStore.get(topic);
+    },
+    async removeChannel(channel) {
+      channel.removed = true;
+      channelStore.delete(channel.topic);
+    }
+  };
+
+  const agent = await startRealtimeAgent({
+    supabase,
+    userId: "user-1",
+    device: { id: "desktop-1", name: "Desk", platform: "darwin" },
+    listWindows: async () => [],
+    watchdogIntervalMs: 5,
+    watchdogUnhealthyMs: 15,
+    onStatus: (status) => statuses.push(status)
+  });
+
+  try {
+    assert.equal(agent.getHealth().online, true);
+    // 模拟 phoenix 自愈卡死：通道异常后再无 SUBSCRIBED。
+    messageCb("CHANNEL_ERROR");
+    await waitForAgent(() => statuses.some((s) => s.startsWith("rebuild:full:watchdog")));
+    assert.equal(agent.getHealth().online, false);
+    // 全量重建确实重建了核心通道。
+    assert.ok(createdTopics.filter((topic) => topic === "device:user-1:desktop-1").length >= 2);
+    assert.ok(createdTopics.filter((topic) => topic === "user:user-1:presence").length >= 2);
   } finally {
     await agent.stop();
   }
@@ -519,9 +582,7 @@ test("startRealtimeAgent includes lanEndpoints in presence and updates them via 
 test("startRealtimeAgent rebuilds channels when CLOSED arrives and recovers health", async () => {
   const createdTopics = [];
   const statuses = [];
-  let closedOnce = false;
   let messageSubscribers = [];
-  let presenceSubscribers = [];
   const channelStore = new Map();
 
   const makeChannel = (topic) => ({
@@ -530,7 +591,6 @@ test("startRealtimeAgent rebuilds channels when CLOSED arrives and recovers heal
     on() { return this; },
     async subscribe(callback) {
       if (topic.endsWith("desktop-1")) messageSubscribers.push(callback);
-      if (topic.endsWith("presence")) presenceSubscribers.push(callback);
       await callback?.("SUBSCRIBED");
       return "ok";
     },
@@ -564,24 +624,28 @@ test("startRealtimeAgent rebuilds channels when CLOSED arrives and recovers heal
 
   assert.equal(agent.getHealth().online, true);
 
-  // 模拟服务端 close 主通道：旧实现里这会永久死亡。
-  const originalMessageSubscribers = [...messageSubscribers];
-  originalMessageSubscribers.at(-1)("CLOSED");
-  assert.equal(agent.getHealth().online, false);
-  assert.ok(statuses.some((s) => s.startsWith("reconnect:scheduled")));
+  // 服务端 close 主通道：CLOSED 状态 phoenix 永不 rejoin，必须重建。
+  messageSubscribers.at(-1)("CLOSED");
+  await waitForAgent(() => createdTopics.filter((topic) => topic === "device:user-1:desktop-1").length === 2);
 
-  // 退避 1s 后重建——测试里直接等待重建完成。
-  await new Promise((resolve) => setTimeout(resolve, 1300));
-
-  assert.equal(agent.getHealth().online, true, "watchdog should have rebuilt and recovered");
-  assert.ok(statuses.includes("reconnect:recovered"));
+  assert.equal(agent.getHealth().online, true, "rebuild should have recovered health");
   assert.ok(
     createdTopics.filter((topic) => topic === "device:user-1:desktop-1").length >= 2,
     "message channel must be recreated after close"
   );
-  closedOnce = true;
-  assert.ok(closedOnce);
 
   await agent.stop();
   assert.equal(agent.getHealth().online, false);
 });
+
+const REBUILD_ECHO_WAIT_MS = 60;
+
+async function waitForAgent(predicate, timeoutMs = 2000) {
+  const startedAt = Date.now();
+  while (!predicate()) {
+    if (Date.now() - startedAt > timeoutMs) {
+      throw new Error("Timed out waiting for condition");
+    }
+    await new Promise((resolve) => setTimeout(resolve, 5));
+  }
+}

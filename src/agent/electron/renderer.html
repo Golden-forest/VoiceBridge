@@ -362,22 +362,13 @@
       window.voicebridge?.lanState().then(renderLanState).catch(() => {});
       window.voicebridge?.onAgentStatus((status) => {
         const text = String(status);
-        // ack 通道是按需创建、 routinely 重建的（预热超时、重连清理），
-        // 它的 CLOSED/TIMED_OUT 不代表云链路状态；health 只由 message +
-        // presence 双通道定义。显示它会把状态卡死在"断线"。
-        if (text.startsWith('ack:')) return;
-        // 只有双通道健康才显示在线；通道异常立即降级，不再"见过一次
-        // SUBSCRIBED 就永远显示已上线"。
+        // 2026-09-27 云端断联重构：连接健康只由 message 通道（真正收命令的
+        // 传输）定义。presence 波动、ack 通道按需重建都不再拉低状态栏；
+        // phoenix 自动 rejoin，恢复后 health:online 会纠正显示。
         if (text === 'health:online') {
           setStatus('已上线');
-        } else if (text === 'health:degraded' || text.includes('CHANNEL_ERROR') || text.includes('CLOSED')) {
+        } else if (text === 'health:degraded') {
           setStatus('连接中断，正在重连…');
-        } else if (text.startsWith('reconnect:scheduled')) {
-          // 只有真正排了重连才显示断线。reconnect:stable（持续在线 30s，
-          // 退避清零）是正面事件，reconnect:recovered 后必跟 health:online。
-          setStatus('连接中断，正在重连…');
-        } else if (text === 'reconnect:stable') {
-          setStatus('已上线');
         } else if (text.startsWith('auth-')) {
           setStatus('登录状态恢复中…');
         }

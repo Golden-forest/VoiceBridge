@@ -586,7 +586,7 @@ test("CloudRealtime stop prevents delayed start callbacks from tracking presence
   assert.equal(tracked, false);
 });
 
-test("CloudRealtime stop cancels stale subscription timeout without status mutation", async () => {
+test("CloudRealtime stop silences never-subscribing channels without status mutation", async () => {
   const statuses = [];
   const supabase = {
     channel() {
@@ -623,7 +623,10 @@ test("CloudRealtime stop cancels stale subscription timeout without status mutat
   assert.deepEqual(statuses, []);
 });
 
-test("CloudRealtime rebuilds core channels after a subscribed channel closes", async () => {
+test("CloudRealtime rebuilds only the server-closed core channel", async () => {
+  // 2026-09-27 重构回归：服务端 phx_close（CLOSED）只重建被关的那一个通道；
+  // 健康的 ack 通道不被连带拆掉（旧实现全量 teardown，把 presence 波动放大
+  // 成整个云传输不可用）。
   const callbacks = new Map();
   const createdTopics = [];
   const supabase = {
@@ -659,7 +662,6 @@ test("CloudRealtime rebuilds core channels after a subscribed channel closes", a
     supabase,
     user: { id: "user-1" },
     phoneDeviceId: "phone-1",
-    reconnectBackoffMs: [1],
     onDevices: () => {},
     onAck: () => {},
     onStatus: () => {}
@@ -671,23 +673,28 @@ test("CloudRealtime rebuilds core channels after a subscribed channel closes", a
   await firstPresenceCallback("CLOSED");
   await waitFor(() => createdTopics.filter((topic) => topic === "user:user-1:presence").length === 2);
 
-  assert.equal(createdTopics.filter((topic) => topic === "device:user-1:phone-1").length, 2);
+  // presence 重建了，ack 通道从未被拆除。
+  assert.equal(createdTopics.filter((topic) => topic === "device:user-1:phone-1").length, 1);
   await realtime.stop();
 });
 
-test("CloudRealtime keeps retrying when the first connection attempt fails", async () => {
-  let ackAttempts = 0;
+test("CloudRealtime relies on phoenix rejoin instead of tearing down on CHANNEL_ERROR", async () => {
+  // CHANNEL_ERROR/TIMED_OUT 是 socket 级异常：realtime-js 自动重连 + rejoin。
+  // 我们不拆通道、不重试，恢复由同一个通道对象的 SUBSCRIBED 回调上报。
   const statuses = [];
+  const createdTopics = [];
+  let ackCallback = null;
   const supabase = {
     channel(topic) {
+      createdTopics.push(topic);
       return {
         on() {
           return this;
         },
         async subscribe(callback) {
           if (topic === "device:user-1:phone-1") {
-            ackAttempts += 1;
-            await callback?.(ackAttempts === 1 ? "CHANNEL_ERROR" : "SUBSCRIBED");
+            ackCallback = callback;
+            await callback?.("CHANNEL_ERROR");
           } else {
             await callback?.("SUBSCRIBED");
           }
@@ -713,16 +720,18 @@ test("CloudRealtime keeps retrying when the first connection attempt fails", asy
     supabase,
     user: { id: "user-1" },
     phoneDeviceId: "phone-1",
-    reconnectBackoffMs: [1],
     onDevices: () => {},
     onAck: () => {},
     onStatus: (status) => statuses.push(status)
   });
 
   await realtime.start();
-  await waitFor(() => ackAttempts === 2);
-
   assert.equal(statuses.includes("ack:CHANNEL_ERROR"), true);
+  // 通道未被拆除（无 rebuild、无新建）。
+  assert.equal(createdTopics.filter((topic) => topic === "device:user-1:phone-1").length, 1);
+
+  // phoenix 在同一通道对象上 rejoin 成功 → 补报 SUBSCRIBED。
+  await ackCallback("SUBSCRIBED");
   assert.equal(statuses.includes("SUBSCRIBED"), true);
   await realtime.stop();
 });

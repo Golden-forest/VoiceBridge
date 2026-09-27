@@ -8,6 +8,18 @@ import {
   ALLOWED_KEYS
 } from "./shared/protocol.js";
 
+// 连接恢复模型（2026-09-27 重构，根因见 docs/agent-work/cloud-disconnect/）：
+// 1. phoenix 自愈优先 —— CHANNEL_ERROR/TIMED_OUT（socket 级异常，如跨境路径
+//    静默黑洞）由 realtime-js 自动重连 + rejoin，我们只上报状态、绝不拆通道。
+//    旧实现任一核心通道 fatal 就全量 teardown（含健康的发送通道），把一次
+//    presence 波动放大成"整个云传输不可用"。
+// 2. 只有服务端 phx_close（CLOSED，phoenix 永不 rejoin）才重建该通道，
+//    且只重建被关的那一个。
+// 3. 回声护栏 —— 重建前先把引用置空，旧通道的回调因身份不匹配立即失活，
+//    purge 触发的 CLOSED 不会引发连锁反应。
+// 4. stop()/reconnectNow()（用户驱动：退出登录、切前台）才做全量重建。
+const REBUILD_MIN_INTERVAL_MS = 5000;
+
 export class CloudRealtime {
   constructor({
     supabase,
@@ -17,8 +29,7 @@ export class CloudRealtime {
     onAck,
     onStatus,
     ackTimeoutMs = 10000,
-    subscribeTimeoutMs = 10000,
-    reconnectBackoffMs = [1000, 2000, 5000, 10000, 30000]
+    subscribeTimeoutMs = 10000
   }) {
     this.supabase = supabase;
     this.user = user;
@@ -32,50 +43,77 @@ export class CloudRealtime {
     this.ackChannel = null;
     this.targetChannels = new Map();
     this.pendingRequests = new Map();
-    this.pendingSubscriptions = new Set();
-    this.startGeneration = 0;
-    this.reconnectBackoffMs = reconnectBackoffMs;
-    this.reconnectAttempt = 0;
-    this.reconnectTimer = null;
-    this.healthResetTimer = null;
+    this.presenceSubscribed = false;
+    this.ackSubscribed = false;
     this.stopped = true;
+    this.lastCoreRebuildAt = { presence: 0, ack: 0 };
   }
 
   async start() {
     await this.stop();
     this.stopped = false;
-    this.reconnectAttempt = 0;
-    const generation = this.startGeneration;
-    try {
-      await this.connectCoreChannels(generation);
-    } catch (error) {
-      if (!this.stopped) {
-        this.onStatus(`reconnect:${error instanceof Error ? error.message : String(error)}`);
-        this.scheduleReconnect(this.startGeneration);
-      }
+    // 不等待订阅结果、不抛错：瞬时失败由 phoenix 自动重试，恢复后状态回调
+    // 会补报 SUBSCRIBED。把启动期超时当致命错误会误杀整个云端会话。
+    await this.buildPresenceChannel();
+    await this.buildAckChannel();
+  }
+
+  reportCoreStatus() {
+    if (this.presenceSubscribed && this.ackSubscribed) {
+      this.onStatus("SUBSCRIBED");
     }
   }
 
-  async connectCoreChannels(lifecycleGeneration) {
-    if (this.stopped || lifecycleGeneration !== this.startGeneration) return;
-    const generation = ++this.startGeneration;
-    clearTimeout(this.healthResetTimer);
-    this.healthResetTimer = null;
-    for (const subscription of [...this.pendingSubscriptions]) {
-      subscription.cancel();
-    }
-    await this.removeActiveChannels();
-    if (this.stopped || generation !== this.startGeneration) return;
-    this.presence = this.supabase.channel(presenceChannel(this.user.id), {
+  async buildPresenceChannel() {
+    const presence = this.supabase.channel(presenceChannel(this.user.id), {
       config: { private: true }
     });
-    this.ackChannel = this.supabase.channel(deviceChannel(this.user.id, this.phoneDeviceId), {
+    this.presence = presence;
+    presence.on("presence", { event: "sync" }, () => {
+      if (this.stopped || presence !== this.presence) return;
+      const state = presence.presenceState();
+      const devices = Object.values(state).flat().filter((entry) => entry.deviceId);
+      this.onDevices(devices);
+      // 预热：为桌面设备预订阅目标通道，避免首次发送时冷启动延迟
+      for (const device of devices) {
+        if (device.deviceId && device.deviceId !== this.phoneDeviceId && device.platform !== "web") {
+          this.warmupTargetChannel(device.deviceId);
+        }
+      }
+    });
+    await presence.subscribe(async (status) => {
+      if (this.stopped || presence !== this.presence) return;
+      this.onStatus(`presence:${status}`);
+      if (status === "SUBSCRIBED") {
+        this.presenceSubscribed = true;
+        this.reportCoreStatus();
+        await presence.track({
+          deviceId: this.phoneDeviceId,
+          name: "Phone",
+          platform: "web",
+          runtimePlatform: navigator.platform || "web",
+          protocolVersion: PROTOCOL_VERSION,
+          status: "online"
+        });
+      } else if (status === "CLOSED") {
+        // 服务端 phx_close：closed 通道 phoenix 永不 rejoin，重建它。
+        this.presenceSubscribed = false;
+        void this.rebuildCoreChannel("presence");
+      } else {
+        // CHANNEL_ERROR / TIMED_OUT：phoenix 自动 rejoin，恢复后会再报
+        // SUBSCRIBED。presence 波动不影响发送通道。
+        this.presenceSubscribed = false;
+      }
+    });
+  }
+
+  async buildAckChannel() {
+    const ackChannel = this.supabase.channel(deviceChannel(this.user.id, this.phoneDeviceId), {
       config: { private: true }
     });
-    const presence = this.presence;
-    const ackChannel = this.ackChannel;
-    this.ackChannel.on("broadcast", { event: "ack" }, ({ payload }) => {
-      if (!this.isActiveGeneration(generation)) return;
+    this.ackChannel = ackChannel;
+    ackChannel.on("broadcast", { event: "ack" }, ({ payload }) => {
+      if (this.stopped || ackChannel !== this.ackChannel) return;
       if (isAckMessage(payload, this.phoneDeviceId) && this.pendingRequests.has(payload.request_id)) {
         try {
           this.onAck(payload);
@@ -89,79 +127,73 @@ export class CloudRealtime {
         }
       }
     });
-    this.presence.on("presence", { event: "sync" }, () => {
-      if (!this.isActiveGeneration(generation)) return;
-      const state = presence.presenceState();
-      const devices = Object.values(state).flat().filter((entry) => entry.deviceId);
-      this.onDevices(devices);
-      // 预热：为桌面设备预订阅目标通道，避免首次发送时冷启动延迟
-      for (const device of devices) {
-        if (device.deviceId && device.deviceId !== this.phoneDeviceId && device.platform !== "web") {
-          this.warmupTargetChannel(device.deviceId);
-        }
+    await ackChannel.subscribe((status) => {
+      if (this.stopped || ackChannel !== this.ackChannel) return;
+      this.onStatus(`ack:${status}`);
+      if (status === "SUBSCRIBED") {
+        this.ackSubscribed = true;
+        this.reportCoreStatus();
+      } else if (status === "CLOSED") {
+        this.ackSubscribed = false;
+        void this.rebuildCoreChannel("ack");
+      } else {
+        this.ackSubscribed = false;
       }
     });
-    const subscriptions = [
-      this.subscribeChannel(ackChannel, "ack", null, generation),
-      this.subscribeChannel(presence, "presence", async (status) => {
-      if (!this.isActiveGeneration(generation)) return;
-      if (status === "SUBSCRIBED") {
-        await presence.track({
-          deviceId: this.phoneDeviceId,
-          name: "Phone",
-          platform: "web",
-          runtimePlatform: navigator.platform || "web",
-          protocolVersion: PROTOCOL_VERSION,
-          status: "online"
-        });
-      }
-      }, generation)
-    ];
-    try {
-      await Promise.all(subscriptions);
-      if (!this.isActiveGeneration(generation)) return;
-      this.onStatus("SUBSCRIBED");
-      this.healthResetTimer = setTimeout(() => {
-        this.healthResetTimer = null;
-        if (this.isActiveGeneration(generation)) this.reconnectAttempt = 0;
-      }, 30000);
-      this.healthResetTimer.unref?.();
-    } catch (error) {
-      await Promise.allSettled(subscriptions);
-      throw error;
-    }
   }
 
-  scheduleReconnect(generation = this.startGeneration) {
-    if (this.stopped || this.reconnectTimer || generation !== this.startGeneration) return;
-    const delay = this.reconnectBackoffMs[
-      Math.min(this.reconnectAttempt, this.reconnectBackoffMs.length - 1)
-    ] ?? 1000;
-    this.reconnectAttempt += 1;
-    this.reconnectTimer = setTimeout(() => {
-      this.reconnectTimer = null;
-      if (this.stopped || generation !== this.startGeneration) return;
-      void this.connectCoreChannels(generation).catch((error) => {
-        if (this.stopped) return;
-        this.onStatus(`reconnect:${error instanceof Error ? error.message : String(error)}`);
-        this.scheduleReconnect(this.startGeneration);
-      });
-    }, delay);
-    this.reconnectTimer.unref?.();
+  async rebuildCoreChannel(kind) {
+    if (this.stopped) return;
+    if (Date.now() - this.lastCoreRebuildAt[kind] < REBUILD_MIN_INTERVAL_MS) return;
+    this.lastCoreRebuildAt[kind] = Date.now();
+    // 先置空引用再 purge：旧通道的回声（leave 触发的 CLOSED）全部失活。
+    const old = kind === "presence" ? this.presence : this.ackChannel;
+    if (kind === "presence") this.presence = null;
+    else this.ackChannel = null;
+    this.onStatus(`rebuild:${kind}:server-closed`);
+    await this.purgeChannel(old);
+    if (this.stopped) return;
+    await (kind === "presence" ? this.buildPresenceChannel() : this.buildAckChannel());
+  }
+
+  async purgeChannel(channel) {
+    if (!channel) return;
+    try {
+      await channel.unsubscribe?.();
+    } catch {
+      // Channel already dead.
+    }
+    try {
+      await this.supabase.removeChannel?.(channel);
+    } catch {
+      // removeChannel unavailable or already removed.
+    }
   }
 
   reconnectNow() {
     if (this.stopped) return;
-    clearTimeout(this.reconnectTimer);
-    this.reconnectTimer = null;
-    clearTimeout(this.healthResetTimer);
-    this.healthResetTimer = null;
-    const generation = this.startGeneration;
-    void this.connectCoreChannels(generation).catch((error) => {
-      if (this.stopped) return;
-      this.onStatus(`reconnect:${error instanceof Error ? error.message : String(error)}`);
-      this.scheduleReconnect(this.startGeneration);
-    });
+    void this.rebuildAllChannels("reconnect-now");
+  }
+
+  async rebuildAllChannels(reason) {
+    if (this.stopped) return;
+    this.onStatus(`rebuild:all:${reason}`);
+    const oldPresence = this.presence;
+    const oldAck = this.ackChannel;
+    const oldTargets = [...this.targetChannels.values()];
+    this.presence = null;
+    this.ackChannel = null;
+    this.targetChannels.clear();
+    this.presenceSubscribed = false;
+    this.ackSubscribed = false;
+    await Promise.all([
+      this.purgeChannel(oldPresence),
+      this.purgeChannel(oldAck),
+      ...oldTargets.map((channel) => this.purgeChannel(channel))
+    ]);
+    if (this.stopped) return;
+    await this.buildPresenceChannel();
+    await this.buildAckChannel();
   }
 
   async sendText({ targetDeviceId, text, autoPaste, targetWindowId }) {
@@ -259,73 +291,55 @@ export class CloudRealtime {
       return channel;
     } catch (error) {
       this.targetChannels.delete(targetDeviceId);
-      try {
-        await channel.unsubscribe?.();
-      } finally {
-        await this.supabase.removeChannel?.(channel);
-      }
+      await this.purgeChannel(channel);
       throw error;
     }
   }
 
-  subscribeChannel(channel, label, onStatus, generation = this.startGeneration) {
+  subscribeChannel(channel, label) {
     return new Promise((resolve, reject) => {
-      const subscription = {
-        label,
-        settled: false,
-        timer: null,
-        cancel: null
-      };
-      const settle = (fn, value) => {
-        if (subscription.settled) return;
-        subscription.settled = true;
-        clearTimeout(subscription.timer);
-        this.pendingSubscriptions.delete(subscription);
-        fn(value);
-      };
-      subscription.cancel = () => {
-        settle(reject, new Error(`${label} 订阅已取消`));
-      };
-      subscription.timer = setTimeout(() => {
-        if (!this.isActiveGeneration(generation)) {
-          settle(reject, new Error(`${label} 订阅已取消`));
-          return;
-        }
+      const timer = setTimeout(() => {
         this.onStatus(`${label}:TIMED_OUT`);
-        settle(reject, new Error(`${label} 订阅超时`));
+        reject(new Error(`${label} 订阅超时`));
       }, this.subscribeTimeoutMs);
-      this.pendingSubscriptions.add(subscription);
 
       let subscribeResult;
       try {
-        subscribeResult = channel.subscribe(async (status) => {
-          if (!this.isActiveGeneration(generation)) return;
-          await onStatus?.(status);
+        subscribeResult = channel.subscribe((status) => {
           if (status === "SUBSCRIBED") {
-            settle(resolve);
+            clearTimeout(timer);
+            resolve();
             return;
           }
           if (["CHANNEL_ERROR", "TIMED_OUT", "CLOSED"].includes(status)) {
+            clearTimeout(timer);
             this.onStatus(`${label}:${status}`);
-            settle(reject, new Error(`${label} 订阅失败：${status}`));
-            if ((label === "ack" || label === "presence") && this.isActiveGeneration(generation)) {
-              this.scheduleReconnect(generation);
-            }
+            reject(new Error(`${label} 订阅失败：${status}`));
           }
         });
       } catch (error) {
-        settle(reject, error);
+        clearTimeout(timer);
+        reject(error);
         return;
       }
 
       if (subscribeResult?.then) {
         subscribeResult.then((status) => {
-          if (status === "ok") settle(resolve);
-          else if (typeof status === "string") settle(reject, new Error(`${label} 订阅失败：${status}`));
-        }).catch((error) => settle(reject, error));
+          if (status === "ok") {
+            clearTimeout(timer);
+            resolve();
+          } else if (typeof status === "string") {
+            clearTimeout(timer);
+            reject(new Error(`${label} 订阅失败：${status}`));
+          }
+        }).catch((error) => {
+          clearTimeout(timer);
+          reject(error);
+        });
       } else if (typeof subscribeResult === "string") {
-        if (subscribeResult === "ok") settle(resolve);
-        else settle(reject, new Error(`${label} 订阅失败：${subscribeResult}`));
+        clearTimeout(timer);
+        if (subscribeResult === "ok") resolve();
+        else reject(new Error(`${label} 订阅失败：${subscribeResult}`));
       }
     });
   }
@@ -387,41 +401,23 @@ export class CloudRealtime {
     this.pendingRequests.delete(requestId);
   }
 
-  isActiveGeneration(generation) {
-    return generation === this.startGeneration && Boolean(this.presence && this.ackChannel);
-  }
-
   async stop() {
-    this.startGeneration++;
     this.stopped = true;
-    clearTimeout(this.reconnectTimer);
-    this.reconnectTimer = null;
-    for (const subscription of [...this.pendingSubscriptions]) {
-      subscription.cancel();
-    }
-    await this.removeActiveChannels();
-    for (const requestId of this.pendingRequests.keys()) {
-      this.cancelPendingRequest(requestId);
-    }
-  }
-
-  async removeActiveChannels() {
     const channels = [
       this.presence,
       this.ackChannel,
       ...this.targetChannels.values()
     ].filter(Boolean);
 
-    await Promise.all(channels.map(async (channel) => {
-      try {
-        await channel.unsubscribe?.();
-      } finally {
-        await this.supabase.removeChannel?.(channel);
-      }
-    }));
     this.presence = null;
     this.ackChannel = null;
     this.targetChannels.clear();
+    this.presenceSubscribed = false;
+    this.ackSubscribed = false;
+    await Promise.all(channels.map((channel) => this.purgeChannel(channel)));
+    for (const requestId of [...this.pendingRequests.keys()]) {
+      this.cancelPendingRequest(requestId);
+    }
   }
 }
 

@@ -700,13 +700,17 @@ async function handleAuthState(event) {
     },
     onStatus: (status) => {
       const text = String(status);
-      // ack:* 是单次请求的超时/错误，不代表云端连接状态。
-      if (text.startsWith("ack:")) return;
+      // 设备发现频道（presence）波动不影响文字发送：phoenix 自动 rejoin，
+      // UI 不降级（2026-09-27 云端断联重构）。
+      if (text.startsWith("presence:") || text.startsWith("rebuild:")) return;
+      // ack:<requestId>:* 是单次请求的超时/错误；只有 ack 通道本身的状态
+      // （ack:CHANNEL_ERROR 等无 UUID 段）才代表云传输降级。
+      if (text.startsWith("ack:") && !/^ack:(SUBSCRIBED|CHANNEL_ERROR|TIMED_OUT|CLOSED)$/.test(text)) return;
       if (text === "SUBSCRIBED") {
         cloudRealtimeSubscribed = true;
         syncCloudConnectionStatus();
       } else if (/CLOSED|CHANNEL_ERROR|TIMED_OUT/.test(text)) {
-        // 通道异常立即降级显示；realtime-js 内部会自动 rejoin，
+        // ack/设备通道异常才降级显示；realtime-js 内部会自动 rejoin，
         // 恢复后会再次收到 SUBSCRIBED 纠正回 connected。
         cloudRealtimeSubscribed = false;
         if (!isNativeLanActive()) setConnectionStatus("error", t('connection.reconnecting'));

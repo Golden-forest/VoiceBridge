@@ -115,6 +115,10 @@ export async function handleDesktopMessage({
   }
 }
 
+// 心跳默认 25s：跨境路径静默黑洞（server→client 单向断流，2026-09 实测）要等
+// 25-60s 才被 phoenix 心跳超时发现。压到 15s 把盲区缩到 15-45s。
+const HEARTBEAT_INTERVAL_MS = 15000;
+
 export function createAgentClient({ supabaseUrl, supabaseAnonKey, storage }) {
   return createClient(supabaseUrl, supabaseAnonKey, {
     auth: {
@@ -122,19 +126,29 @@ export function createAgentClient({ supabaseUrl, supabaseAnonKey, storage }) {
       persistSession: true,
       autoRefreshToken: true,
       detectSessionInUrl: false
+    },
+    realtime: {
+      heartbeatIntervalMs: HEARTBEAT_INTERVAL_MS
     }
   });
 }
 
-// realtime-js 的 channel 一旦进入 CLOSED 状态永不 rejoin；errored 状态下
-// subscribe() 是 no-op 且 supabase.channel(topic) 会返回缓存里的死对象。
-// 所以通道死亡时必须 removeChannel 后整体重建，否则桌面端"掉线直到重启"。
-const RECONNECT_BACKOFF_MS = [1000, 2000, 5000, 10000, 30000];
-const FATAL_CHANNEL_STATUSES = ["CHANNEL_ERROR", "CLOSED"];
-// 重连计数只有在持续在线这么久后才清零。瞬时 SUBSCRIBED 就清零会把退避
-// 永远打回 1s：一旦服务端因 join 频率超限开始断连，"重连→订阅成功→又被
-// 断开"的循环就自我维持，永远以 1 秒间隔重打服务器（2026-08 桌面端死循环）。
-const HEALTH_RESET_MS = 30000;
+// 连接恢复模型（2026-09-27 重构，根因见 docs/agent-work/cloud-disconnect/）：
+// 1. phoenix 自愈优先 —— socket 断开由 realtime-js 的 reconnectTimer 自动重连、
+//    errored 通道在 connOpen 后自动 rejoin，我们什么都不做。旧实现里每次
+//    CHANNEL_ERROR 都 purge 全部通道再重建，而 purge 的 leave() 又会触发 CLOSED
+//    回调排下一轮重连，形成自我维持的风暴（9/26 日志：209 次真实掉线被放大成
+//    708 次重连调度，70% 是自己制造）。
+// 2. 只有两件事需要人工干预：
+//    a) 服务端 phx_close（CLOSED 状态）——phoenix 的 closed 通道永不 rejoin，
+//       必须	removeChannel 后重建该通道；
+//    b) 看门狗 —— message 通道连续 watchdogUnhealthyMs 不健康，说明 phoenix
+//       自愈卡死（如 socket 卡在假在线），做一次全量重建兜底。
+// 3. 回声护栏 —— 重建前先把引用置空，旧通道的所有回调因身份不匹配立即失活，
+//    purge 触发的 CLOSED 不会再引发任何动作。
+const REBUILD_MIN_INTERVAL_MS = 5000;
+const WATCHDOG_INTERVAL_MS = 30000;
+const WATCHDOG_UNHEALTHY_MS = 150000;
 
 export async function startRealtimeAgent({
   supabase,
@@ -146,26 +160,23 @@ export async function startRealtimeAgent({
   windowRefreshMs = 5000,
   appVersion,
   listWindows = listCloudWindows,
-  lanEndpoints = []
+  lanEndpoints = [],
+  watchdogIntervalMs = WATCHDOG_INTERVAL_MS,
+  watchdogUnhealthyMs = WATCHDOG_UNHEALTHY_MS
 }) {
   const ackChannels = new Map();
-  let messageChannel = supabase.channel(deviceChannel(userId, device.id), {
-    config: { private: true }
-  });
-  let presence = supabase.channel(presenceChannel(userId), {
-    config: { private: true }
-  });
+  let messageChannel = null;
+  let presence = null;
   let presenceTimer = null;
+  let watchdogTimer = null;
   let stopped = false;
-  let reconnectTimer = null;
-  let reconnectAttempt = 0;
-  let healthResetTimer = null;
-  let reconnectGeneration = 0;
+  let rebuilding = false;
   let messageHealthy = false;
-  let presenceHealthy = false;
+  let lastHealthyAt = Date.now();
   let includeWindowTitles = Boolean(reportWindowTitles);
   let currentLanEndpoints = normalizeLanEndpoints(lanEndpoints);
   let lastWindowsJson = "";
+  const lastRebuildAt = { message: 0, presence: 0 };
 
   const purgeChannel = async (channel) => {
     try {
@@ -180,81 +191,19 @@ export async function startRealtimeAgent({
     }
   };
 
-  const scheduleReconnect = (reason) => {
+  const noteHealth = () => {
     if (stopped) return;
-    if (reconnectTimer) return;
-    const generation = ++reconnectGeneration;
-    const delay = RECONNECT_BACKOFF_MS[Math.min(reconnectAttempt, RECONNECT_BACKOFF_MS.length - 1)];
-    reconnectAttempt += 1;
-    onStatus(`reconnect:scheduled:${reason}:${delay}ms`);
-    reconnectTimer = setTimeout(() => {
-      reconnectTimer = null;
-      void reconnect(generation);
-    }, delay);
-  };
-
-  const reconnect = async (generation) => {
-    if (stopped || generation !== reconnectGeneration) return;
-    messageHealthy = false;
-    presenceHealthy = false;
-    clearTimeout(presenceTimer);
-    presenceTimer = null;
-    await Promise.all([...ackChannels.keys()].map((targetId) => {
-      const entry = ackChannels.get(targetId);
-      ackChannels.delete(targetId);
-      return purgeChannel(entry?.channel);
-    }));
-    await purgeChannel(messageChannel);
-    await purgeChannel(presence);
-    messageChannel = supabase.channel(deviceChannel(userId, device.id), {
-      config: { private: true }
-    });
-    presence = supabase.channel(presenceChannel(userId), {
-      config: { private: true }
-    });
-    bindCoreChannels();
-    await subscribeCoreChannels();
-  };
-
-  const clearHealthResetTimer = () => {
-    clearTimeout(healthResetTimer);
-    healthResetTimer = null;
-  };
-
-  const noteChannelHealth = () => {
-    if (messageHealthy && presenceHealthy) {
-      // 双通道恢复健康时，挂起的重连定时器已无意义——通道是 phoenix 自动
-      // rejoin 修好的。留着它会在 30s 后主动 purge 掉健康通道，purge 又触发
-      // CLOSED → 再排下一个定时器，形成每 30s 一次的"已上线→重连"死循环
-      //（2026-08 桌面端日志实测）。取消定时器并作废代次，让迟到的回调 no-op。
-      if (reconnectTimer) {
-        clearTimeout(reconnectTimer);
-        reconnectTimer = null;
-        reconnectGeneration += 1;
-      }
-      if (reconnectAttempt > 0) {
-        onStatus("reconnect:recovered");
-        // 不立刻清零 reconnectAttempt；持续在线 HEALTH_RESET_MS 后才恢复
-        // 最短退避，避免瞬时恢复把下次断开又拉回 1s 间隔。
-        if (!healthResetTimer) {
-          healthResetTimer = setTimeout(() => {
-            healthResetTimer = null;
-            if (stopped) return;
-            if (messageHealthy && presenceHealthy) {
-              reconnectAttempt = 0;
-              onStatus("reconnect:stable");
-            }
-          }, HEALTH_RESET_MS);
-        }
-      }
+    if (messageHealthy) {
+      lastHealthyAt = Date.now();
       onStatus("health:online");
     } else {
-      clearHealthResetTimer();
       onStatus("health:degraded");
     }
   };
 
   const trackPresence = async (force = false) => {
+    const channel = presence;
+    if (!channel) return;
     const windows = await listWindows({ includeTitles: includeWindowTitles });
     const windowsJson = JSON.stringify({ windows, lanEndpoints: currentLanEndpoints });
     if (!force && windowsJson === lastWindowsJson) return;
@@ -271,7 +220,7 @@ export async function startRealtimeAgent({
     if (currentLanEndpoints.length > 0) {
       payload.lanEndpoints = currentLanEndpoints;
     }
-    await presence.track(payload);
+    await channel.track(payload);
   };
 
   const schedulePresenceRefresh = () => {
@@ -287,6 +236,155 @@ export async function startRealtimeAgent({
         schedulePresenceRefresh();
       }
     }, windowRefreshMs);
+  };
+
+  const rebuildMessageChannel = async (reason) => {
+    if (stopped || rebuilding) return;
+    if (Date.now() - lastRebuildAt.message < REBUILD_MIN_INTERVAL_MS) return;
+    lastRebuildAt.message = Date.now();
+    rebuilding = true;
+    const old = messageChannel;
+    messageChannel = null;
+    messageHealthy = false;
+    noteHealth();
+    onStatus(`rebuild:message:${reason}`);
+    try {
+      await purgeChannel(old);
+      if (!stopped) await buildMessageChannel();
+    } finally {
+      rebuilding = false;
+    }
+  };
+
+  const rebuildPresenceChannel = async (reason) => {
+    if (stopped || rebuilding) return;
+    if (Date.now() - lastRebuildAt.presence < REBUILD_MIN_INTERVAL_MS) return;
+    lastRebuildAt.presence = Date.now();
+    rebuilding = true;
+    const old = presence;
+    presence = null;
+    onStatus(`rebuild:presence:${reason}`);
+    try {
+      await purgeChannel(old);
+      if (!stopped) await buildPresenceChannel();
+    } finally {
+      rebuilding = false;
+    }
+  };
+
+  const buildMessageChannel = async () => {
+    const channel = supabase.channel(deviceChannel(userId, device.id), {
+      config: { private: true }
+    });
+    messageChannel = channel;
+    channel.on("broadcast", { event: "command" }, async ({ payload }) => {
+      const ackChannelPromise = (
+        isInsertTextMessage(payload, device.id) || isKeyMessage(payload, device.id)
+      )
+        ? getAckChannel(payload.source_device_id)
+        : null;
+      const result = await handleDesktopMessage({ payload, myDeviceId: device.id, output });
+      if (result.ack) {
+        const targetDeviceId = result.ack.target_device_id;
+        try {
+          const ackChannel = await (ackChannelPromise || getAckChannel(targetDeviceId));
+          const sendStatus = await ackChannel.send({
+            type: "broadcast",
+            event: "ack",
+            payload: result.ack
+          });
+          if (sendStatus !== "ok") {
+            onStatus(`ack:${targetDeviceId}:${sendStatus}`);
+          }
+        } catch (error) {
+          // 命令已执行（文本已粘贴），只是回执发不出去。绝不能让这个
+          // rejection 沉默地炸掉 broadcast 回调——那会让手机端误报失败。
+          onStatus(`ack:${targetDeviceId}:${error instanceof Error ? error.message : String(error)}`);
+        }
+      }
+    });
+    await channel.subscribe((status) => {
+      // 回声护栏：只有"当前" message 通道的回调才算数。purge 旧通道时
+      // leave() 触发的 CLOSED、迟到的事件，都在这里被挡掉。
+      if (stopped || channel !== messageChannel) return;
+      onStatus(`message:${status}`);
+      if (status === "SUBSCRIBED") {
+        messageHealthy = true;
+        noteHealth();
+      } else if (status === "CLOSED") {
+        // 服务端 phx_close：closed 通道 phoenix 永不 rejoin，必须重建。
+        messageHealthy = false;
+        noteHealth();
+        void rebuildMessageChannel("server-closed");
+      } else if (status === "CHANNEL_ERROR" || status === "TIMED_OUT") {
+        // socket 级异常（心跳超时/断流）。phoenix 自己重连 + rejoin，
+        // 恢复后会再次收到 SUBSCRIBED。这里只降级显示，不做任何拆除。
+        messageHealthy = false;
+        noteHealth();
+      }
+    });
+  };
+
+  const buildPresenceChannel = async () => {
+    const channel = supabase.channel(presenceChannel(userId), {
+      config: { private: true }
+    });
+    presence = channel;
+    // join 事件的 key 是 Realtime 随机生成的 presence key，每次重连都会变；
+    // 真正稳定的对端 ID 在 payload 的 deviceId 里。用 key 预热会在每次
+    // 对端重连时创建一个指向不存在设备的新通道，channel join 频率超标后
+    // 服务器会断开整个连接，形成每秒重连的死循环。
+    channel.on("presence", { event: "join" }, ({ newPresences }) => {
+      for (const entry of newPresences ?? []) {
+        const deviceId = entry?.deviceId;
+        if (deviceId && deviceId !== device.id) {
+          warmupAckChannel(deviceId);
+        }
+      }
+    });
+    await channel.subscribe(async (status) => {
+      if (stopped || channel !== presence) return;
+      onStatus(`presence:${status}`);
+      if (status === "SUBSCRIBED") {
+        await trackPresence(true);
+        schedulePresenceRefresh();
+      } else if (status === "CLOSED") {
+        // 服务端 phx_close —— 重建 presence 通道（不影响 message 传输健康度）。
+        void rebuildPresenceChannel("server-closed");
+      }
+      // CHANNEL_ERROR/TIMED_OUT：phoenix 自动 rejoin，不拆除。
+    });
+  };
+
+  const fullRebuild = async (reason) => {
+    if (stopped || rebuilding) return;
+    rebuilding = true;
+    onStatus(`rebuild:full:${reason}`);
+    try {
+      clearTimeout(presenceTimer);
+      presenceTimer = null;
+      const oldMessage = messageChannel;
+      const oldPresence = presence;
+      const oldAcks = [...ackChannels.values()];
+      messageChannel = null;
+      presence = null;
+      ackChannels.clear();
+      messageHealthy = false;
+      // 全部引用先置空再 purge：旧通道回调立即失活，purge 引发的
+      // CLOSED/TIMED_OUT 不会触发任何连锁反应。
+      await Promise.all([
+        purgeChannel(oldMessage),
+        purgeChannel(oldPresence),
+        ...oldAcks.map(({ channel }) => purgeChannel(channel))
+      ]);
+      if (stopped) return;
+      lastWindowsJson = "";
+      await buildMessageChannel();
+      await buildPresenceChannel();
+      noteHealth();
+    } finally {
+      rebuilding = false;
+    }
   };
 
   const getAckChannel = async (targetDeviceId) => {
@@ -319,83 +417,31 @@ export async function startRealtimeAgent({
     });
   };
 
-  const bindCoreChannels = () => {
-    messageChannel.on("broadcast", { event: "command" }, async ({ payload }) => {
-      const ackChannelPromise = (
-        isInsertTextMessage(payload, device.id) || isKeyMessage(payload, device.id)
-      )
-        ? getAckChannel(payload.source_device_id)
-        : null;
-      const result = await handleDesktopMessage({ payload, myDeviceId: device.id, output });
-      if (result.ack) {
-        const targetDeviceId = result.ack.target_device_id;
-        try {
-          const ackChannel = await (ackChannelPromise || getAckChannel(targetDeviceId));
-          const sendStatus = await ackChannel.send({
-            type: "broadcast",
-            event: "ack",
-            payload: result.ack
-          });
-          if (sendStatus !== "ok") {
-            onStatus(`ack:${targetDeviceId}:${sendStatus}`);
-          }
-        } catch (error) {
-          // 命令已执行（文本已粘贴），只是回执发不出去。绝不能让这个
-          // rejection 沉默地炸掉 broadcast 回调——那会让手机端误报失败。
-          onStatus(`ack:${targetDeviceId}:${error instanceof Error ? error.message : String(error)}`);
-        }
-      }
-    });
+  // 看门狗：message 通道连续太久不健康（phoenix 自愈应在一两分钟内完成），
+  // 说明自愈卡死——socket 假在线、通道对象缓存死亡等。做一次全量重建兜底。
+  // 节奏由 watchdogIntervalMs/watchdogUnhealthyMs 控制，慢到不可能自我维持。
+  watchdogTimer = setInterval(() => {
+    if (stopped) return;
+    if (messageHealthy) {
+      lastHealthyAt = Date.now();
+      return;
+    }
+    if (Date.now() - lastHealthyAt >= watchdogUnhealthyMs) {
+      lastHealthyAt = Date.now();
+      void fullRebuild("watchdog");
+    }
+  }, watchdogIntervalMs);
+  watchdogTimer.unref?.();
 
-    // join 事件的 key 是 Realtime 随机生成的 presence key，每次重连都会变；
-    // 真正稳定的对端 ID 在 payload 的 deviceId 里。用 key 预热会在每次
-    // 对端重连时创建一个指向不存在设备的新通道，channel join 频率超标后
-    // 服务器会断开整个连接，形成每秒重连的死循环。
-    presence.on("presence", { event: "join" }, ({ newPresences }) => {
-      for (const entry of newPresences ?? []) {
-        const deviceId = entry?.deviceId;
-        if (deviceId && deviceId !== device.id) {
-          warmupAckChannel(deviceId);
-        }
-      }
-    });
-  };
-
-  const subscribeCoreChannels = async () => {
-    await messageChannel.subscribe((status) => {
-      onStatus(`message:${status}`);
-      if (status === "SUBSCRIBED") {
-        messageHealthy = true;
-        noteChannelHealth();
-      } else if (FATAL_CHANNEL_STATUSES.includes(status)) {
-        messageHealthy = false;
-        scheduleReconnect(`message:${status}`);
-      }
-    });
-    await presence.subscribe(async (status) => {
-      onStatus(`presence:${status}`);
-      if (status === "SUBSCRIBED") {
-        presenceHealthy = true;
-        noteChannelHealth();
-        await trackPresence(true);
-        schedulePresenceRefresh();
-      } else if (FATAL_CHANNEL_STATUSES.includes(status)) {
-        presenceHealthy = false;
-        noteChannelHealth();
-        scheduleReconnect(`presence:${status}`);
-      }
-    });
-  };
-
-  bindCoreChannels();
-  await subscribeCoreChannels();
+  await buildMessageChannel();
+  await buildPresenceChannel();
 
   return {
     getHealth() {
-      return { online: messageHealthy && presenceHealthy && !stopped };
+      return { online: messageHealthy && !stopped };
     },
     forceReconnect(reason = "manual") {
-      scheduleReconnect(reason);
+      void fullRebuild(reason);
     },
     async setReportWindowTitles(enabled) {
       includeWindowTitles = Boolean(enabled);
@@ -409,18 +455,17 @@ export async function startRealtimeAgent({
     },
     async stop() {
       stopped = true;
-      reconnectGeneration += 1;
       clearTimeout(presenceTimer);
-      clearTimeout(reconnectTimer);
-      clearHealthResetTimer();
+      clearInterval(watchdogTimer);
       presenceTimer = null;
-      reconnectTimer = null;
       await Promise.all([
         purgeChannel(messageChannel),
         purgeChannel(presence),
         ...[...ackChannels.values()].map(({ channel }) => purgeChannel(channel))
       ]);
       ackChannels.clear();
+      messageChannel = null;
+      presence = null;
     }
   };
 }
