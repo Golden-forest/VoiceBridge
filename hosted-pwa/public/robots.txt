@@ -3,4 +3,4 @@ Allow: /
 Allow: /zh-CN/
 Disallow: /app
 
-Sitemap: https://voicebridge-6kr.pages.dev/sitemap.xml
+Sitemap: https://voicebridge.heyflint.top/sitemap.xml

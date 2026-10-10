@@ -147,7 +147,7 @@ test("sitemap.xml and robots.txt are shipped", async () => {
   ]);
 
   assert.match(sitemap, /<\?xml version="1\.0"/);
-  assert.match(sitemap, /https:\/\/voicebridge-6kr\.pages\.dev\//);
+  assert.match(sitemap, /https:\/\/voicebridge\.heyflint\.top\//);
   assert.match(sitemap, /hreflang="en"/);
   assert.match(sitemap, /hreflang="zh-CN"/);
   assert.match(sitemap, /hreflang="x-default"/);
@@ -155,7 +155,7 @@ test("sitemap.xml and robots.txt are shipped", async () => {
   assert.match(robots, /User-agent: \*/);
   assert.match(robots, /Allow: \//);
   assert.match(robots, /Disallow: \/app/);
-  assert.match(robots, /Sitemap: https:\/\/voicebridge-6kr\.pages\.dev\/sitemap\.xml/);
+  assert.match(robots, /Sitemap: https:\/\/voicebridge\.heyflint\.top\/sitemap\.xml/);
 });
 
 // ---- OG placeholder image --------------------------------------------------

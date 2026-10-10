@@ -5,16 +5,16 @@
   "meta": {
     "title": "VoiceBridge - 你的声音，抵达每个光标",
     "description": "把手机变成 macOS 和 Windows 的语音输入遥控器。录音、选择屏幕，转写文字直接抵达当前光标。",
-    "canonical": "https://voicebridge-6kr.pages.dev/zh-CN/",
-    "hreflang_en": "https://voicebridge-6kr.pages.dev/",
-    "hreflang_zh_cn": "https://voicebridge-6kr.pages.dev/zh-CN/",
-    "hreflang_default": "https://voicebridge-6kr.pages.dev/"
+    "canonical": "https://voicebridge.heyflint.top/zh-CN/",
+    "hreflang_en": "https://voicebridge.heyflint.top/",
+    "hreflang_zh_cn": "https://voicebridge.heyflint.top/zh-CN/",
+    "hreflang_default": "https://voicebridge.heyflint.top/"
   },
   "og": {
     "title": "VoiceBridge - 你的声音，抵达每个光标",
     "description": "把手机变成 macOS 和 Windows 的语音输入遥控器。录音、选择屏幕，转写文字直接抵达当前光标。",
-    "url": "https://voicebridge-6kr.pages.dev/zh-CN/",
-    "image": "https://voicebridge-6kr.pages.dev/og-image-zh.png",
+    "url": "https://voicebridge.heyflint.top/zh-CN/",
+    "image": "https://voicebridge.heyflint.top/og-image-zh.png",
     "locale": "zh_CN"
   },
   "nav": {
