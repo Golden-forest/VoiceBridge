@@ -71,6 +71,7 @@
           "^/cloudflare($|/)",
           "^/supabase($|/)",
           "^/scripts($|/)",
+          "^/src/public/commands\\.json$",
           "^/[^/]+\\.png$",
           "^/src/.*\\.test\\.js$",
           "^/node_modules/\\.cache($|/)",
