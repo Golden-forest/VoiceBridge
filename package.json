@@ -62,6 +62,7 @@
         "ignore": [
           "^/out($|/)",
           "^/hosted-pwa($|/)",
+          "^/mobile($|/)",
           "^/\\.superpowers($|/)",
           "^/\\.env($|\\.)",
           "^/\\.wrangler($|/)",
@@ -70,6 +71,7 @@
           "^/cloudflare($|/)",
           "^/supabase($|/)",
           "^/scripts($|/)",
+          "^/[^/]+\\.png$",
           "^/src/.*\\.test\\.js$",
           "^/node_modules/\\.cache($|/)",
           "^/node_modules/\\.bin($|/)",
