@@ -5,16 +5,16 @@
   "meta": {
     "title": "VoiceBridge - Your Voice, Any Cursor",
     "description": "Use your phone as a voice input remote for macOS and Windows. Record once, choose a screen, and send text straight to the active cursor.",
-    "canonical": "https://voicebridge-6kr.pages.dev/",
-    "hreflang_en": "https://voicebridge-6kr.pages.dev/",
-    "hreflang_zh_cn": "https://voicebridge-6kr.pages.dev/zh-CN/",
-    "hreflang_default": "https://voicebridge-6kr.pages.dev/"
+    "canonical": "https://voicebridge.heyflint.top/",
+    "hreflang_en": "https://voicebridge.heyflint.top/",
+    "hreflang_zh_cn": "https://voicebridge.heyflint.top/zh-CN/",
+    "hreflang_default": "https://voicebridge.heyflint.top/"
   },
   "og": {
     "title": "VoiceBridge - Your Voice, Any Cursor",
     "description": "Use your phone as a voice input remote for macOS and Windows. Record once, choose a screen, and send text straight to the active cursor.",
-    "url": "https://voicebridge-6kr.pages.dev/",
-    "image": "https://voicebridge-6kr.pages.dev/og-image-en.png",
+    "url": "https://voicebridge.heyflint.top/",
+    "image": "https://voicebridge.heyflint.top/og-image-en.png",
     "locale": "en_US"
   },
   "nav": {
