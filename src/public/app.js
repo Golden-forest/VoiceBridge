@@ -1,7 +1,7 @@
 import { CloudRealtime, getPhoneDeviceId, isDesktopDeviceCandidate } from "./cloudRealtime.js";
 import { createBillingSession, invokeBillingFunction } from "./billing.js";
 import { recordWavUntilStopped } from "./cloudRecorder.js";
-import { transcribeCloudAudio, prefetchDirectAsrSignature, setAsrTimingListener } from "./cloudTranscribe.js";
+import { transcribeCloudAudio, setAsrTimingListener } from "./cloudTranscribe.js";
 import { createRecordingTimingStore } from "./timingRecorder.js";
 import { commandStore } from "./commandStore.js";
 import { isProtocolCompatible } from "../shared/protocol.js";
@@ -2138,11 +2138,10 @@ async function startRecording() {
     });
     recordingTiming.reset();
     beginRecordingState();
-    if (isCloudMode && !isNativeLanActive()) {
-      // 录音开始即预取直连签名：跨境签名往返（含 Edge 冷启动）与录音并行，
-      // 说完话直接上传腾讯。失败静默回退到原有的实时签名路径。
-      prefetchedAsrIssue = prefetchDirectAsrSignature({ durationMs: maxMs });
-    } else if (ws && ws.readyState === WebSocket.OPEN) {
+    // 云端直连签名预取已停用：直连通道在浏览器语境下必败（CORS + 代理出口
+    // 被腾讯拒，2026-10-11 实测），预取只产生无用的预留配额行。
+    prefetchedAsrIssue = null;
+    if (!isCloudMode && ws && ws.readyState === WebSocket.OPEN) {
       // LAN 模式（LAN 页面 / 原生 App 直连）：通知桌面端预取识别签名，
       // 上传到达后免掉停止录音的签发等待。旧桌面端收到未知消息只 warn。
       ws.send(JSON.stringify({ type: "asr-prefetch", duration_ms: maxMs }));

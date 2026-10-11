@@ -52,6 +52,7 @@ export async function transcribeCloudAudio({
   filename = "voicebridge.wav",
   durationMs,
   prefetchedIssue = null,
+  allowDirectAsr = false,
   fetch: fetchImpl = globalThis.fetch
 } = {}) {
   if (!supabase) {
@@ -84,10 +85,15 @@ export async function transcribeCloudAudio({
     }
   }
 
-  // 直连通道（Task 2）：签名 → 手机直传腾讯 → 上报结果；任何失败都静默回退到 Edge 中转。
-  const direct = await tryDirectAsr({ baseUrl, anonKey, accessToken, audio, durationMs, fetchImpl, preloadedIssue: preloaded });
-  if (direct) {
-    return direct;
+  // 直连通道默认关闭：浏览器/WebView 跨域 fetch 到腾讯必被 CORS 拦截
+  // （预检往返 1.7~3.4s 后必败），而 vb-api Worker 代理出口又被腾讯边缘
+  // 拒绝（404，2026-10-11 实测）。开着只会在每次录音前白等一次注定失败
+  // 的预检。保留实现与测试，待原生 HTTP 桥或可信代理出口后再启用。
+  if (allowDirectAsr) {
+    const direct = await tryDirectAsr({ baseUrl, anonKey, accessToken, audio, durationMs, fetchImpl, preloadedIssue: preloaded });
+    if (direct) {
+      return direct;
+    }
   }
   return transcribeViaRelay({ baseUrl, anonKey, accessToken, audio, filename, durationMs, fetchImpl });
 }
@@ -139,6 +145,23 @@ function isValidIssuePayload(issue) {
     && Boolean(issue?.headers)
     && Number.isFinite(issue?.expires_at)
     && typeof issue?.request_id === "string";
+}
+
+// 直连腾讯的 URL 改写到 API 同源代理：asr.cloud.tencent.com 不返回 CORS 头，
+// WebView/PWA 的跨域 fetch 必被浏览器拦截（TypeError: Failed to fetch，
+// 2026-10-11 安卓实测 13/13 失败全数回退慢速中转）。vb-api Worker 提供
+// /asr/flash/* 透传：签名 URL 的 path+query 原样转发，腾讯侧验签不受影响，
+// 响应补 CORS 头——这是直连通道在浏览器语境下唯一可行的通路。
+// 非腾讯域名的 issue.url 原样返回（未来换识别商时不被误改）。
+function proxiedDirectAsrUrl(rawUrl, baseUrl) {
+  try {
+    const u = new URL(rawUrl);
+    if (u.hostname !== "asr.cloud.tencent.com") return rawUrl;
+    const b = new URL(baseUrl);
+    return `${b.origin}${u.pathname}${u.search}`;
+  } catch {
+    return rawUrl;
+  }
 }
 
 async function tryDirectAsr({ baseUrl, anonKey, accessToken, audio, durationMs, fetchImpl, preloadedIssue }) {
@@ -208,7 +231,7 @@ async function tryDirectAsr({ baseUrl, anonKey, accessToken, audio, durationMs, 
 
   const directStart = Date.now();
   try {
-    const payload = await fetchWithTimeout(fetchImpl, issue.url, {
+    const payload = await fetchWithTimeout(fetchImpl, proxiedDirectAsrUrl(issue.url, baseUrl), {
       method: "POST",
       headers: issue.headers,
       body: audio
