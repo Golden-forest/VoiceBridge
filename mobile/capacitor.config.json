@@ -2,9 +2,11 @@
   "appId": "com.heyflint.voicebridge",
   "appName": "VoiceBridge",
   "webDir": "www",
+  "android": {
+    "allowMixedContent": true
+  },
   "server": {
     "androidScheme": "https",
-    "allowMixedContent": true,
     "allowNavigation": [
       "192.168.*.*",
       "10.*.*.*",

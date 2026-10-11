@@ -10,6 +10,8 @@ import {
 
 const BASE = "https://project.supabase.co";
 const TENCENT_URL = "https://asr.cloud.tencent.com/asr/flash/v1/123?signed=1";
+// 客户端把直连 URL 改写到 API 同源代理(Worker /asr/flash/* 透传腾讯,绕开 CORS)
+const PROXIED_TENCENT_URL = `${BASE}/asr/flash/v1/123?signed=1`;
 
 test("transcribeCloudAudio falls back to the relay when direct ASR is unavailable", async () => {
   __clearAccessTokenCacheForTests();
@@ -21,6 +23,7 @@ test("transcribeCloudAudio falls back to the relay when direct ASR is unavailabl
   });
 
   const result = await transcribeCloudAudio({
+    allowDirectAsr: true,
     supabase,
     audio: new Blob(["wav"], { type: "audio/wav" }),
     filename: "voicebridge.wav",
@@ -55,6 +58,7 @@ test("transcribeCloudAudio direct path: issue → Tencent POST → success repor
   });
 
   const result = await transcribeCloudAudio({
+    allowDirectAsr: true,
     supabase,
     audio: new Blob(["wav-bytes"], { type: "audio/wav" }),
     durationMs: 1500,
@@ -71,7 +75,7 @@ test("transcribeCloudAudio direct path: issue → Tencent POST → success repor
           expires_at: Math.floor(Date.now() / 1000) + 300
         });
       }
-      if (url.startsWith("https://asr.cloud.tencent.com/")) {
+      if (url === PROXIED_TENCENT_URL) {
         assert.equal(options.method, "POST");
         assert.equal(options.headers.Authorization, "TC3-Signed");
         assert.equal(options.body.size, 9);
@@ -115,6 +119,7 @@ test("transcribeCloudAudio falls back to relay when Tencent returns a non-zero c
   const supabase = createSupabaseClient({ url: BASE, anonKey: "anon-key", accessToken: "access-token" });
 
   const result = await transcribeCloudAudio({
+    allowDirectAsr: true,
     supabase,
     audio: new Blob(["wav"], { type: "audio/wav" }),
     durationMs: 1000,
@@ -129,7 +134,7 @@ test("transcribeCloudAudio falls back to relay when Tencent returns a non-zero c
           expires_at: Math.floor(Date.now() / 1000) + 300
         });
       }
-      if (url.startsWith("https://asr.cloud.tencent.com/")) {
+      if (url === PROXIED_TENCENT_URL) {
         return jsonResponse(200, { code: 4003, message: "flash not enabled" });
       }
       if (url.includes("report-asr-result")) {
@@ -156,6 +161,7 @@ test("transcribeCloudAudio falls back to relay when Tencent fetch throws, and re
   const supabase = createSupabaseClient({ url: BASE, anonKey: "anon-key", accessToken: "access-token" });
 
   const result = await transcribeCloudAudio({
+    allowDirectAsr: true,
     supabase,
     audio: new Blob(["wav"], { type: "audio/wav" }),
     durationMs: 1000,
@@ -170,7 +176,7 @@ test("transcribeCloudAudio falls back to relay when Tencent fetch throws, and re
           expires_at: Math.floor(Date.now() / 1000) + 300
         });
       }
-      if (url.startsWith("https://asr.cloud.tencent.com/")) {
+      if (url === PROXIED_TENCENT_URL) {
         throw new Error("network down");
       }
       if (url.includes("report-asr-result")) {
@@ -191,6 +197,7 @@ test("transcribeCloudAudio falls back to relay on a stale expires_at", async () 
   const supabase = createSupabaseClient({ url: BASE, anonKey: "anon-key", accessToken: "access-token" });
 
   const result = await transcribeCloudAudio({
+    allowDirectAsr: true,
     supabase,
     audio: new Blob(["wav"], { type: "audio/wav" }),
     durationMs: 1000,
@@ -213,7 +220,7 @@ test("transcribeCloudAudio falls back to relay on a stale expires_at", async () 
   });
 
   assert.equal(result.text, "relay ok");
-  assert.equal(calls.some((c) => c.url.startsWith("https://asr.cloud.tencent.com/")), false,
+  assert.equal(calls.some((c) => c.url === PROXIED_TENCENT_URL), false,
     "Tencent must not be called with a stale signature");
 });
 
@@ -222,6 +229,7 @@ test("transcribeCloudAudio direct result survives a failed report-asr-result sen
   const supabase = createSupabaseClient({ url: BASE, anonKey: "anon-key", accessToken: "access-token" });
 
   const result = await transcribeCloudAudio({
+    allowDirectAsr: true,
     supabase,
     audio: new Blob(["wav"], { type: "audio/wav" }),
     durationMs: 1000,
@@ -235,7 +243,7 @@ test("transcribeCloudAudio direct result survives a failed report-asr-result sen
           expires_at: Math.floor(Date.now() / 1000) + 300
         });
       }
-      if (url.startsWith("https://asr.cloud.tencent.com/")) {
+      if (url === PROXIED_TENCENT_URL) {
         return jsonResponse(200, { code: 0, flash_result: [{ text: "直接成功" }] });
       }
       if (url.includes("report-asr-result")) {
@@ -255,6 +263,7 @@ test("transcribeCloudAudio reports failed and falls back on an invalid issue pay
   const supabase = createSupabaseClient({ url: BASE, anonKey: "anon-key", accessToken: "access-token" });
 
   const result = await transcribeCloudAudio({
+    allowDirectAsr: true,
     supabase,
     audio: new Blob(["wav"], { type: "audio/wav" }),
     durationMs: 1000,
@@ -281,7 +290,7 @@ test("transcribeCloudAudio reports failed and falls back on an invalid issue pay
     duration_ms: 1000
   });
   assert.equal(calls.some((c) => c.url.endsWith("/transcribe")), true, "relay fallback must run");
-  assert.equal(calls.some((c) => c.url.startsWith("https://asr.cloud.tencent.com/")), false,
+  assert.equal(calls.some((c) => c.url === PROXIED_TENCENT_URL), false,
     "Tencent must not be called without a signed URL");
 });
 
@@ -290,6 +299,7 @@ test("transcribeCloudAudio falls back to relay when the issue call itself throws
   const supabase = createSupabaseClient({ url: BASE, anonKey: "anon-key", accessToken: "access-token" });
 
   const result = await transcribeCloudAudio({
+    allowDirectAsr: true,
     supabase,
     audio: new Blob(["wav"], { type: "audio/wav" }),
     durationMs: 1000,
@@ -362,6 +372,7 @@ test("transcribeCloudAudio uses a valid prefetched signature without re-issuing"
   };
 
   const result = await transcribeCloudAudio({
+    allowDirectAsr: true,
     supabase,
     audio: new Blob(["wav-bytes"], { type: "audio/wav" }),
     durationMs: 2000,
@@ -371,7 +382,7 @@ test("transcribeCloudAudio uses a valid prefetched signature without re-issuing"
       if (url.includes("issue-asr-request")) {
         throw new Error("issue-asr-request must not be called when a valid prefetched signature exists");
       }
-      if (url.startsWith("https://asr.cloud.tencent.com/")) {
+      if (url === PROXIED_TENCENT_URL) {
         assert.equal(options.headers.Authorization, "TC3-Presigned");
         return jsonResponse(200, { code: 0, flash_result: [{ text: "预签名" }] });
       }
@@ -407,6 +418,7 @@ test("transcribeCloudAudio ignores an expired prefetched signature and re-issues
   };
 
   const result = await transcribeCloudAudio({
+    allowDirectAsr: true,
     supabase,
     audio: new Blob(["wav"], { type: "audio/wav" }),
     durationMs: 1000,
@@ -422,7 +434,7 @@ test("transcribeCloudAudio ignores an expired prefetched signature and re-issues
           expires_at: Math.floor(Date.now() / 1000) + 300
         });
       }
-      if (url.startsWith("https://asr.cloud.tencent.com/")) {
+      if (url === PROXIED_TENCENT_URL) {
         assert.equal(options.headers.Authorization, "TC3-Fresh");
         return jsonResponse(200, { code: 0, flash_result: [{ text: "回退" }] });
       }
@@ -502,3 +514,62 @@ function jsonResponse(status, payload) {
     }
   };
 }
+
+test("transcribeCloudAudio leaves a non-Tencent direct URL untouched (no proxy rewrite)", async () => {
+  __clearAccessTokenCacheForTests();
+  const calls = [];
+  const supabase = createSupabaseClient({ url: BASE, anonKey: "anon-key", accessToken: "access-token" });
+  const otherVendorUrl = "https://asr.other-vendor.example/flash/v1/999?signed=1";
+  await transcribeCloudAudio({
+    allowDirectAsr: true,
+    supabase,
+    audio: new Blob(["wav-bytes"], { type: "audio/wav" }),
+    durationMs: 800,
+    fetch: async (url, options) => {
+      calls.push({ url, options });
+      if (url.includes("issue-asr-request")) {
+        return jsonResponse(200, {
+          ok: true,
+          request_id: "req-direct",
+          url: otherVendorUrl,
+          headers: { "Content-Type": "application/octet-stream" },
+          expires_at: Math.floor(Date.now() / 1000) + 60
+        });
+      }
+      if (url === otherVendorUrl) {
+        return jsonResponse(200, { code: 0, flash_result: [{ text: "原始域名直连" }] });
+      }
+      if (url.includes("report-asr-result")) return jsonResponse(200, { ok: true });
+      throw new Error(`unexpected fetch: ${url}`);
+    }
+  });
+  await __waitForPendingAsrReportsForTests();
+  // 非腾讯域名:不改写,原样直连;也绝不应出现被改写到 BASE 的调用。
+  assert.equal(calls.some((c) => c.url === otherVendorUrl), true,
+    "non-Tencent issue.url must be fetched verbatim");
+  assert.equal(calls.some((c) => c.url.startsWith(`${BASE}/asr/flash/`)), false,
+    "non-Tenant vendor URL must not be rewritten to the proxy path");
+});
+
+test("transcribeCloudAudio skips the direct attempt by default (browser CORS makes it always fail)", async () => {
+  __clearAccessTokenCacheForTests();
+  const calls = [];
+  const supabase = createSupabaseClient({ url: BASE, anonKey: "anon-key", accessToken: "access-token" });
+  const result = await transcribeCloudAudio({
+    supabase,
+    audio: new Blob(["wav"], { type: "audio/wav" }),
+    durationMs: 1234,
+    fetch: async (url, options) => {
+      calls.push({ url, options });
+      if (url.includes("issue-asr-request")) throw new Error("issue must not be called when direct is skipped");
+      if (url.endsWith("/transcribe")) return jsonResponse(200, { ok: true, request_id: "req-relay", text: "纯中转" });
+      if (url.includes("report-asr-result")) return jsonResponse(200, { ok: true });
+      throw new Error(`unexpected fetch: ${url}`);
+    }
+  });
+  assert.equal(result.text, "纯中转");
+  // 不允许出现任何直连尝试:无 issue 签名、无腾讯域名、无代理路径
+  assert.equal(calls.some((c) => c.url.includes("issue-asr-request")), false, "must not issue a direct signature");
+  assert.equal(calls.some((c) => /asr\.cloud\.tencent\.com|\/asr\/flash\//.test(c.url)), false, "must not touch Tencent or proxy path");
+  assert.equal(calls.filter((c) => c.url.endsWith("/transcribe")).length, 1, "exactly one relay call");
+});

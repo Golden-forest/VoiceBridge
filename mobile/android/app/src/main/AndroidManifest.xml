@@ -41,4 +41,9 @@
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
+    <!-- 原生配对扫二维码（@capacitor/barcode-scanner 的库 manifest 为空，须由 App 声明） -->
+    <uses-permission android:name="android.permission.CAMERA" />
+    <!-- Capacitor 的 WebView 麦克风桥接会同时申请 MODIFY_AUDIO_SETTINGS+RECORD_AUDIO,
+         少声明任何一个系统都判拒,getUserMedia 即 NotAllowedError(2026-10-11 实测) -->
+    <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />
 </manifest>
