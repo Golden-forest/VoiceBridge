@@ -113,11 +113,11 @@ test("legal pages are substantive and commercially consistent", async () => {
 
 // ---- downloads.json --------------------------------------------------------
 
-test("downloads.json is shipped with three real v0.1.3 assets", async () => {
+test("downloads.json is shipped with three real v0.1.4 assets", async () => {
   const raw = await readFile(new URL("client/downloads.json", distRoot), "utf8");
   const data = JSON.parse(raw);
 
-  assert.equal(data.version, "0.1.3");
+  assert.equal(data.version, "0.1.4");
   assert.equal(data.repository, "Golden-forest/VoiceBridge");
   assert.equal(data.assets.length, 3);
 
@@ -129,8 +129,8 @@ test("downloads.json is shipped with three real v0.1.3 assets", async () => {
     assert.ok(asset.url, "asset.url must be non-empty");
     assert.match(
       asset.url,
-      /^https:\/\/github\.com\/Golden-forest\/VoiceBridge\/releases\/download\/v0\.1\.3\//,
-      `asset.url for ${asset.filename} must point at the v0.1.3 GitHub release`
+      /^https:\/\/github\.com\/Golden-forest\/VoiceBridge\/releases\/download\/v0\.1\.4\//,
+      `asset.url for ${asset.filename} must point at the v0.1.4 GitHub release`
     );
     // Real file size from the release, never null after batch 3
     assert.equal(typeof asset.size, "number");
