@@ -7,6 +7,7 @@ import {
   isKeyMessage
 } from "../shared/protocol.js";
 import { outputText } from "../server/input/outputText.js";
+import { assertInputActive, runDesktopInputOperation } from "../server/input/desktopInputQueue.js";
 import { activateCloudWindow, listCloudWindows } from "../server/input/windowManager.js";
 import {
   pasteClipboard,
@@ -31,12 +32,17 @@ const DEFAULT_KEY_HANDLERS = Object.freeze({
   "arrow-right": () => pressArrow("right")
 });
 
-export async function handleDesktopMessage({
+export function handleDesktopMessage(options) {
+  return runDesktopInputOperation(() => executeDesktopMessage(options));
+}
+
+async function executeDesktopMessage({
   payload,
   myDeviceId,
   output = outputText,
   keyHandlers = DEFAULT_KEY_HANDLERS,
-  activateWindow = activateCloudWindow
+  activateWindow = activateCloudWindow,
+  isActive = () => true
 }) {
   const activateTargetWindow = async () => {
     if (!payload.target_window_id) return;
@@ -49,7 +55,9 @@ export async function handleDesktopMessage({
   if (isKeyMessage(payload, myDeviceId)) {
     const { key, request_id, source_device_id } = payload;
     try {
+      assertInputActive(isActive);
       await activateTargetWindow();
+      assertInputActive(isActive);
       await keyHandlers[key]();
       return {
         handled: true,
@@ -84,9 +92,12 @@ export async function handleDesktopMessage({
   }
 
   try {
+    assertInputActive(isActive);
     await activateTargetWindow();
+    assertInputActive(isActive);
     const outputResult = await output(payload.text, {
-      autoPaste: Boolean(payload.auto_paste)
+      autoPaste: Boolean(payload.auto_paste),
+      isActive
     });
     const pasteFailed = Boolean(payload.auto_paste && outputResult.pasteError);
     return {
@@ -162,7 +173,8 @@ export async function startRealtimeAgent({
   listWindows = listCloudWindows,
   lanEndpoints = [],
   watchdogIntervalMs = WATCHDOG_INTERVAL_MS,
-  watchdogUnhealthyMs = WATCHDOG_UNHEALTHY_MS
+  watchdogUnhealthyMs = WATCHDOG_UNHEALTHY_MS,
+  isActive = () => true
 }) {
   const ackChannels = new Map();
   let messageChannel = null;
@@ -205,6 +217,7 @@ export async function startRealtimeAgent({
     const channel = presence;
     if (!channel) return;
     const windows = await listWindows({ includeTitles: includeWindowTitles });
+    if (stopped || !isActive() || channel !== presence) return;
     const windowsJson = JSON.stringify({ windows, lanEndpoints: currentLanEndpoints });
     if (!force && windowsJson === lastWindowsJson) return;
     lastWindowsJson = windowsJson;
@@ -278,12 +291,16 @@ export async function startRealtimeAgent({
     });
     messageChannel = channel;
     channel.on("broadcast", { event: "command" }, async ({ payload }) => {
+      if (stopped || !isActive() || channel !== messageChannel) return;
       const ackChannelPromise = (
         isInsertTextMessage(payload, device.id) || isKeyMessage(payload, device.id)
       )
         ? getAckChannel(payload.source_device_id)
         : null;
-      const result = await handleDesktopMessage({ payload, myDeviceId: device.id, output });
+      const result = await handleDesktopMessage({
+        payload, myDeviceId: device.id, output,
+        isActive: () => !stopped && isActive() && channel === messageChannel
+      });
       if (result.ack) {
         const targetDeviceId = result.ack.target_device_id;
         try {

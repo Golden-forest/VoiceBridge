@@ -20,6 +20,7 @@ import {
   getStoredNativeLanEndpoint,
   isLanPageEnvironment,
   lanTokenHeaders,
+  lanTokenStorageKey,
   rememberNativeLanEndpoint,
   resolveCloudOrigin
 } from "./lanMode.js";
@@ -69,6 +70,22 @@ let nativeLanEndpoint = null;
 let activeCloudUserId = "";
 let activeCloudPhoneDeviceId = "";
 const LAST_CLOUD_DESKTOP_KEY = "voicebridge_last_cloud_desktop_id";
+let identityUserId = "";
+let identityVersion = 0;
+let cloudSetupUserId = "";
+let cloudSetupVersion = 0;
+let lanContextVersion = 0;
+let targetVersion = 0;
+let inputVersion = 0;
+let windowSelector = null;
+let commandLibrary = null;
+let activeLanPairingOverlay = null;
+let recoveredTranscript = null;
+
+function isCurrentIdentity(version) {
+  return version === identityVersion && (!isCloudMode ||
+    identityUserId === (window.VoiceBridgeAuth?.user?.id || ""));
+}
 
 // 录音链路耗时观测：识别段由 cloudTranscribe 打点汇入，发送/编码段在各流程
 // 补记，账户抽屉展示最近一次快照（延迟问题肉眼可定位：通道直连/中转等）。
@@ -87,7 +104,7 @@ document.addEventListener("click", (event) => {
 
 function getLastCloudDesktopId() {
   try {
-    return localStorage.getItem(LAST_CLOUD_DESKTOP_KEY) || "";
+    return localStorage.getItem(`${LAST_CLOUD_DESKTOP_KEY}:${identityUserId}`) || "";
   } catch {
     return "";
   }
@@ -96,7 +113,7 @@ function getLastCloudDesktopId() {
 function rememberCloudDesktopId(deviceId) {
   if (!deviceId) return;
   try {
-    localStorage.setItem(LAST_CLOUD_DESKTOP_KEY, deviceId);
+    localStorage.setItem(`${LAST_CLOUD_DESKTOP_KEY}:${identityUserId}`, deviceId);
   } catch {
     // Storage can be unavailable in private browsing; selection still works in-memory.
   }
@@ -105,7 +122,7 @@ function rememberCloudDesktopId(deviceId) {
 async function requestLanCommands(path, init = {}) {
   const response = await fetch(lanApiUrl(path), {
     ...init,
-    headers: { "Content-Type": "application/json", ...lanTokenHeaders(), ...(init.headers || {}) }
+    headers: { "Content-Type": "application/json", ...activeLanTokenHeaders(), ...(init.headers || {}) }
   });
   const payload = await response.json().catch(() => ({}));
   if (!response.ok) throw new Error(payload.error || t('commandStore.operationFailed'));
@@ -127,11 +144,19 @@ async function requestLanCommands(path, init = {}) {
 // 绝不弹错误提示。
 let lanProbe = null;
 let lanAffordanceTimer = null;
+// presence 抖动会短暂送来缺桌面的列表（GFW 黑洞期为常态）；连续多次缺失才认定
+// 桌面真的离开，一两次缺失不拆健康直连。
+let nativeLanEndpointMissCount = 0;
 
 function updateCloudLanEndpoints(desktopDevices) {
   if (!isCloudMode) return;
-  const endpoints = desktopDevices.flatMap((device) =>
-    Array.isArray(device.lanEndpoints) ? device.lanEndpoints : []);
+  const selected = desktopDevices.find((device) => device.deviceId === selectedCloudDeviceId);
+  const endpoints = Array.isArray(selected?.lanEndpoints) ? selected.lanEndpoints : [];
+  if (isNativeLanActive() && !findMatchingLanEndpoint(nativeLanEndpoint, endpoints)) {
+    if (++nativeLanEndpointMissCount >= 3) disconnectNativeLan();
+  } else {
+    nativeLanEndpointMissCount = 0;
+  }
   if (!lanProbe) {
     lanProbe = new LanProbe();
     lanProbe.bindWindow(window);
@@ -150,7 +175,8 @@ let nativeLanRestoreAttempted = false;
 async function maybeRestoreNativeLan(endpoints) {
   if (!isNativeApp || !isCloudMode || nativeLanRestoreAttempted || isNativeLanActive()) return;
   const stored = getStoredNativeLanEndpoint(window.localStorage);
-  const match = stored && findMatchingLanEndpoint(stored, endpoints);
+  const match = stored?.userId === identityUserId && stored?.deviceId === selectedCloudDeviceId
+    ? findMatchingLanEndpoint(stored, endpoints) : null;
   if (!match) return; // 桌面离线 / 换了网络：留云端，下次冷启动再试
   nativeLanRestoreAttempted = true;
   try {
@@ -163,17 +189,19 @@ async function maybeRestoreNativeLan(endpoints) {
 function scheduleLanAffordanceRefresh() {
   if (isNativeLanActive()) return;
   if (lanAffordanceTimer) return;
+  const binding = currentLanBinding();
   lanAffordanceTimer = setTimeout(async () => {
     lanAffordanceTimer = null;
     // 端点在探测期间可能已变化，重新读取当前列表。
     // 探测成功优先可达端点；探测失败（含 mixed-content 拦截）回退首个上报端点。
     const endpoint = await lanProbe.getSwitchTarget().catch(() => null);
-    if (!isCloudMode || !channelBadge || isNativeLanActive()) return;
+    if (!isCloudMode || !channelBadge || isNativeLanActive() || !isCurrentLanBinding(binding)) return;
     if (!endpoint) return; // 无上报端点时保持"云端"状态，静默
     // 真实手机上 https 页面探测 http 端点会被 mixed-content 拦截，探测基本
     // 必败。探测失败绝不亮"局域网可用"绿灯（手机可能根本不在同一网络），
     // 降级为中性入口文案；点击后的导航结果由 LAN 页面健康回退兜底。
     const reachable = await lanProbe.getReachable().catch(() => null);
+    if (!isCurrentLanBinding(binding)) return;
     if (reachable) {
       channelBadge.textContent = t('lan.channelLanAvailable');
       channelBadge.classList.add("available");
@@ -186,6 +214,7 @@ function scheduleLanAffordanceRefresh() {
       channelBadge.title = t('lan.lanTryTitle');
     }
     channelBadge.onclick = () => {
+      if (!isCurrentLanBinding(binding)) return;
       if (isNativeApp) {
         void activateNativeLan(endpoint);
       } else {
@@ -195,8 +224,22 @@ function scheduleLanAffordanceRefresh() {
   }, 0);
 }
 
+function currentLanBinding() {
+  return { userId: identityUserId, deviceId: selectedCloudDeviceId, version: lanContextVersion };
+}
+
+function isCurrentLanBinding(binding) {
+  return Boolean(binding?.userId && binding.deviceId && binding.version === lanContextVersion &&
+    binding.userId === identityUserId && binding.userId === window.VoiceBridgeAuth?.user?.id &&
+    binding.deviceId === selectedCloudDeviceId);
+}
+
 function isNativeLanActive() {
-  return isNativeApp && nativeLanEndpoint !== null;
+  return isNativeApp && nativeLanEndpoint !== null && isCurrentLanBinding(nativeLanEndpoint);
+}
+
+function activeLanTokenHeaders() {
+  return lanTokenHeaders(window, isNativeLanActive() ? nativeLanEndpoint : null);
 }
 
 function lanApiUrl(path) {
@@ -204,26 +247,56 @@ function lanApiUrl(path) {
   return `${buildNativeLanBaseUrl(nativeLanEndpoint)}${path}`;
 }
 
-function returnNativeAppToCloud() {
-  if (!isNativeLanActive()) return;
-  nativeLanEndpoint = null;
-  // 用户主动切回云端：清除记忆端点，冷启动不再自动进 LAN。
-  forgetNativeLanEndpoint(window.localStorage);
-  if (ws) {
-    ws.close(1000, "switch-to-cloud");
-    ws = null;
+function disconnectNativeLan({ forget = false, revoke = false } = {}) {
+  const binding = nativeLanEndpoint || currentLanBinding();
+  if (revoke && nativeLanEndpoint) {
+    const headers = lanTokenHeaders(window, binding);
+    if (Object.keys(headers).length) {
+      void fetch(`${buildNativeLanBaseUrl(nativeLanEndpoint)}/api/lan/pair`, { method: "DELETE", headers, keepalive: true }).catch(() => {});
+    }
   }
-  channelBadge.classList.remove("lan", "available", "try");
-  channelBadge.textContent = t('lan.channelCloud');
-  channelBadge.title = "";
-  channelBadge.onclick = null;
+  lanContextVersion++;
+  nativeLanEndpoint = null;
+  targetVersion++;
+  activeLanPairingOverlay?.remove();
+  activeLanPairingOverlay = null;
+  clearTimeout(lanAffordanceTimer);
+  lanAffordanceTimer = null;
+  clearTimeout(wsRetryTimer);
+  wsRetryTimer = null;
+  if (wsVisibilityHandler) document.removeEventListener("visibilitychange", wsVisibilityHandler);
+  wsVisibilityHandler = null;
+  const previousSocket = ws;
+  ws = null;
+  previousSocket?.close(1000, "context-changed");
+  if (forget) forgetNativeLanEndpoint(window.localStorage);
+  if (revoke) {
+    try {
+      window.localStorage.removeItem(lanTokenStorageKey(binding));
+      const prefix = `voicebridge_lan_token:${binding.userId}:`;
+      const keys = Array.from({ length: window.localStorage.length || 0 }, (_, i) => window.localStorage.key(i));
+      for (const key of keys) if (key?.startsWith(prefix)) window.localStorage.removeItem(key);
+    } catch { /* Storage may be unavailable. */ }
+  }
+  if (channelBadge) {
+    channelBadge.classList.remove("lan", "available", "try");
+    channelBadge.textContent = t('lan.channelCloud');
+    channelBadge.title = "";
+    channelBadge.onclick = null;
+  }
+}
+
+function returnNativeAppToCloud() {
+  disconnectNativeLan({ forget: true });
   updateCloudLanEndpoints(cloudDesktopDevices);
   syncCloudConnectionStatus();
 }
 
-async function finishNativeLanActivation(endpoint) {
-  nativeLanEndpoint = endpoint;
-  rememberNativeLanEndpoint(endpoint, window.localStorage);
+async function finishNativeLanActivation(endpoint, binding) {
+  if (!isCurrentLanBinding(binding)) return;
+  nativeLanEndpoint = { ...endpoint, ...binding };
+  targetVersion++;
+  rememberNativeLanEndpoint(nativeLanEndpoint, window.localStorage);
   channelBadge.classList.remove("available", "try");
   channelBadge.classList.add("lan");
   channelBadge.textContent = t('lan.channelLan');
@@ -235,21 +308,45 @@ async function finishNativeLanActivation(endpoint) {
 
 async function activateNativeLan(endpoint, { silent = false } = {}) {
   if (!isNativeApp || !endpoint) return;
+  const binding = currentLanBinding();
+  if (!isCurrentLanBinding(binding)) return;
   const pairUrl = `${buildNativeLanBaseUrl(endpoint)}/api/lan/pair`;
-  const pairing = createPairingClient({ pairUrl, win: window });
+  const pairing = createPairingClient({ pairUrl, win: window, binding, isCurrent: () => isCurrentLanBinding(binding) });
   try {
     const { paired } = await pairing.status();
+    if (!isCurrentLanBinding(binding)) return;
     if (!paired) {
-      if (silent) return; // 自动恢复路径绝不弹配对码浮层，静默留云端
-      showLanPairingOverlay(pairing, {
-        onSuccess: () => finishNativeLanActivation(endpoint)
+      if (silent) return;
+      activeLanPairingOverlay?.remove();
+      activeLanPairingOverlay = showLanPairingOverlay(pairing, {
+        isCurrent: () => isCurrentLanBinding(binding),
+        onSuccess: () => finishNativeLanActivation(endpoint, binding)
       });
       return;
     }
-    await finishNativeLanActivation(endpoint);
+    await finishNativeLanActivation(endpoint, binding);
   } catch {
-    if (!silent) showToast(t('lan.lanLost'), true);
+    if (!silent && isCurrentLanBinding(binding)) showToast(t('lan.lanLost'), true);
   }
+}
+
+function selectCloudDesktop(deviceId) {
+  if (deviceId !== selectedCloudDeviceId) {
+    if (isNativeApp) disconnectNativeLan();
+    targetVersion++;
+    selectedCloudDeviceId = deviceId;
+    nativeLanRestoreAttempted = false;
+    if (windowSelector) {
+      windowSelector.selectedWindow = null;
+      windowSelector._windowCache = null;
+      windowSelector._windowCacheTime = 0;
+      windowSelector._saveSelection();
+      windowSelector._updateButton();
+      windowSelector._close();
+    }
+  }
+  if (cloudDeviceSelect) cloudDeviceSelect.value = deviceId;
+  rememberCloudDesktopId(deviceId);
 }
 
 function initChannelBadge() {
@@ -271,7 +368,7 @@ function initChannelBadge() {
 
 // LAN 页面：配对门禁。未配对时展示配对码输入框（复用 pairing-overlay 样式），
 // 配对成功后 token 已写入 localStorage，刷新页面以加载带 token 的 WS / 请求。
-function showLanPairingOverlay(pairing, { onSuccess } = {}) {
+function showLanPairingOverlay(pairing, { onSuccess, isCurrent = () => true } = {}) {
   const overlay = document.createElement("div");
   overlay.className = "pairing-overlay";
   const card = document.createElement("section");
@@ -300,14 +397,16 @@ function showLanPairingOverlay(pairing, { onSuccess } = {}) {
 
   const submit = async () => {
     const code = input.value.trim();
-    if (!code) return;
+    if (!code || !isCurrent()) return;
     submitBtn.disabled = true;
     try {
       const result = await pairing.pair(code);
+      if (!isCurrent()) { overlay.remove(); return; }
       if (result.ok) {
         message.textContent = t('lan.pairSuccess');
         setTimeout(() => {
           overlay.remove();
+          if (!isCurrent()) return;
           if (onSuccess) void onSuccess();
           else location.reload();
         }, 500);
@@ -328,6 +427,7 @@ function showLanPairingOverlay(pairing, { onSuccess } = {}) {
   overlay.appendChild(card);
   document.body.appendChild(overlay);
   input.focus();
+  return overlay;
 }
 
 // LAN 页面失联回退：健康轮询连续失败 → 跳回云端来源（若有）
@@ -344,7 +444,7 @@ function startLanHealthWatch() {
 
 async function bootstrapLanPage() {
   initChannelBadge();
-  if (isLanPage) {
+  if (!isCloudMode) {
     const pairing = createPairingClient({ win: window });
     let paired = false;
     try {
@@ -491,8 +591,7 @@ nativePairButton?.addEventListener("click", async () => {
 window.addEventListener("voicebridge:pairing-success", (event) => {
   const deviceId = event.detail?.deviceId || "";
   if (!deviceId) return;
-  selectedCloudDeviceId = deviceId;
-  rememberCloudDesktopId(deviceId);
+  selectCloudDesktop(deviceId);
   if (cloudDeviceSelect) cloudDeviceSelect.value = deviceId;
   cloudRealtime?.reconnectNow();
   syncCloudConnectionStatus();
@@ -548,7 +647,7 @@ async function sendTextInput() {
     return;
   }
   if (text === lastAutoPastedText) {
-    textInput.value = "";
+    setTextInputValue("");
     updateTextInputState();
     lastAutoPastedText = "";
     clearTimeout(lastAutoPasteTimer);
@@ -559,14 +658,19 @@ async function sendTextInput() {
   lastAutoPastedText = "";
   clearTimeout(lastAutoPasteTimer);
   lastAutoPasteTimer = null;
+  const version = inputVersion;
+  const authVersion = identityVersion;
   const accepted = await sendTextToDesktop(text);
-  if (accepted) {
-    textInput.value = "";
+  if (accepted && isCurrentIdentity(authVersion) && version === inputVersion && textInput.value.trim() === text) {
+    setTextInputValue("");
     updateTextInputState();
   }
 }
 
-async function sendTextToDesktop(text, { localSuccessMessage = t('status.sentToDesktop') } = {}) {
+async function sendTextToDesktop(text, { localSuccessMessage = t('status.sentToDesktop'), context, voiceCommand = false } = {}) {
+  const authVersion = identityVersion;
+  if (isCloudMode && identityUserId !== window.VoiceBridgeAuth?.user?.id) return false;
+  if (context && !isCurrentRecordingTarget(context)) return false;
   if ((window.__VB_CONFIG || {}).voicebridgeMode === "cloud" && !isNativeLanActive()) {
     if (!cloudRealtime || !selectedCloudDeviceId) {
       showToast(t('status.desktopNotOpen'), true);
@@ -575,22 +679,23 @@ async function sendTextToDesktop(text, { localSuccessMessage = t('status.sentToD
     if (!selectedCloudDeviceIsCompatible()) return false;
     try {
       const sendPromise = cloudRealtime.sendText({
-        targetDeviceId: selectedCloudDeviceId,
+        targetDeviceId: context?.deviceId || selectedCloudDeviceId,
         text,
         // 手动点"发送"按钮的意图是把文本输入到光标处，不是只入剪贴板。
         // 所以无论 autoPaste 开关状态如何，都强制为 true。
         autoPaste: true,
-        targetWindowId: windowSelector.targetWindow?.windowId
+        targetWindowId: (context?.targetWindow || windowSelector.targetWindow)?.windowId
       });
       showToast(t('status.sending'));
       const sendStartedAt = performance.now();
       await sendPromise;
+      if (!isCurrentIdentity(authVersion)) return false;
       const sendAckMs = Math.round(performance.now() - sendStartedAt);
       console.info("[vb-timing] send→ack", { ms: sendAckMs });
       recordingTiming.note({ sendAckMs });
       return true;
     } catch (error) {
-      showToast(error.message || t('connection.sendFailed'), true);
+      if (isCurrentIdentity(authVersion)) showToast(error.message || t('connection.sendFailed'), true);
       return false;
     }
   }
@@ -599,11 +704,11 @@ async function sendTextToDesktop(text, { localSuccessMessage = t('status.sentToD
     const msg = {
       type: "phrase",
       text,
-      autoPaste: autoPasteEl.checked
+      autoPaste: true
     };
-    if (windowSelector.targetWindow) {
-      msg.targetWindow = windowSelector.targetWindow;
-    }
+    const targetWindow = context?.targetWindow || windowSelector.targetWindow;
+    if (targetWindow) msg.targetWindow = targetWindow;
+    if (voiceCommand) msg.voiceCommand = true;
     copyToPhoneClipboard(text);
     ws.send(JSON.stringify(msg));
     showToast(localSuccessMessage);
@@ -616,26 +721,59 @@ async function sendTextToDesktop(text, { localSuccessMessage = t('status.sentToD
 
 async function handleAuthState(event) {
   const { session, user } = event.detail;
+  if (isCloudMode && (user?.id || "") !== (window.VoiceBridgeAuth?.user?.id || "")) return;
   updateBillingControls(Boolean(session));
   if (!isCloudMode) return;
-  if (!session || !user || !window.VoiceBridgeAuth?.supabase) {
-    if (activeCloudUserId) {
-      showToast(t('status.sessionExpired'));
-      activeCloudUserId = "";
+  const nextUserId = session && user ? user.id : "";
+  if (identityUserId !== nextUserId) {
+    cancelRecordingWork();
+    if (isNativeApp) disconnectNativeLan({ forget: Boolean(identityUserId), revoke: true });
+    identityVersion++;
+    identityUserId = nextUserId;
+    targetVersion++;
+    cloudSetupUserId = "";
+    nativeLanRestoreAttempted = false;
+    currentUserPlan = "free";
+    lastAutoPastedText = "";
+    clearTimeout(lastAutoPasteTimer);
+    lastAutoPasteTimer = null;
+    recoveredTranscript = null;
+    document.querySelector("#recoveredTranscriptPanel")?.classList.add("hidden");
+    document.querySelector("#recoveredTranscriptList")?.replaceChildren();
+    commandLibrary?.resetForIdentity();
+    accountDrawer.close();
+    accountDrawer.el.body?.replaceChildren();
+    recordingTiming.reset();
+    if (windowSelector) {
+      windowSelector.selectedWindow = null;
+      windowSelector._windowCache = null;
+      windowSelector._saveSelection();
+      windowSelector._updateButton();
+      windowSelector._close();
     }
-    await stopCloudRealtime();
+    setTextInputValue("");
     resetCloudDeviceSelect();
+  }
+  if (!session || !user || !window.VoiceBridgeAuth?.supabase) {
+    cloudSetupVersion++;
+    cloudSetupUserId = "";
+    const version = identityVersion;
+    await stopCloudRealtime();
+    if (version === identityVersion) resetCloudDeviceSelect();
     return;
   }
-
-  const phoneDeviceId = getPhoneDeviceId();
-  if (cloudRealtime && activeCloudUserId === user.id && activeCloudPhoneDeviceId === phoneDeviceId) {
-    return;
-  }
-
+  const phoneDeviceId = getPhoneDeviceId(user.id);
+  if (cloudSetupUserId === user.id || (cloudRealtime && activeCloudUserId === user.id && activeCloudPhoneDeviceId === phoneDeviceId)) return;
+  const setupVersion = ++cloudSetupVersion;
+  const authVersion = identityVersion;
+  const isCurrentSetup = () => setupVersion === cloudSetupVersion && authVersion === identityVersion &&
+    user.id === identityUserId && user.id === window.VoiceBridgeAuth?.user?.id;
+  cloudSetupUserId = user.id;
   await stopCloudRealtime();
+  if (!isCurrentSetup()) return;
   activeCloudUserId = user.id;
   activeCloudPhoneDeviceId = phoneDeviceId;
+  void commandLibrary?.load();
 
   // 登记/刷新手机端自己的设备记录，使 Realtime RLS policy 能通过
   // （policy 要求订阅 device:<user_id>:<device_id> 时 devices 表里有对应行）
@@ -648,6 +786,7 @@ async function handleAuthState(event) {
         .select("id")
         .eq("id", phoneDeviceId)
         .maybeSingle();
+      if (!isCurrentSetup()) return;
       if (lookupError) throw lookupError;
       const writeResult = existingDevice
         ? await sbAuth.from("devices").update({
@@ -671,23 +810,32 @@ async function handleAuthState(event) {
           last_seen_at: now,
           updated_at: now
         });
+      if (!isCurrentSetup()) return;
       if (writeResult.error) throw writeResult.error;
     }
   } catch (error) {
+    if (!isCurrentSetup()) return;
+    cloudSetupUserId = "";
     console.warn("Failed to register phone device:", error);
+    setConnectionStatus("error", t('connection.deviceRegistrationFailed'));
+    showToast(t('connection.deviceRegistrationFailed'), true);
+    return;
   }
+  if (!isCurrentSetup()) return;
 
   const realtime = new CloudRealtime({
     supabase: window.VoiceBridgeAuth.supabase,
     user,
     phoneDeviceId,
     onDevices: (devices) => {
+      if (!isCurrentSetup() || cloudRealtime !== realtime) return;
       const desktopDevices = devices.filter((device) => isDesktopDeviceCandidate(device, phoneDeviceId));
       renderCloudDeviceOptions(desktopDevices);
       updateCloudLanEndpoints(desktopDevices);
       syncCloudConnectionStatus();
     },
     onAck: (ack) => {
+      if (!isCurrentSetup() || cloudRealtime !== realtime) return;
       if (ack.key) {
         // 按键回执（Enter/Paste/Undo 等）：给完成触感；toast 由 sendKeyCommand
         // 的 then/catch 负责，这里不重复弹。
@@ -698,6 +846,7 @@ async function handleAuthState(event) {
       showToast(ack.status === "success" ? t('status.sentToDesktopAck') : t('status.desktopExecFailed', ack.detail));
     },
     onStatus: (status) => {
+      if (!isCurrentSetup() || cloudRealtime !== realtime) return;
       const text = String(status);
       // 设备发现频道（presence）波动不影响文字发送：phoenix 自动 rejoin，
       // UI 不降级（2026-09-27 云端断联重构）。
@@ -722,6 +871,7 @@ async function handleAuthState(event) {
   if (sb && planBadge) {
     sb.from("subscriptions").select("plan,status").eq("user_id", user.id).maybeSingle()
       .then(({ data: sub }) => {
+        if (!isCurrentSetup()) return;
         const plan = sub?.plan === "admin"
           ? "admin"
           : (sub?.plan === "pro" && isPaidStatus(sub.status) ? "pro" : "free");
@@ -740,10 +890,13 @@ async function handleAuthState(event) {
   }
   try {
     await realtime.start();
+    if (!isCurrentSetup()) { await realtime.stop(); return; }
+    cloudSetupUserId = "";
   } catch (error) {
     if (cloudRealtime !== realtime || activeCloudUserId !== user.id || activeCloudPhoneDeviceId !== phoneDeviceId) {
       return;
     }
+    cloudSetupUserId = "";
     showToast(error.message || t('connection.cloudConnectFailedToast'), true);
     setConnectionStatus("error", t('connection.cloudConnectFailed'));
     await stopCloudRealtime();
@@ -752,7 +905,8 @@ async function handleAuthState(event) {
 }
 
 window.addEventListener("voicebridge:auth", (event) => {
-  void handleAuthState(event);
+  // Supabase auth callbacks must finish before starting further auth work.
+  setTimeout(() => void handleAuthState(event), 0);
 });
 
 // Mobile browsers suspend sockets aggressively in the background. Rebuild the
@@ -767,18 +921,8 @@ document.addEventListener("visibilitychange", () => {
   }
 });
 
-if (window.VoiceBridgeAuth) {
-  void handleAuthState({
-    detail: {
-      session: window.VoiceBridgeAuth.session,
-      user: window.VoiceBridgeAuth.user
-    }
-  });
-}
-
 cloudDeviceSelect?.addEventListener("change", () => {
-  selectedCloudDeviceId = cloudDeviceSelect.value;
-  rememberCloudDesktopId(selectedCloudDeviceId);
+  selectCloudDesktop(cloudDeviceSelect.value);
   syncDeviceSelectorLabel();
   updateCloudLanEndpoints(cloudDesktopDevices);
   syncCloudConnectionStatus();
@@ -859,17 +1003,11 @@ function renderCloudDeviceOptions(desktopDevices) {
 
   cloudDeviceSelect.replaceChildren(...options);
 
-  if (desktopDevices.some((device) => device.deviceId === previousDeviceId)) {
-    selectedCloudDeviceId = previousDeviceId;
-    cloudDeviceSelect.value = previousDeviceId;
-  } else if (desktopDevices.some((device) => device.deviceId === rememberedDeviceId)) {
-    selectedCloudDeviceId = rememberedDeviceId;
-    cloudDeviceSelect.value = rememberedDeviceId;
-  } else {
-    selectedCloudDeviceId = desktopDevices[0]?.deviceId || "";
-    cloudDeviceSelect.value = selectedCloudDeviceId;
-  }
-  rememberCloudDesktopId(selectedCloudDeviceId);
+  const nextDeviceId = desktopDevices.some((device) => device.deviceId === previousDeviceId)
+    ? previousDeviceId
+    : desktopDevices.some((device) => device.deviceId === rememberedDeviceId)
+      ? rememberedDeviceId : desktopDevices[0]?.deviceId || "";
+  selectCloudDesktop(nextDeviceId);
 
   renderDeviceSelectorList(desktopDevices);
   syncDeviceSelectorLabel();
@@ -900,9 +1038,7 @@ function renderDeviceSelectorList(desktopDevices) {
     btn.appendChild(title);
     if (isSelected) btn.appendChild(dropdownIconEl(checkIconSvg, "window-item-check"));
     btn.addEventListener("click", () => {
-      selectedCloudDeviceId = device.deviceId;
-      cloudDeviceSelect.value = device.deviceId;
-      rememberCloudDesktopId(selectedCloudDeviceId);
+      selectCloudDesktop(device.deviceId);
       syncDeviceSelectorLabel();
       updateCloudLanEndpoints(cloudDesktopDevices);
       syncCloudConnectionStatus();
@@ -921,11 +1057,12 @@ function createCloudPlaceholderOption() {
 }
 
 async function stopCloudRealtime() {
-  await cloudRealtime?.stop();
+  const previous = cloudRealtime;
   cloudRealtime = null;
   cloudRealtimeSubscribed = false;
   activeCloudUserId = "";
   activeCloudPhoneDeviceId = "";
+  await previous?.stop();
 }
 
 function resetCloudDeviceSelect() {
@@ -1183,12 +1320,13 @@ class WindowSelector {
   }
 
   get targetWindow() {
-    if (isCloudMode && !isNativeLanActive() && this.selectedWindow?.deviceId !== selectedCloudDeviceId) return null;
+    if (isCloudMode && this.selectedWindow?.deviceId !== selectedCloudDeviceId) return null;
     return this.selectedWindow;
   }
 
   _loadSelection() { try { return JSON.parse(localStorage.getItem(WindowSelector.STORAGE_KEY)); } catch { return null; } }
   _saveSelection() {
+    targetVersion++;
     try {
       if (this.selectedWindow) localStorage.setItem(WindowSelector.STORAGE_KEY, JSON.stringify(this.selectedWindow));
       else localStorage.removeItem(WindowSelector.STORAGE_KEY);
@@ -1224,6 +1362,9 @@ class WindowSelector {
   }
 
   async _fetchWindows() {
+    const version = targetVersion;
+    const authVersion = identityVersion;
+    const isCurrent = () => version === targetVersion && authVersion === identityVersion;
     if (isCloudMode && !isNativeLanActive()) {
       const windows = cloudDesktopDevices
         .find((device) => device.deviceId === selectedCloudDeviceId)
@@ -1238,13 +1379,15 @@ class WindowSelector {
     }
     this.el.list.innerHTML = `<p class="window-list-loading">${t('common.loading')}</p>`;
     try {
-      const res = await fetch(lanApiUrl("/api/windows"), { headers: lanTokenHeaders() });
+      const res = await fetch(lanApiUrl("/api/windows"), { headers: activeLanTokenHeaders() });
+      if (!isCurrent()) return;
       if (!res.ok) {
         console.error("API error:", res.status, await res.text().catch(() => ""));
         this.el.list.innerHTML = `<p class="window-list-empty">${t('windowSelector.fetchFailed')}</p>`;
         return;
       }
       const data = await res.json();
+      if (!isCurrent()) return;
       if (!data.ok || !data.windows || data.windows.length === 0) {
         this.el.list.innerHTML = `<p class="window-list-empty">${t('windowSelector.noWindows')}</p>`;
         return;
@@ -1253,6 +1396,7 @@ class WindowSelector {
       this._windowCache = data.windows;
       this._windowCacheTime = Date.now();
     } catch {
+      if (!isCurrent()) return;
       this.el.list.innerHTML = `<p class="window-list-empty">${t('windowSelector.fetchFailed')}</p>`;
     }
   }
@@ -1303,7 +1447,8 @@ class WindowSelector {
         btn.addEventListener("click", (e) => {
           e.stopPropagation();
           if (isSelected) this.selectedWindow = null;
-          else this.selectedWindow = { appName: group.appName, windowTitle: win.title };
+          else this.selectedWindow = { appName: group.appName, windowTitle: win.title,
+            ...(isCloudMode ? { deviceId: selectedCloudDeviceId } : {}) };
           this._saveSelection();
           this._updateButton();
           this._close();
@@ -1378,8 +1523,9 @@ class CommandLibrary {
     this._longPressTriggered = false;
     this._longPressStartX = 0;
     this._longPressStartY = 0;
+    this._loadVersion = 0;
     this._bindContainerEvents();
-    this.load();
+    if (!isCloudMode) void this.load();
   }
 
   _bindContainerEvents() {
@@ -1433,9 +1579,26 @@ class CommandLibrary {
     });
   }
 
+  resetForIdentity() {
+    this._loadVersion++;
+    clearTimeout(this._longPressTimer);
+    if (this.editingId) this._exitEditMode(false);
+    this.commands = [];
+    this.filter = "";
+    this.activeCategory = t('libraryExtra.recent');
+    this.closeAddDialog();
+    this.renderTabs();
+    this.render();
+  }
+
   async load() {
+    const version = ++this._loadVersion;
+    const authVersion = identityVersion;
+    if (isCloudMode && !identityUserId) return;
     try {
-      this.commands = await activeCommandStore.list();
+      const commands = await activeCommandStore.list();
+      if (version !== this._loadVersion || !isCurrentIdentity(authVersion)) return;
+      this.commands = commands;
       // If "最近" is active but no commands have been used, fall back to first category
       if (this.activeCategory === t('libraryExtra.recent') && !this.commands.some(c => c.lastUsedAt)) {
         const cats = this._getCategories();
@@ -1448,8 +1611,9 @@ class CommandLibrary {
       }
       this.renderTabs();
       this.render();
-      await this._migrateLocalStoragePhrases();
+      await this._migrateLocalStoragePhrases(version, authVersion);
     } catch {
+      if (version !== this._loadVersion || !isCurrentIdentity(authVersion)) return;
       this.container.innerHTML = `<p style="padding:12px;color:var(--text-muted);text-align:center;">${t('library.loadFailed')}</p>`;
     }
   }
@@ -1616,7 +1780,7 @@ class CommandLibrary {
     const inputCard = document.getElementById("inputCard");
     editLabel.value = cmd.label;
     editLabel.classList.remove("hidden");
-    textInput.value = cmd.text;
+    setTextInputValue(cmd.text);
     textInput.rows = 5;
     textInput.placeholder = t('libraryExtra.editPlaceholder');
     inputCard.classList.add("editing");
@@ -1661,7 +1825,7 @@ class CommandLibrary {
     const inputCard = document.getElementById("inputCard");
     editLabel.value = "";
     editLabel.classList.add("hidden");
-    textInput.value = "";
+    setTextInputValue("");
     textInput.rows = 3;
     textInput.placeholder = t('input.placeholder');
     inputCard.classList.remove("editing");
@@ -1694,20 +1858,25 @@ class CommandLibrary {
   }
 
   async _deleteCommand(id) {
+    const authVersion = identityVersion;
     try {
       await activeCommandStore.remove(id);
+      if (!isCurrentIdentity(authVersion)) return;
       this.commands = this.commands.filter(c => c.id !== id);
       showToast(t('library.deleted'));
-      this._exitEditMode(false);
+      if (this.editingId === id) this._exitEditMode(false);
     } catch {
+      if (!isCurrentIdentity(authVersion)) return;
       showToast(t('library.deleteFailed'), true);
-      this._exitEditMode(false);
+      if (this.editingId === id) this._exitEditMode(false);
     }
   }
 
   async _updateCommand(id, updates) {
+    const authVersion = identityVersion;
     try {
       const updated = await activeCommandStore.update(id, updates);
+      if (!isCurrentIdentity(authVersion)) return;
       const idx = this.commands.findIndex(c => c.id === id);
       if (idx !== -1) this.commands[idx] = updated;
     } catch (err) {
@@ -1716,10 +1885,12 @@ class CommandLibrary {
   }
 
   async touchCommand(id) {
+    const authVersion = identityVersion;
     const command = this.commands.find(c => c.id === id);
     if (!command || command.source !== "user") return;
     try {
       const updated = await activeCommandStore.update(id, { lastUsedAt: Date.now() });
+      if (!isCurrentIdentity(authVersion)) return;
       const idx = this.commands.findIndex(c => c.id === id);
       if (idx !== -1) this.commands[idx] = updated;
       this.renderTabs();
@@ -1730,12 +1901,14 @@ class CommandLibrary {
   }
 
   async addCommand(text, category) {
+    const authVersion = identityVersion;
     try {
       const created = await activeCommandStore.create({
         text,
         label: text.length > 8 ? text.slice(0, 8) + "\u2026" : text,
         category: category || t('library.categoryGeneral')
       });
+      if (!isCurrentIdentity(authVersion)) return;
       this.commands.unshift(created);
       // Switch to the category of the newly added command
       this.activeCategory = created.category || t('libraryExtra.uncategorized');
@@ -1743,6 +1916,7 @@ class CommandLibrary {
       this.render();
       showToast(t('libraryExtra.addedSuccess'));
     } catch {
+      if (!isCurrentIdentity(authVersion)) return;
       showToast(t('libraryExtra.addFailed'), true);
     }
   }
@@ -1785,6 +1959,7 @@ class CommandLibrary {
   }
 
   async confirmAdd() {
+    const authVersion = identityVersion;
     const input = document.getElementById("addCommandInput");
     const select = document.getElementById("addCommandCategory");
     const newCatInput = document.getElementById("addCommandNewCategory");
@@ -1794,19 +1969,21 @@ class CommandLibrary {
       ? (newCatInput.value.trim() || t('library.categoryGeneral'))
       : select.value;
     await this.addCommand(text, category);
+    if (!isCurrentIdentity(authVersion)) return;
     this.closeAddDialog();
   }
 
-  async _migrateLocalStoragePhrases() {
+  async _migrateLocalStoragePhrases(version, authVersion) {
     const STORAGE_KEY = "voicebridge_phrases";
     try {
       const raw = localStorage.getItem(STORAGE_KEY);
       if (!raw) return;
       const phrases = JSON.parse(raw);
       if (!Array.isArray(phrases) || phrases.length === 0) return;
-      const migratedKey = "voicebridge_phrases_migrated";
+      const migratedKey = `voicebridge_phrases_migrated:${identityUserId || "local"}`;
       if (localStorage.getItem(migratedKey)) return;
       for (const phrase of phrases) {
+        if (version !== this._loadVersion || !isCurrentIdentity(authVersion)) return;
         if (phrase.text) {
           await activeCommandStore.create({
             text: phrase.text,
@@ -1815,8 +1992,12 @@ class CommandLibrary {
           });
         }
       }
+      if (version !== this._loadVersion || !isCurrentIdentity(authVersion)) return;
       localStorage.setItem(migratedKey, "true");
-      this.commands = await activeCommandStore.list();
+      localStorage.removeItem(STORAGE_KEY);
+      const commands = await activeCommandStore.list();
+      if (version !== this._loadVersion || !isCurrentIdentity(authVersion)) return;
+      this.commands = commands;
       this.renderTabs();
       this.render();
     } catch { }
@@ -1824,13 +2005,14 @@ class CommandLibrary {
 }
 
 // === Initialize ===
-const windowSelector = new WindowSelector();
-const commandLibrary = new CommandLibrary(document.getElementById("commandLibrary"));
+windowSelector = new WindowSelector();
+commandLibrary = new CommandLibrary(document.getElementById("commandLibrary"));
 
 // === Text Input Events ===
 updateTextInputState();
 
 textInput.addEventListener("input", () => {
+  inputVersion++;
   updateTextInputState();
 });
 
@@ -1900,7 +2082,7 @@ function sendKeyCommand(key, successMessage) {
     return;
   }
   if (ws && ws.readyState === WebSocket.OPEN) {
-    ws.send(JSON.stringify({ type: "key", key }));
+    ws.send(JSON.stringify({ type: "key", key, ...(windowSelector.targetWindow ? { targetWindow: windowSelector.targetWindow } : {}) }));
     showToast(successMessage);
   } else {
     showToast(t('status.sendFailedConnection'), true);
@@ -1951,15 +2133,8 @@ savePhraseBtn.addEventListener("click", () => {
 // === Send Text Button (AutoPaste OFF 时手动发送文本框内容) ===
 const sendTextBtn = document.querySelector("#sendTextBtn");
 sendTextBtn?.addEventListener("click", async () => {
-  const text = textInput.value.trim();
-  if (!text) return;
   sendTextBtn.disabled = true;
-  const accepted = await sendTextToDesktop(text);
-  sendTextBtn.disabled = false;
-  if (accepted) {
-    textInput.value = "";
-    updateTextInputState();
-  }
+  try { await sendTextInput(); } finally { sendTextBtn.disabled = false; }
 });
 
 // === Command Library Events ===
@@ -2013,14 +2188,17 @@ const stopSvg = '<svg viewBox="0 0 24 24"><rect x="6" y="6" width="12" height="1
 
 let recorder = null;
 let isRecording = false;
+let isStarting = false;
+let recordingController = null;
+let uploadController = null;
+let recordingContext = null;
+let recordingWorkVersion = 0;
 let maxRecordTimer = null;
 let timerInterval = null;
 let recordSeconds = 0;
 let recordingStartedAt = 0;
 let stopStartedAt = 0;
 let currentRecordingDurationMs = null;
-// 录音期间预取的直连 ASR 签名（Promise|null）：说完话免一次跨境签名往返。
-let prefetchedAsrIssue = null;
 let isUploading = false;
 let ws = null;
 
@@ -2051,13 +2229,111 @@ recordButton.addEventListener("click", toggleRecording);
 fallbackButton.addEventListener("click", () => fallbackFile.click());
 fallbackFile.addEventListener("change", async () => {
   const file = fallbackFile.files?.[0];
-  if (file) { await uploadAudio(file, fileExtensionFor(file.type)); fallbackFile.value = ""; }
+  if (!file || isStarting || isRecording || isUploading) return;
+  const context = captureRecordingContext(++recordingWorkVersion);
+  stopStartedAt = performance.now();
+  isUploading = true;
+  recordButton.disabled = true;
+  setActionButtonsDisabled(true);
+  await uploadAudio(file, fileExtensionFor(file.type), context);
+  fallbackFile.value = "";
 });
 
 async function toggleRecording() {
-  if (isUploading) return;
+  if (isUploading || isStarting) return;
   if (isRecording) await stopRecording();
   else await startRecording();
+}
+
+function setTextInputValue(text) {
+  textInput.value = text;
+  inputVersion++;
+}
+
+function captureRecordingContext(workVersion = recordingWorkVersion) {
+  return {
+    workVersion, identityVersion, userId: identityUserId, targetVersion,
+    deviceId: selectedCloudDeviceId, inputVersion, inputText: textInput.value,
+    targetWindow: windowSelector.targetWindow ? { ...windowSelector.targetWindow } : null,
+    autoPaste: autoPasteEl.checked,
+    lanEndpoint: isNativeLanActive() ? { ...nativeLanEndpoint } : null,
+    durationMs: null
+  };
+}
+
+function isCurrentRecordingIdentity(context) {
+  return context?.identityVersion === identityVersion && (!isCloudMode ||
+    (context.userId === identityUserId && context.userId === window.VoiceBridgeAuth?.user?.id));
+}
+
+function isCurrentRecordingTarget(context) {
+  return isCurrentRecordingIdentity(context) && context.targetVersion === targetVersion &&
+    context.deviceId === selectedCloudDeviceId && Boolean(context.lanEndpoint) === isNativeLanActive();
+}
+
+function retainRecognizedText(text, context) {
+  if (!isCurrentRecordingIdentity(context)) return;
+  const panel = document.querySelector("#recoveredTranscriptPanel");
+  const list = document.querySelector("#recoveredTranscriptList");
+  if (!panel || !list) return;
+  recoveredTranscript ||= [];
+  const item = { text, context };
+  recoveredTranscript.push(item);
+  const row = document.createElement("div");
+  const result = document.createElement("textarea");
+  result.className = "text-input";
+  result.readOnly = true;
+  result.rows = 3;
+  result.value = text;
+  result.setAttribute("aria-label", t('record.recoveredText'));
+  const append = document.createElement("button");
+  append.type = "button";
+  append.className = "save-btn save-btn-sm";
+  append.textContent = t('record.appendRecovered');
+  append.addEventListener("click", () => {
+    if (!isCurrentRecordingIdentity(context)) return;
+    setTextInputValue([textInput.value.trimEnd(), text].filter(Boolean).join("\n"));
+    updateTextInputState();
+    recoveredTranscript = recoveredTranscript.filter((entry) => entry !== item);
+    row.remove();
+    panel.classList.toggle("hidden", recoveredTranscript.length === 0);
+    textInput.focus();
+  });
+  row.append(result, append);
+  list.appendChild(row);
+  panel.classList.remove("hidden");
+  showToast(t('record.resultRetained'));
+}
+
+function acceptRecognizedText(text, context) {
+  if (!isCurrentRecordingIdentity(context)) return;
+  const unchanged = isCurrentRecordingTarget(context) && context.inputVersion === inputVersion &&
+    context.inputText === textInput.value && !commandLibrary.editingId;
+  if (!unchanged) { retainRecognizedText(text, context); return; }
+  setTextInputValue(text);
+  updateTextInputState();
+  if (context.autoPaste && autoPasteEl.checked) {
+    void sendTextToDesktop(text, { context, voiceCommand: Boolean(context.lanEndpoint) || !isCloudMode })
+      .then((accepted) => { if (!accepted) retainRecognizedText(text, context); })
+      .catch(() => retainRecognizedText(text, context));
+  }
+}
+
+function cancelRecordingWork() {
+  recordingWorkVersion++;
+  recordingController?.abort();
+  uploadController?.abort();
+  recordingController = null;
+  uploadController = null;
+  void recorder?.cancel();
+  recorder = null;
+  recordingContext = null;
+  isStarting = false;
+  isRecording = false;
+  clearTimeout(maxRecordTimer);
+  clearInterval(timerInterval);
+  recordButton.classList.remove("recording");
+  finishUpload();
 }
 
 function setRecordIdle() {
@@ -2118,45 +2394,55 @@ function beginRecordingState() {
 }
 
 async function startRecording() {
+  if (isStarting || isRecording || isUploading || commandLibrary.editingId) return;
+  if (isCloudMode && (!selectedCloudDeviceId || identityUserId !== window.VoiceBridgeAuth?.user?.id)) {
+    showToast(t('status.desktopNotOpen'), true);
+    return;
+  }
+  const context = captureRecordingContext(++recordingWorkVersion);
+  const controller = new AbortController();
+  recordingController = controller;
+  isStarting = true;
+  recordButton.disabled = true;
+  setActionButtonsDisabled(true);
   try {
-    if (isCloudMode && !isNativeLanActive() && !selectedCloudDeviceId) {
-      showToast(t('status.desktopNotOpen'), true);
-      return;
-    }
-    const maxMs = currentMaxAudioMs();
-    // 云端和 LAN 统一直接录制 16 kHz 单声道 WAV。LAN 上传后桌面可直接
-    // 透传给腾讯 ASR，避免 MediaRecorder(WebM/MP4) 再走一次 ffmpeg 转码。
-    recorder = await recordWavUntilStopped({
-      onStopReady: async (blob) => uploadAudio(blob, "wav"),
-      maxDurationMs: maxMs,
+    const nextRecorder = await recordWavUntilStopped({
+      onStopReady: async (blob) => uploadAudio(blob, "wav", context),
+      maxDurationMs: currentMaxAudioMs(),
+      signal: controller.signal,
       onMaxDurationReached: () => {
-        void stopRecording().catch((error) => {
-          console.error("Auto-stop failed:", error);
-          finishUpload();
-        });
+        if (context.workVersion === recordingWorkVersion) void stopRecording();
       }
     });
+    if (controller.signal.aborted || context.workVersion !== recordingWorkVersion || !isCurrentRecordingTarget(context)) {
+      await nextRecorder.cancel();
+      return;
+    }
+    recorder = nextRecorder;
+    recordingContext = context;
     recordingTiming.reset();
     beginRecordingState();
-    // 云端直连签名预取已停用：直连通道在浏览器语境下必败（CORS + 代理出口
-    // 被腾讯拒，2026-10-11 实测），预取只产生无用的预留配额行。
-    prefetchedAsrIssue = null;
-    if (!isCloudMode && ws && ws.readyState === WebSocket.OPEN) {
-      // LAN 模式（LAN 页面 / 原生 App 直连）：通知桌面端预取识别签名，
-      // 上传到达后免掉停止录音的签发等待。旧桌面端收到未知消息只 warn。
-      ws.send(JSON.stringify({ type: "asr-prefetch", duration_ms: maxMs }));
-    }
   } catch (error) {
-    showToast(t('record.micDenied', error.message), true);
+    if (error.name !== "AbortError" && context.workVersion === recordingWorkVersion) showToast(t('record.micDenied', error.message), true);
+  } finally {
+    if (context.workVersion === recordingWorkVersion) {
+      isStarting = false;
+      recordButton.disabled = Boolean(commandLibrary.editingId);
+      if (!isRecording) setActionButtonsDisabled(false);
+    }
   }
 }
 
 async function stopRecording() {
   if (!isRecording || !recorder) return;
+  const currentRecorder = recorder;
+  const context = recordingContext;
+  recorder = null;
   isRecording = false;
   isUploading = true;
   stopStartedAt = performance.now();
-  currentRecordingDurationMs = getCurrentRecordingDurationMs();
+  context.durationMs = getCurrentRecordingDurationMs();
+  currentRecordingDurationMs = context.durationMs;
   clearTimeout(maxRecordTimer);
   clearInterval(timerInterval);
   recordButton.classList.remove("recording");
@@ -2165,123 +2451,90 @@ async function stopRecording() {
   setRecordProcessing();
   showToast(t('record.uploading'));
   try {
-    await recorder.stop();
+    await currentRecorder.stop();
   } catch (error) {
-    showToast(error.message || t('record.stopFailed'), true);
-    finishUpload();
+    if (isCurrentRecordingIdentity(context) && error.name !== "AbortError") showToast(error.message || t('record.stopFailed'), true);
+    finishUpload(context);
   }
 }
 
-async function uploadAudio(blob, extension) {
+async function uploadAudio(blob, extension, context = captureRecordingContext()) {
+  const controller = new AbortController();
+  uploadController = controller;
   let timeout = null;
   try {
-    if (!blob.size) { showToast(t('record.noVoice'), true); finishUpload(); return; }
+    if (!isCurrentRecordingIdentity(context)) return;
+    if (!blob.size) { showToast(t('record.noVoice'), true); return; }
     showToast(t('record.recognizing'));
-    if (isCloudMode && !isNativeLanActive()) {
-      const encodeMs = Math.round(performance.now() - stopStartedAt);
-      console.info("[vb-timing] stop→encode+upload-ready", { ms: encodeMs, bytes: blob.size });
-      recordingTiming.note({ encodeMs, bytes: blob.size });
-      const payload = await transcribeCloudAudio({
-        audio: blob,
-        filename: `voicebridge.${extension}`,
-        durationMs: currentRecordingDurationMs,
-        prefetchedIssue: prefetchedAsrIssue
+    let payload;
+    if (isCloudMode && !context.lanEndpoint) {
+      recordingTiming.note({ encodeMs: Math.round(performance.now() - stopStartedAt), bytes: blob.size });
+      payload = await transcribeCloudAudio({
+        audio: blob, filename: `voicebridge.${extension}`, durationMs: context.durationMs,
+        expectedUserId: context.userId, signal: controller.signal
       });
-      prefetchedAsrIssue = null;
-      const transcribedMs = Math.round(performance.now() - stopStartedAt);
-      console.info("[vb-timing] stop→transcribed", { ms: transcribedMs });
-      recordingTiming.note({ transcribedMs });
-      const text = (payload.text || "").trim();
-      if (!text) throw new Error(t('record.noTranscriptText'));
-      // 识别结果先放入文本框（与 Lan 版本对齐：可见、可编辑、可收藏）
-      if (!commandLibrary.editingId) {
-        textInput.value = text;
-        updateTextInputState();
-      }
-      // 仅 AutoPaste ON 时立即异步发送（延迟与原实现相同，void 表示不 await）
-      if (autoPasteEl.checked) {
-        void sendTextToDesktop(text).catch((error) => {
-          showToast(error.message || t('connection.sendFailed'), true);
-        });
-      }
-      return;
+      if (!isCurrentRecordingIdentity(context)) return;
+      recordingTiming.note({ transcribedMs: Math.round(performance.now() - stopStartedAt) });
+    } else {
+      const formData = new FormData();
+      formData.append("audio", blob, `voicebridge.${extension}`);
+      // Wait for this phone's context checks before any desktop output.
+      formData.append("deferOutput", "true");
+      formData.append("autoPaste", "false");
+      const url = context.lanEndpoint ? `${buildNativeLanBaseUrl(context.lanEndpoint)}/api/upload` : "/api/upload";
+      timeout = setTimeout(() => controller.abort(), 30_000);
+      const response = await fetch(url, {
+        method: "POST", body: formData,
+        headers: lanTokenHeaders(window, context.lanEndpoint), signal: controller.signal
+      });
+      payload = await response.json();
+      if (!isCurrentRecordingIdentity(context)) return;
+      if (!response.ok || !payload.ok) throw new Error(payload.error || t('record.uploadFailed'));
+      recordingTiming.note({ lan: true, totalMs: Math.round(performance.now() - stopStartedAt) });
     }
-
-    const formData = new FormData();
-    formData.append("audio", blob, `voicebridge.${extension}`);
-    formData.append("autoPaste", String(autoPasteEl.checked));
-    if (windowSelector.targetWindow) {
-      formData.append("targetAppName", windowSelector.targetWindow.appName);
-      formData.append("targetWindowTitle", windowSelector.targetWindow.windowTitle);
-    }
-    recordingTiming.note({ lan: true, encodeMs: Math.round(performance.now() - stopStartedAt) });
-    const controller = new AbortController();
-    timeout = setTimeout(() => controller.abort(), 30_000);
-    const response = await fetch(lanApiUrl("/api/upload"), {
-      method: "POST",
-      body: formData,
-      headers: lanTokenHeaders(),
-      signal: controller.signal
-    });
-    clearTimeout(timeout);
-    timeout = null;
-    const payload = await response.json();
-    recordingTiming.note({ totalMs: Math.round(performance.now() - stopStartedAt) });
-    if (!response.ok || !payload.ok) throw new Error(payload.error || t('record.uploadFailed'));
-    const output = payload.output || {};
-    // WS 在线时，桌面端的 output 广播是结果提示与触感的单一反馈点（本函数
-    // 不再重复触发，修掉 HTTP 响应 + 广播的双重提示竞态）；WS 掉线时退化为
-    // 这里的 HTTP 响应提示（仅文字，无触感，可接受的降级）。
-    const wsFeedbackExpected = ws && ws.readyState === WebSocket.OPEN;
-    if (!wsFeedbackExpected) {
-      if (output.buffered) {
-        showToast(t('record.appendedToBuffer'));
-      } else if (output.command) {
-        showToast(output.keyError ? t('record.voiceCommandFailed') : t('record.voiceCommandExecuted'), Boolean(output.keyError));
-      } else if (output.pasted) {
-        showToast(t('record.copiedAndPasted'));
-      } else if (output.copied) {
-        showCopyToast(t('record.copiedToClipboard'), payload.text || "");
-      } else {
-        showToast(t('record.clipboardFailed'), true);
-      }
-    }
+    if (controller.signal.aborted) return;
+    const text = (payload.text || "").trim();
+    if (!text) throw new Error(t('record.noTranscriptText'));
+    acceptRecognizedText(text, context);
   } catch (error) {
-    if (timeout) clearTimeout(timeout);
-    if (error.name === "AbortError") {
-      showToast(t('record.uploadTimeout'), true);
-      return;
-    }
-    showToast(error.message, true);
+    if (isCurrentRecordingIdentity(context) && !controller.signal.aborted && error.name !== "AbortError") showToast(error.message, true);
+    else if (isCurrentRecordingIdentity(context) && context.workVersion === recordingWorkVersion && timeout) showToast(t('record.uploadTimeout'), true);
   } finally {
-    finishUpload();
+    if (timeout) clearTimeout(timeout);
+    if (uploadController === controller) uploadController = null;
+    finishUpload(context);
   }
 }
 
-function finishUpload() {
+function finishUpload(context) {
+  if (context && context.workVersion !== recordingWorkVersion) return;
   isUploading = false;
   recordingStartedAt = 0;
   currentRecordingDurationMs = null;
-  if (commandLibrary.editingId) {
-    recordButton.disabled = true;
-    enterButton.disabled = true;
-  } else {
-    recordButton.disabled = false;
-    setActionButtonsDisabled(false);
-  }
+  recordButton.disabled = Boolean(commandLibrary?.editingId || isStarting || !navigator.mediaDevices?.getUserMedia || !BrowserAudioContext);
+  setActionButtonsDisabled(Boolean(commandLibrary?.editingId || isStarting));
   setRecordIdle();
 }
 
 // === WebSocket ===
 let wsRetryTimer = null;
 let wsVisibilityHandler = null;
+let wsRetryDelay = 1500;
 
 function connectWebSocket() {
-  let wsRetryDelay = 1500;
-  if (ws) ws.close(1000, "replace-connection");
-  ws = new WebSocket(buildLanWsUrl(window, isNativeLanActive() ? nativeLanEndpoint : null));
+  if (isCloudMode && !isNativeLanActive()) return;
+  clearTimeout(wsRetryTimer);
+  wsRetryTimer = null;
+  const previous = ws;
+  ws = null;
+  previous?.close(1000, "replace-connection");
+  const endpoint = isNativeLanActive() ? { ...nativeLanEndpoint } : null;
+  const socket = new WebSocket(buildLanWsUrl(window, endpoint));
+  ws = socket;
+  const isCurrent = () => ws === socket && (!isCloudMode || isCurrentLanBinding(endpoint));
 
-  ws.addEventListener("open", () => {
+  socket.addEventListener("open", () => {
+    if (!isCurrent()) { socket.close(1000, "stale-connection"); return; }
     wsRetryDelay = 1500;
     clearTimeout(wsRetryTimer);
     wsRetryTimer = null;
@@ -2291,7 +2544,8 @@ function connectWebSocket() {
     }
     setConnectionStatus("connected", isNativeLanActive() ? t('lan.directConnected') : t('connection.wsConnected'));
   });
-  ws.addEventListener("message", (event) => {
+  socket.addEventListener("message", (event) => {
+    if (!isCurrent()) return;
     try {
       const payload = JSON.parse(event.data);
       if (payload.type === "ack" && payload.key) {
@@ -2300,12 +2554,8 @@ function connectWebSocket() {
         if (payload.status !== "success") showToast(t('status.keyCommandFailed'), true);
         return;
       }
-      if (payload.type === "result" && payload.text) {
-        if (!commandLibrary.editingId) {
-          textInput.value = payload.text;
-          updateTextInputState();
-        }
-      }
+      // Deferred uploads return text only to their requesting phone via HTTP.
+      // Other clients' result broadcasts must never overwrite this phone's draft.
       if (payload.message) {
         showToast(payload.message, payload.type === "error");
       }
@@ -2331,27 +2581,49 @@ function connectWebSocket() {
       // Ignore malformed messages
     }
   });
-  ws.addEventListener("close", (event) => {
-    if (event.code === 1000) return; // Normal closure, no reconnect
-    if (event.code === 4001) return; // LAN 未配对：不重连，等待配对后刷新页面
+  socket.addEventListener("close", (event) => {
+    if (!isCurrent() || event.code === 1000) return;
     setConnectionStatus("error", t('connection.reconnecting'));
-    clearTimeout(wsRetryTimer);
-    wsRetryTimer = setTimeout(connectWebSocket, wsRetryDelay);
-    wsRetryDelay = Math.min(wsRetryDelay * 2, 60000);
-    if (wsVisibilityHandler) {
-      document.removeEventListener("visibilitychange", wsVisibilityHandler);
-    }
-    wsVisibilityHandler = () => {
-      if (document.visibilityState === "visible" && (!ws || ws.readyState !== WebSocket.OPEN)) {
-        clearTimeout(wsRetryTimer);
-        wsRetryTimer = null;
-        document.removeEventListener("visibilitychange", wsVisibilityHandler);
-        wsVisibilityHandler = null;
-        wsRetryDelay = 1500;
-        connectWebSocket();
+    const pairUrl = endpoint ? `${buildNativeLanBaseUrl(endpoint)}/api/lan/pair` : "/api/lan/pair";
+    const pairing = createPairingClient({ win: window, pairUrl, binding: endpoint });
+    // Upgrade 403 is reported by browsers as close 1006. Probe pairing status
+    // instead of relying on a post-upgrade private close code.
+    void pairing.status().then(({ paired }) => {
+      if (!isCurrent()) return;
+      if (!paired) {
+        if (isNativeApp) {
+          disconnectNativeLan({ forget: true, revoke: true });
+          nativeLanRestoreAttempted = true;
+          updateCloudLanEndpoints(cloudDesktopDevices);
+          syncCloudConnectionStatus();
+        } else {
+          ws = null;
+          try { window.localStorage.removeItem(lanTokenStorageKey()); } catch { /* ignore */ }
+          showLanPairingOverlay(pairing);
+        }
+        return;
       }
-    };
-    document.addEventListener("visibilitychange", wsVisibilityHandler);
+      scheduleRetry();
+    }).catch(() => { if (isCurrent()) scheduleRetry(); });
+
+    function scheduleRetry() {
+      if (!isCurrent()) return;
+      clearTimeout(wsRetryTimer);
+      wsRetryTimer = setTimeout(() => { if (isCurrent()) connectWebSocket(); }, wsRetryDelay);
+      wsRetryDelay = Math.min(wsRetryDelay * 2, 60000);
+      if (wsVisibilityHandler) document.removeEventListener("visibilitychange", wsVisibilityHandler);
+      wsVisibilityHandler = () => {
+        if (document.visibilityState === "visible" && isCurrent() && socket.readyState !== WebSocket.OPEN) {
+          clearTimeout(wsRetryTimer);
+          wsRetryTimer = null;
+          document.removeEventListener("visibilitychange", wsVisibilityHandler);
+          wsVisibilityHandler = null;
+          wsRetryDelay = 1500;
+          connectWebSocket();
+        }
+      };
+      document.addEventListener("visibilitychange", wsVisibilityHandler);
+    }
   });
 }
 
@@ -2399,14 +2671,18 @@ class AccountDrawer {
   close() {
     this._isOpen = false;
     this.el.drawer?.classList.add("hidden");
+    this._deleteOverlay?.remove();
+    this._deleteOverlay = null;
   }
 
   async _render() {
+    const authVersion = identityVersion;
     const body = this.el.body;
     if (!body) return;
     body.innerHTML = `<p style='text-align:center;color:var(--text-muted)'>${t('common.loading')}</p>`;
     try {
       const data = await this._fetchData();
+      if (!isCurrentIdentity(authVersion) || !this._isOpen) return;
       body.replaceChildren(
         this._renderLanguage(),
         this._renderPlan(data),
@@ -2418,6 +2694,7 @@ class AccountDrawer {
         this._renderDevices(data),
       );
     } catch (error) {
+      if (!isCurrentIdentity(authVersion) || !this._isOpen) return;
       const errP = document.createElement("p");
       errP.style.cssText = "text-align:center;color:var(--danger)";
       errP.textContent = error.message || t('account.loadFailed');
@@ -2507,18 +2784,19 @@ class AccountDrawer {
     const user = window.VoiceBridgeAuth?.user;
     if (!supabase || !user) throw new Error(t('account.pleaseLogin'));
 
-    const [subRes, usageRes, devicesRes] = await Promise.all([
+    const now = new Date();
+    const monthStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1)).toISOString();
+    const authVersion = identityVersion;
+    const [subRes, usageEvents, devicesRes] = await Promise.all([
       supabase.from("subscriptions").select("*").eq("user_id", user.id).maybeSingle(),
-      supabase.from("usage_events").select("status, audio_duration_ms").eq("user_id", user.id),
+      this._fetchMonthlyUsage(user.id, monthStart, authVersion),
       supabase.from("devices").select("*").eq("user_id", user.id).order("last_seen_at", { ascending: false }),
     ]);
 
     if (subRes.error) throw new Error(t('account.getSubFailed'));
-    if (usageRes.error) throw new Error(t('account.getUsageFailed'));
     if (devicesRes.error) throw new Error(t('account.getDevicesFailed'));
 
     const subscription = subRes.data || null;
-    const usageEvents = usageRes.data || [];
     const devices = devicesRes.data || [];
 
     const plan = subscription && (subscription.plan === "admin")
@@ -2526,14 +2804,32 @@ class AccountDrawer {
       : (subscription && isPaidStatus(subscription.status) && subscription.plan === "pro")
         ? "pro"
         : "free";
-    const usedSeconds = usageEvents
-      .filter((event) => event.status === "success")
-      .reduce((sum, event) => sum + Math.ceil((event.audio_duration_ms || 0) / 1000), 0);
+    const usedSeconds = Math.ceil(usageEvents
+      .filter((event) => ["success", "processing", "unknown"].includes(event.status))
+      .reduce((sum, event) => sum + (event.audio_duration_ms || 0), 0) / 1000);
     const totalCount = usageEvents.length;
     const successCount = usageEvents.filter((e) => e.status === "success").length;
     const rejectedCount = usageEvents.filter((e) => e.status === "rejected").length;
 
     return { subscription, plan, usedSeconds, totalCount, successCount, rejectedCount, devices, user };
+  }
+
+  async _fetchMonthlyUsage(userId, monthStart, authVersion) {
+    const supabase = window.VoiceBridgeAuth?.supabase;
+    const events = [];
+    const pageSize = 1000;
+    for (let start = 0; ; start += pageSize) {
+      if (!isCurrentIdentity(authVersion) || userId !== identityUserId) throw new DOMException("账号已切换", "AbortError");
+      const { data, error } = await supabase.from("usage_events")
+        .select("status, audio_duration_ms")
+        .eq("user_id", userId).gte("created_at", monthStart)
+        .order("created_at", { ascending: true }).order("id", { ascending: true })
+        .range(start, start + pageSize - 1);
+      if (!isCurrentIdentity(authVersion) || userId !== identityUserId) throw new DOMException("账号已切换", "AbortError");
+      if (error || !Array.isArray(data)) throw new Error(t('account.getUsageFailed'));
+      events.push(...data);
+      if (data.length < pageSize) return events;
+    }
   }
 
   _renderPlan(data) {
@@ -2615,7 +2911,8 @@ class AccountDrawer {
       for (const [lKey, lLabel] of [["monthlySeconds", t('account.monthlyQuota')], ["maxAudioSeconds", t('account.maxPerAudio')], ["rateLimitPerMinute", t('account.rateLimitPerMin')]]) {
         const item = document.createElement("p");
         item.className = "pricing-card-item";
-        item.textContent = `${lLabel}: ${t('account.secondsUnit', limits[lKey])}`;
+        const unitKey = lKey === "rateLimitPerMinute" ? "account.requestsPerMinuteUnit" : "account.secondsUnit";
+        item.textContent = `${lLabel}: ${t(unitKey, limits[lKey])}`;
         card.appendChild(item);
       }
 
@@ -2729,6 +3026,9 @@ class AccountDrawer {
     return section;
   }
   _renderProfile(data) {
+    const authVersion = identityVersion;
+    const userId = data.user?.id;
+    const isCurrentProfile = () => isCurrentIdentity(authVersion) && userId === identityUserId;
     const section = document.createElement("div");
     section.className = "account-section";
 
@@ -2772,6 +3072,7 @@ class AccountDrawer {
 
     // 邮箱编辑交互
     emailEditBtn.addEventListener("click", () => {
+      if (!isCurrentProfile()) return;
       emailEditBtn.classList.add("hidden");
       const group = document.createElement("div");
       group.className = "profile-edit-group";
@@ -2794,17 +3095,17 @@ class AccountDrawer {
         emailEditBtn.classList.remove("hidden");
       });
       confirm.addEventListener("click", async () => {
+        if (!isCurrentProfile()) return;
         const newEmail = input.value.trim();
         if (!newEmail) return;
         confirm.disabled = true;
         try {
-          const { error } = await window.VoiceBridgeAuth?.supabase.auth.updateUser({ email: newEmail });
-          if (error) throw error;
+          await this._updateProfileForIdentity({ email: newEmail }, authVersion, userId);
           showToast(t('account.emailUpdateSent'));
           group.remove();
           emailEditBtn.classList.remove("hidden");
         } catch (err) {
-          showToast(err.message || t('account.modifyFailed'), true);
+          if (isCurrentProfile()) showToast(err.message || t('account.modifyFailed'), true);
         } finally {
           confirm.disabled = false;
         }
@@ -2819,6 +3120,7 @@ class AccountDrawer {
 
     // 密码编辑交互
     pwdEditBtn.addEventListener("click", () => {
+      if (!isCurrentProfile()) return;
       pwdEditBtn.classList.add("hidden");
       const group = document.createElement("div");
       group.className = "profile-edit-group";
@@ -2847,6 +3149,7 @@ class AccountDrawer {
         pwdEditBtn.classList.remove("hidden");
       });
       confirm.addEventListener("click", async () => {
+        if (!isCurrentProfile()) return;
         const newPwd = newInput.value;
         if (!newPwd || newPwd.length < 6) {
           showToast(t('account.passwordTooShort'), true);
@@ -2858,15 +3161,14 @@ class AccountDrawer {
         }
         confirm.disabled = true;
         try {
-          const { error } = await window.VoiceBridgeAuth?.supabase.auth.updateUser({ password: newPwd });
-          if (error) throw error;
+          await this._updateProfileForIdentity({ password: newPwd }, authVersion, userId);
           showToast(t('account.passwordSetSuccess'));
           pwdRow.querySelector(".account-row-value").textContent = t('account.passwordSet');
           pwdEditBtn.textContent = t('account.changePassword');
           group.remove();
           pwdEditBtn.classList.remove("hidden");
         } catch (err) {
-          showToast(err.message || t('account.modifyFailed'), true);
+          if (isCurrentProfile()) showToast(err.message || t('account.modifyFailed'), true);
         } finally {
           confirm.disabled = false;
         }
@@ -2877,7 +3179,7 @@ class AccountDrawer {
       group.appendChild(confirmInput);
       group.appendChild(actions);
       section.insertBefore(group, pwdEditBtn.nextSibling);
-      currInput.focus();
+      newInput.focus();
     });
 
     // 退出登录按钮
@@ -2907,14 +3209,31 @@ class AccountDrawer {
     return section;
   }
 
+  async _updateProfileForIdentity(updates, authVersion, userId) {
+    const isCurrent = () => isCurrentIdentity(authVersion) && userId === identityUserId;
+    if (!isCurrent()) throw new DOMException("账号已切换", "AbortError");
+    const supabase = window.VoiceBridgeAuth?.supabase;
+    const { data, error: sessionError } = await supabase.auth.getSession();
+    if (!isCurrent() || data.session?.user?.id !== userId) throw new DOMException("账号已切换", "AbortError");
+    if (sessionError) throw sessionError;
+    const { error } = await supabase.auth.updateUser(updates);
+    if (!isCurrent()) throw new DOMException("账号已切换", "AbortError");
+    if (error) throw error;
+  }
+
   /**
    * 删除账号对话框：输入"删除"二次确认 → 调用 account-delete Edge Function
    */
   _openDeleteAccountDialog(triggerBtn) {
+    const authVersion = identityVersion;
+    const userId = identityUserId;
+    if (!userId || !isCurrentIdentity(authVersion)) return;
     const confirmWord = getCurrentLocale() === 'zh-CN' ? '删除' : 'DELETE';
 
     // overlay
     const overlay = document.createElement("div");
+    this._deleteOverlay?.remove();
+    this._deleteOverlay = overlay;
     overlay.className = "modal-overlay";
     overlay.style.cssText = "position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:9999;display:flex;align-items:center;justify-content:center;padding:24px;";
 
@@ -2969,6 +3288,7 @@ class AccountDrawer {
     });
 
     confirmBtn.addEventListener("click", async () => {
+      if (!isCurrentIdentity(authVersion) || userId !== identityUserId) { overlay.remove(); return; }
       confirmBtn.disabled = true;
       confirmBtn.textContent = t('account.deleteAccountProgress');
       cancelBtn.disabled = true;
@@ -2980,6 +3300,7 @@ class AccountDrawer {
       }
       try {
         const { data: session } = await supabase.auth.getSession();
+        if (!isCurrentIdentity(authVersion) || session.session?.user?.id !== userId) { overlay.remove(); return; }
         const resp = await fetch(
           `${window.__VB_CONFIG.supabaseUrl}/functions/v1/account-delete`,
           {
@@ -2991,6 +3312,7 @@ class AccountDrawer {
           }
         );
         const body = await resp.json();
+        if (!isCurrentIdentity(authVersion)) { overlay.remove(); return; }
         if (!resp.ok || !body.ok) {
           const msg = body?.code === "admin_protected"
             ? t('account.deleteAccountAdminProtected')
@@ -3007,6 +3329,7 @@ class AccountDrawer {
         await window.VoiceBridgeAuth?.signOut();
         setTimeout(() => location.reload(), 800);
       } catch (error) {
+        if (!isCurrentIdentity(authVersion)) { overlay.remove(); return; }
         showToast(error?.message || t('account.deleteAccountFailed'), true);
         overlay.remove();
         triggerBtn.disabled = false;
@@ -3102,3 +3425,12 @@ class AccountDrawer {
 
 const accountDrawer = new AccountDrawer();
 accountDrawerBtn?.addEventListener("click", () => accountDrawer.open());
+
+if (window.VoiceBridgeAuth) {
+  void handleAuthState({
+    detail: {
+      session: window.VoiceBridgeAuth.session,
+      user: window.VoiceBridgeAuth.user
+    }
+  });
+}

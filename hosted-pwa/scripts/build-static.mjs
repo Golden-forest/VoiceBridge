@@ -1,5 +1,6 @@
 import { access, cp, mkdir, readFile, readdir, rm } from "node:fs/promises";
 import path from "node:path";
+import { verifyMirroredSources } from "./mirrored-sources.mjs";
 
 const root = process.cwd();
 const dist = path.join(root, "dist");
@@ -11,7 +12,7 @@ await mkdir(path.join(dist, "server"), { recursive: true });
 await mkdir(path.join(dist, "client"), { recursive: true });
 await mkdir(path.join(dist, ".openai"), { recursive: true });
 
-await verifyMirroredSources();
+await verifyMirroredSources(projectRoot, publicDir);
 await cp(publicDir, path.join(dist, "client"), { recursive: true });
 await mkdir(path.join(dist, "client", "vendor"), { recursive: true });
 await cp(
@@ -76,53 +77,8 @@ async function removeTestFiles(directory) {
     const entryPath = path.join(directory, entry.name);
     if (entry.isDirectory()) {
       await removeTestFiles(entryPath);
-    } else if (entry.name.endsWith(".test.js")) {
+    } else if (/\.test\.(?:js|mjs)$/.test(entry.name)) {
       await rm(entryPath);
     }
   }));
-}
-
-async function verifyMirroredSources() {
-  // 1. Byte-exact mirrors: src/shared/* must equal hosted-pwa/public/shared/* verbatim.
-  const exactMirrors = ["shared/protocol.js", "shared/planLimits.js"];
-  for (const relativePath of exactMirrors) {
-    const [localSource, cloudSource] = await Promise.all([
-      readFile(path.join(projectRoot, "src", relativePath), "utf8"),
-      readFile(path.join(publicDir, relativePath), "utf8")
-    ]);
-    if (localSource !== cloudSource) {
-      throw new Error(`Cloud source drift detected: ${relativePath}`);
-    }
-  }
-
-  // 2. Path-rewritten mirrors: src/public/<file> imports `../shared/<x>.js` (because
-  //    it sits next to src/shared at authoring time), but the published cloud copy
-  //    lives at public/<file> and must import `./shared/<x>.js`. Normalize before
-  //    comparing so the build gate fails only on real drift.
-  // Gate EVERY .js file present in both trees so a one-sided edit (like the
-  // cloudRecorder.js auto-stop fix that never shipped) fails the build loudly.
-  const cloudFiles = [];
-  for (const name of await readdir(path.join(projectRoot, "src", "public"))) {
-    if (!name.endsWith(".js")) continue;
-    try {
-      await access(path.join(publicDir, name));
-      cloudFiles.push(name);
-    } catch {
-      // only gate files that also exist in the published tree
-    }
-  }
-  for (const relativePath of cloudFiles) {
-    const [localSource, cloudSource] = await Promise.all([
-      readFile(path.join(projectRoot, "src", "public", relativePath), "utf8"),
-      readFile(path.join(publicDir, relativePath), "utf8")
-    ]);
-    const normalizedLocalSource = localSource
-      .replaceAll(/"\.\.\/shared\/([^"]+\.js)"/g, '"./shared/$1"')
-      // src/public/index.html is the PWA; in the hosted tree the landing page
-      // owns index.html and the PWA lives at app.html.
-      .replaceAll('"./index.html"', '"./app.html"');
-    if (normalizedLocalSource !== cloudSource) {
-      throw new Error(`Cloud source drift detected: ${relativePath}`);
-    }
-  }
 }

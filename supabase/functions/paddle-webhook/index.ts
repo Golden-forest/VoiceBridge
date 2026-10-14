@@ -2,7 +2,6 @@
 // 验签 → 业务校验 → 构造标准化 effect → 调用 process_billing_event RPC
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { Paddle, type EventData } from "npm:@paddle/paddle-node-sdk@3.8.0";
 
 import { corsHeaders, jsonResponse } from "../_shared/cors.ts";
 import {
@@ -16,6 +15,7 @@ import {
 } from "../_shared/paddle.ts";
 
 type SupabaseClientLike = ReturnType<typeof createClient<any, "public", any>>;
+type EventData = NonNullable<Awaited<ReturnType<ReturnType<typeof createPaddle>["webhooks"]["unmarshal"]>>>;
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
@@ -43,7 +43,7 @@ Deno.serve(async (req) => {
         return jsonResponse({ ok: false, message: "Forbidden" }, 403);
       }
     } catch (ipError) {
-      console.error("Paddle webhook: IP allowlist unavailable:", ipError?.message);
+      console.error("Paddle webhook: IP allowlist unavailable:", ipError instanceof Error ? ipError.message : "Unknown error");
       return jsonResponse(
         { ok: false, message: "Webhook source verification unavailable" },
         503,
@@ -74,7 +74,7 @@ Deno.serve(async (req) => {
 
     // 4. 忽略不支持的事件类型
     if (effect.type === "ignore") {
-      const { data: rpcResult } = await serviceClient.rpc("process_billing_event", {
+      const { data: rpcResult, error: rpcError } = await serviceClient.rpc("process_billing_event", {
         p_provider: "paddle",
         p_event_id: eventData.eventId,
         p_event_type: eventType,
@@ -82,7 +82,8 @@ Deno.serve(async (req) => {
         p_payload: JSON.parse(rawBody),
         p_effect: effect,
       });
-      const action = rpcResult?.[0]?.action || "processed";
+      if (rpcError) throw rpcError;
+      const action = readBillingAction(rpcResult);
       return jsonResponse({ ok: true, action });
     }
 
@@ -104,11 +105,7 @@ Deno.serve(async (req) => {
       return jsonResponse({ ok: false, message: "Internal error" }, 500);
     }
 
-    const action = rpcResult?.[0]?.action || "processed";
-    if (action === "failed") {
-      // RPC 内部记录了失败，返回非 2xx 让 Paddle 重试
-      return jsonResponse({ ok: false, message: "Processing failed, will retry" }, 500);
-    }
+    const action = readBillingAction(rpcResult);
     // action === 'processed' | 'duplicate' | 'stale' → 都返回 200
     return jsonResponse({ ok: true, action });
   } catch (error) {
@@ -116,6 +113,14 @@ Deno.serve(async (req) => {
     return jsonResponse({ ok: false, message: "Webhook processing failed" }, 500);
   }
 });
+
+function readBillingAction(result: unknown): string {
+  if (typeof result !== "string" || !["processed", "duplicate", "stale", "failed"].includes(result)) {
+    throw new Error("Invalid process_billing_event response");
+  }
+  if (result === "failed") throw new Error("Billing event processing failed; retry required");
+  return result;
+}
 
 // ============================================================================
 // Effect 构造（业务校验 + 标准化）
@@ -165,7 +170,7 @@ function buildSubscriptionEffect(
   eventData: EventData,
 ): BillingEffect {
   // @ts-ignore: SDK 类型在不同版本间不完全一致，按运行时字段访问
-  const sub = eventData.data;
+  const sub = eventData.data as any;
   if (!sub || !sub.id) {
     return { type: "ignore" };
   }
@@ -209,7 +214,7 @@ async function buildTransactionEffect(
   eventData: EventData,
 ): Promise<BillingEffect> {
   // @ts-ignore
-  const txn = eventData.data;
+  const txn = eventData.data as any;
   if (!txn || !txn.id) {
     return { type: "ignore" };
   }

@@ -118,6 +118,10 @@ export default {
 
   // === Recording / Transcription ===
   record: {
+    recoveredText: 'Saved transcription',
+    appendRecovered: 'Add to text box',
+    resultRetained: 'Transcription saved. Review it before adding it to the text box.',
+
     recordUnsupported: 'Recording is not supported in this browser, use audio upload fallback.',
     reachedLimit: (seconds) => `Reached the ${seconds}-second limit, uploading audio…`,
     maxDurationHint: (seconds) => `You can record up to ${seconds} seconds this time.`,
@@ -169,6 +173,7 @@ export default {
 
   // === WebSocket / Cloud connection status ===
   connection: {
+    deviceRegistrationFailed: 'Phone registration failed. Refresh to try again.',
     wsConnected: 'Connected to desktop',
     cloudConnected: 'Cloud connected',
     cloudConnectFailed: 'Cloud connection failed',
@@ -218,6 +223,7 @@ export default {
     maxPerAudio: 'Max per audio',
     rateLimitPerMin: 'Rate (req/min)',
     secondsUnit: (sec) => `${sec} sec`,
+    requestsPerMinuteUnit: (count) => `${count} req/min`,
     upgradeToPro: 'Upgrade to Pro',
     currentPlanBadge: 'Current plan',
 
@@ -255,17 +261,17 @@ export default {
 
     profileTitle: 'Profile',
     emailLabel: 'Email',
-    desktopPassword: 'Desktop sign-in password',
+    desktopPassword: 'Sign-in password',
     passwordSet: 'Set',
     passwordUnset: 'Not set',
     editEmail: 'Edit email',
-    setPassword: 'Set desktop password',
+    setPassword: 'Set password',
     changePassword: 'Change password',
     newEmailPlaceholder: 'New email',
     newPasswordPlaceholder: 'New password (min 6 chars)',
     confirmPasswordPlaceholder: 'Re-enter new password',
     emailUpdateSent: 'Verification email sent to the new address',
-    passwordSetSuccess: 'Desktop password set, you can use it on the desktop app',
+    passwordSetSuccess: 'Sign-in password updated',
     passwordTooShort: 'Password must be at least 6 characters',
     passwordMismatch: 'Passwords do not match',
     modifyFailed: 'Update failed',
@@ -277,6 +283,13 @@ export default {
     removeFailed: 'Remove failed',
 
     logout: 'Sign out',
+    deleteAccount: 'Delete account',
+    deleteAccountHint: 'This cancels your subscriptions and permanently deletes your account and associated data. This cannot be undone.',
+    deleteAccountTypeConfirm: 'Type DELETE to confirm.',
+    deleteAccountProgress: 'Canceling subscriptions and deleting…',
+    deleteAccountAdminProtected: 'Admin accounts cannot be deleted here.',
+    deleteAccountFailed: 'Failed to delete the account. Please try again later.',
+    deleteAccountSuccess: 'Account deleted',
 
     languageTitle: 'Language',
     languageZhCN: '简体中文',

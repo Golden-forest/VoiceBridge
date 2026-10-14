@@ -40,10 +40,9 @@ test("password reset returns to the custom-domain app route", () => {
   assert.match(authJs, /resetPasswordForEmail\(email,\s*\{\s*redirectTo:\s*buildAppRedirectUrl\(\)\s*\}\)/);
 });
 
-test("GitHub users can set a desktop password from account settings", () => {
+test("GitHub users see login password setup in account settings", () => {
   assert.match(appJs, /usesGithubWithoutEmailPassword/);
   assert.match(appJs, /account\.setPassword/);
-  assert.match(appJs, /auth\.updateUser\(\{ password: newPwd \}\)/);
 });
 
 test("phone can claim a QR pairing after authentication", () => {
@@ -56,7 +55,7 @@ test("phone can claim a QR pairing after authentication", () => {
   assert.match(pairingJs, /url\.searchParams\.delete\("device"\)/);
   assert.match(pairingJs, /`\$\{url\.pathname\}\$\{url\.search\}\$\{url\.hash\}`/);
   assert.match(pairingJs, /voicebridge:pairing-success/);
-  assert.match(appJs, /selectedCloudDeviceId = deviceId/);
+  assert.match(appJs, /selectCloudDesktop\(deviceId\)/);
 });
 
 test("account drawer button and plan badge are shown for signed-in cloud users", () => {

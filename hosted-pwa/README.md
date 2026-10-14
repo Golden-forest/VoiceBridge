@@ -1,98 +1,20 @@
-# vinext-starter
+# VoiceBridge Hosted PWA
 
-A clean full-stack starter running on
-[vinext](https://github.com/cloudflare/vinext), with optional Cloudflare D1 and
-Drizzle support.
-
-## Prerequisites
-
-- Node.js `>=22.13.0`
-
-## Quick Start
+静态官网和手机网页，部署目标为 Cloudflare Pages；`worker/static.js` 同时保留静态 Worker 的路由映射。当前发布不使用旧 vinext/Next.js starter。
 
 ```bash
-npm install
-npm run dev
-npm run build
+# 从仓库根目录运行
+npm --prefix hosted-pwa run build
+npm --prefix hosted-pwa test
+./scripts/verify
 ```
 
-This starter does not use `wrangler.jsonc`.
+构建生成 `dist/client` 静态资源和 `dist/server/index.js`。`build-landing.mjs` 根据 `landing/template.html` 与 `landing/locales/{en,zh-CN}.json` 生成官网，`build-static.mjs` 校验共用镜像、打包本地 Supabase SDK 并移除测试资源。
 
-## Included Shape
+- 官网 `/`、`/zh-CN/`；手机应用 `/app`；法律/FAQ 页面独立发布。
+- 共用逻辑源为 `../src/public`，对应镜像在 `public`，共享协议在 `public/shared`。构建不允许漏文件或内容漂移。
+- `public/config.js` 只含公开 URL、publishable key 与 Paddle client token；密钥只在云端。
+- 用户在手机登录并扫码认领电脑，桌面无需输入账号密码。
+- 移动端通过根目录 `npm run mobile:prepare` 从当前构建生成本地网页包。
 
-- edit site code under `app/`
-- `.openai/hosting.json` declares optional Sites D1 and R2 bindings
-- `vite.config.ts` simulates declared bindings for local development
-- `db/schema.ts` starts intentionally empty
-- `examples/d1/` contains an optional D1 example surface
-- `drizzle.config.ts` supports local migration generation when needed
-
-## Workspace Auth Headers
-
-OpenAI workspace sites can read the current user's email from
-`oai-authenticated-user-email`.
-
-SIWC-authenticated workspace sites may also receive
-`oai-authenticated-user-full-name` when the user's SIWC profile has a non-empty
-`name` claim. The full-name value is percent-encoded UTF-8 and is accompanied by
-`oai-authenticated-user-full-name-encoding: percent-encoded-utf-8`.
-
-Treat the full name as optional and fall back to email when it is absent:
-
-```tsx
-import { headers } from "next/headers";
-
-export default async function Home() {
-  const requestHeaders = await headers();
-  const email = requestHeaders.get("oai-authenticated-user-email");
-  const encodedFullName = requestHeaders.get("oai-authenticated-user-full-name");
-  const fullName =
-    encodedFullName &&
-    requestHeaders.get("oai-authenticated-user-full-name-encoding") ===
-      "percent-encoded-utf-8"
-      ? decodeURIComponent(encodedFullName)
-      : null;
-
-  const displayName = fullName ?? email;
-  // ...
-}
-```
-
-## Optional Dispatch-Owned ChatGPT Sign-In
-
-Import the ready-to-use helpers from `app/chatgpt-auth.ts` when the site needs
-optional or required ChatGPT sign-in:
-
-- Use `getChatGPTUser()` for optional signed-in UI.
-- Use `requireChatGPTUser(returnTo)` for server-rendered pages that should send
-  anonymous visitors through Sign in with ChatGPT.
-- Use `chatGPTSignInPath(returnTo)` and `chatGPTSignOutPath(returnTo)` for
-  browser links or actions.
-- Pass a same-origin relative `returnTo` path for the destination after sign-in
-  or sign-out. The helper validates and safely encodes it.
-- Mark protected pages with `export const dynamic = "force-dynamic"` because
-  they depend on per-request identity headers.
-
-Dispatch owns `/signin-with-chatgpt`, `/signout-with-chatgpt`, `/callback`, the
-OAuth cookies, and identity header injection. Do not implement app routes for
-those reserved paths. Routes that do not import and call the helper remain
-anonymous-compatible.
-
-SIWC establishes identity only; it does not prove workspace membership. Use the
-Sites hosting platform's access policy controls for workspace-wide restrictions,
-or enforce explicit server-side membership or allowlist checks.
-
-Use SIWC for account pages, user-specific dashboards, saved records, and write
-actions tied to the current ChatGPT user. Leave public content anonymous.
-
-## Useful Commands
-
-- `npm run dev`: start local development
-- `npm run build`: verify the vinext build output
-- `npm test`: build the starter and verify its rendered loading skeleton
-- `npm run db:generate`: generate Drizzle migrations after schema changes
-
-## Learn More
-
-- [vinext Documentation](https://github.com/cloudflare/vinext)
-- [Drizzle D1 Guide](https://orm.drizzle.team/docs/get-started/d1-new)
+发布命令 `bash scripts/deploy.sh frontend` 必须在明确授权后执行，Live Paddle 仍保留既有发布门。完整架构、验收边界及远端顺序见根 README。

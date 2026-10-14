@@ -58,7 +58,7 @@
     "media_alt": "A phone sending voice input to active cursors across a browser, code editor, and document on multiple computers.",
     "aux1_eyebrow": "Multi-device",
     "aux1_title": "Switch screens, not tools",
-    "aux1_body": "Sign in on your computers with the same account. Your phone finds every online device, ready for you to choose and send.",
+    "aux1_body": "Scan each computer's QR code with your signed-in phone. Choose any paired computer to send text.",
     "aux2_eyebrow": "Fallback",
     "aux2_title": "Clipboard backup",
     "aux2_body": "If auto-paste is unavailable, your text still reaches the computer clipboard, ready to paste."
@@ -91,7 +91,7 @@
     "step1_title": "Open the web app",
     "step1_body": "Visit on your phone's browser. Sign up or log in.",
     "step2_title": "Install desktop app",
-    "step2_body": "Sign in with the same account. Connect multiple computers.",
+    "step2_body": "Scan its QR code with your phone to pair. No desktop password required.",
     "step3_title": "Pick a target, speak",
     "step3_body": "Choose a computer on your phone, tap to record, and text lands right at that cursor."
   },

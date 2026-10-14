@@ -6,13 +6,15 @@ import express from "express";
 import multer from "multer";
 
 import { transcribeAudio } from "../asr/transcriber.js";
-import { resolveAsrChannel } from "../asr/directEdgeAsr.js";
 import { createAsrTextOutputBuffer } from "../input/asrTextOutputBuffer.js";
+import { assertInputActive } from "../input/desktopInputQueue.js";
 import { resolveAutoPaste } from "./uploadOptions.js";
 
-export function createUploadRouter({ config, wsHub, tmpDir, edgeAsr, asrPrefetch }) {
+export function createUploadRouter({ config, wsHub, tmpDir, edgeAsr, output, isActive = () => true, authorize = () => true }) {
   const router = express.Router();
   const asrOutputBuffer = createAsrTextOutputBuffer({
+    ...(output ? { outputTextFn: output } : {}),
+    isActive,
     onFlush: ({ text, output }) => {
       wsHub.broadcast({
         type: "output",
@@ -53,6 +55,11 @@ export function createUploadRouter({ config, wsHub, tmpDir, edgeAsr, asrPrefetch
 
   router.post("/upload", upload.single("audio"), async (req, res) => {
     const filePath = req.file?.path;
+    let canceled = false;
+    res.once("close", () => { if (!res.writableEnded) canceled = true; });
+    // Authorization may change while ASR or the desktop queue is awaiting.
+    // Keep this request's permission instead of inheriting a newer phone's.
+    const requestIsActive = () => isActive() && !canceled && authorize(req);
 
     try {
       if (!filePath) {
@@ -72,18 +79,22 @@ export function createUploadRouter({ config, wsHub, tmpDir, edgeAsr, asrPrefetch
         message: "正在识别..."
       });
 
-      // 录音期间预取的签名（手机 record-start 时经 WS 通知桌面申请）：
-      // 只在 edge 通道消费——本地凭证通道用不到签名，不 consume 的话
-      // 预取缓存里的预留行由看门狗按过期关闭，不会泄漏配额。
-      const prefetchedIssue = asrPrefetch && resolveAsrChannel(config, edgeAsr) === "edge"
-        ? asrPrefetch.consume()
-        : null;
-
-      const rawText = await transcribeAudio({ filePath, tmpDir, prefetchedIssue }, config, edgeAsr);
+      assertInputActive(requestIsActive);
+      const rawText = await transcribeAudio({ filePath, tmpDir }, config, edgeAsr);
+      assertInputActive(requestIsActive);
+      if (req.body.deferOutput === "true") {
+        return res.json({
+          ok: true,
+          text: rawText,
+          output: { copied: false, pasted: false, deferred: true }
+        });
+      }
       const bufferResult = await asrOutputBuffer.handleText(rawText, {
         autoPaste,
         targetWindow,
-        immediate: true
+        immediate: true,
+        sourceIdentity: req.headers["x-vb-lan-token"] || req,
+        isActive: requestIsActive
       });
       const text = bufferResult.text;
 
@@ -159,6 +170,7 @@ export function createUploadRouter({ config, wsHub, tmpDir, edgeAsr, asrPrefetch
     });
   });
 
+  router.close = () => asrOutputBuffer.clear();
   return router;
 }
 

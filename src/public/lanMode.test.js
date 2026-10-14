@@ -400,3 +400,20 @@ test("findMatchingLanEndpoint prefers exact match then falls back to host+httpPo
   assert.equal(findMatchingLanEndpoint(null, [ENDPOINT_A]), null);
   assert.equal(findMatchingLanEndpoint(ENDPOINT_A, []), null);
 });
+
+test("native LAN tokens are isolated by account and desktop; late pairing does not save credentials", async () => {
+  const storage = fakeStorage();
+  const accountA = { userId: "A", deviceId: "desktop-1" };
+  const accountB = { userId: "B", deviceId: "desktop-1" };
+  const desktopB = { userId: "A", deviceId: "desktop-2" };
+  const pair = createPairingClient({ storage, binding: accountA, fetchImpl: async () => new Response(JSON.stringify({ ok: true, token: "token-A" })) });
+  assert.equal((await pair.pair("123456")).ok, true);
+  assert.deepEqual(lanTokenHeaders({ localStorage: storage }, accountA), { "x-vb-lan-token": "token-A" });
+  assert.deepEqual(lanTokenHeaders({ localStorage: storage }, accountB), {});
+  assert.deepEqual(lanTokenHeaders({ localStorage: storage }, desktopB), {});
+  assert.match(buildLanWsUrl({ localStorage: storage }, { ...ENDPOINT_A, ...accountA }), /token=token-A/);
+  assert.doesNotMatch(buildLanWsUrl({ localStorage: storage }, { ...ENDPOINT_A, ...accountB }), /token=/);
+  const latePair = createPairingClient({ storage, binding: accountB, isCurrent: () => false, fetchImpl: async () => new Response(JSON.stringify({ ok: true, token: "late-B" })) });
+  assert.equal((await latePair.pair("123456")).ok, false);
+  assert.deepEqual(lanTokenHeaders({ localStorage: storage }, accountB), {});
+});

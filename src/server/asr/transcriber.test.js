@@ -75,16 +75,12 @@ test("transcribeAudio transcribes phone wav via edge channel without ffmpeg", as
   const json = (payload, ok = true) => ({ ok, json: async () => payload });
   const edgeAsr = {
     getAccessToken: async () => "token",
+    deviceId: "desktop-1",
     supabaseUrl: "https://edge.test",
     supabaseAnonKey: "anon",
     fetchImpl: async (url) => {
-      if (String(url).includes("issue-asr-request")) {
-        return json({ ok: true, request_id: "r1", url: "https://tencent.test/flash", headers: {}, expires_at: Math.floor(Date.now() / 1000) + 60 });
-      }
-      if (String(url).includes("tencent.test")) {
-        return json({ code: 0, flash_result: [{ text: "嗯，你好" }] });
-      }
-      return json({ ok: true });
+      assert.equal(String(url), "https://edge.test/functions/v1/transcribe");
+      return json({ ok: true, text: "嗯，你好" });
     }
   };
   try {

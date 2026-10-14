@@ -118,6 +118,10 @@ export default {
 
   // === 录音 / 转写 ===
   record: {
+    recoveredText: '保留的识别文字',
+    appendRecovered: '添加到输入框',
+    resultRetained: '识别文字已保留，请确认后添加到输入框。',
+
     recordUnsupported: '当前浏览器无法直接录音，可改用音频上传兜底。',
     reachedLimit: (seconds) => `已到 ${seconds} 秒上限，正在上传音频...`,
     maxDurationHint: (seconds) => `本次最多录制 ${seconds} 秒。`,
@@ -169,6 +173,7 @@ export default {
 
   // === WebSocket / Cloud 连接状态 ===
   connection: {
+    deviceRegistrationFailed: '手机设备注册失败，请刷新后重试。',
     wsConnected: '已连接电脑端',
     cloudConnected: '云端已连接',
     cloudConnectFailed: '云端连接失败',
@@ -220,6 +225,7 @@ export default {
     maxPerAudio: '单次最长',
     rateLimitPerMin: '速率(次/分)',
     secondsUnit: (sec) => `${sec}秒`,
+    requestsPerMinuteUnit: (count) => `${count} 次/分`,
     upgradeToPro: '升级 Pro',
     currentPlanBadge: '当前方案',
 
@@ -260,17 +266,17 @@ export default {
     // 个人资料
     profileTitle: '个人资料',
     emailLabel: '邮箱',
-    desktopPassword: '桌面登录密码',
+    desktopPassword: '登录密码',
     passwordSet: '已设置',
     passwordUnset: '未设置',
     editEmail: '修改邮箱',
-    setPassword: '设置桌面登录密码',
+    setPassword: '设置登录密码',
     changePassword: '修改密码',
     newEmailPlaceholder: '新邮箱',
     newPasswordPlaceholder: '新密码（至少6位）',
     confirmPasswordPlaceholder: '再次输入新密码',
     emailUpdateSent: '验证邮件已发送到新邮箱',
-    passwordSetSuccess: '桌面登录密码已设置，可在电脑端使用',
+    passwordSetSuccess: '登录密码已更新',
     passwordTooShort: '新密码至少需要6位',
     passwordMismatch: '两次输入的密码不一致',
     modifyFailed: '修改失败',
@@ -284,6 +290,13 @@ export default {
 
     // 退出登录
     logout: '退出登录',
+    deleteAccount: '删除账号',
+    deleteAccountHint: '删除将取消订阅并永久删除账号及关联数据，此操作无法撤销。',
+    deleteAccountTypeConfirm: '请输入“删除”确认。',
+    deleteAccountProgress: '正在取消订阅并删除…',
+    deleteAccountAdminProtected: '管理员账号不能在此删除。',
+    deleteAccountFailed: '删除账号失败，请稍后重试。',
+    deleteAccountSuccess: '账号已删除',
 
     // 语言（自引用 - 自身切换）
     languageTitle: '语言',

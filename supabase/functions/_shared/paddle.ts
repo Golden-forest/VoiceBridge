@@ -1,7 +1,7 @@
 // Paddle 共享工具：SDK 初始化、配置校验、状态映射、Price 校验、用户解析。
 // 被 billing-create-checkout-session / billing-create-portal-session / paddle-webhook 共用。
 
-import { Paddle } from "npm:@paddle/paddle-node-sdk@3.8.0";
+import { Paddle, Environment } from "npm:@paddle/paddle-node-sdk@3.8.0";
 
 export type BillingProvider = "stripe" | "paddle";
 export type PaddleEnvironment = "production";
@@ -141,7 +141,8 @@ export function getBillingEnv(): BillingEnv {
  * 创建 Paddle SDK 客户端。
  */
 export function createPaddle(apiKey: string, environment: PaddleEnvironment): Paddle {
-  return new Paddle(apiKey, { environment });
+  if (environment !== "production") throw new Error("Unsupported Paddle environment");
+  return new Paddle(apiKey, { environment: Environment.production });
 }
 
 /**

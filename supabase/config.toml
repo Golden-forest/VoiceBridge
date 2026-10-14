@@ -10,6 +10,9 @@ verify_jwt = false
 [functions.report-asr-result]
 verify_jwt = false
 
+[functions.account-delete]
+verify_jwt = false
+
 [functions.billing-create-checkout-session]
 verify_jwt = true
 

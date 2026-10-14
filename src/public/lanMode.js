@@ -199,7 +199,10 @@ export function rememberNativeLanEndpoint(endpoint, storage) {
   try {
     storage?.setItem(
       NATIVE_LAN_ENDPOINT_STORAGE_KEY,
-      JSON.stringify({ host: endpoint?.host, port: endpoint?.port, httpPort: endpoint?.httpPort })
+      JSON.stringify({
+        host: endpoint?.host, port: endpoint?.port, httpPort: endpoint?.httpPort,
+        ...(endpoint?.userId ? { userId: endpoint.userId, deviceId: endpoint.deviceId } : {})
+      })
     );
   } catch { /* storage 不可用时静默：下次冷启动回云端模式 */ }
 }
@@ -211,7 +214,7 @@ export function getStoredNativeLanEndpoint(storage) {
     if (!raw) return null;
     const parsed = JSON.parse(raw);
     const [endpoint] = normalizeEndpoints([parsed]);
-    return endpoint || null;
+    return endpoint ? { ...endpoint, ...(parsed.userId ? { userId: parsed.userId, deviceId: parsed.deviceId } : {}) } : null;
   } catch {
     return null;
   }
@@ -243,9 +246,15 @@ export function findMatchingLanEndpoint(stored, endpoints) {
 }
 
 /** LAN token 请求头（未配对时为空对象） */
-export function lanTokenHeaders(win = window) {
+export function lanTokenStorageKey(binding) {
+  return binding?.userId && binding?.deviceId
+    ? `${LAN_TOKEN_STORAGE_KEY}:${binding.userId}:${binding.deviceId}`
+    : LAN_TOKEN_STORAGE_KEY;
+}
+
+export function lanTokenHeaders(win = window, binding = null) {
   try {
-    const token = win.localStorage.getItem(LAN_TOKEN_STORAGE_KEY);
+    const token = win.localStorage.getItem(lanTokenStorageKey(binding));
     return token ? { [LAN_TOKEN_HEADER]: token } : {};
   } catch {
     return {};
@@ -255,10 +264,7 @@ export function lanTokenHeaders(win = window) {
 /** 带 token 的 WS 地址（token 走 query，浏览器 WS API 不支持自定义头） */
 export function buildLanWsUrl(win = window, endpoint = null) {
   if (endpoint) {
-    let token = "";
-    try {
-      token = win.localStorage.getItem(LAN_TOKEN_STORAGE_KEY) || "";
-    } catch { /* ignore */ }
+    const token = lanTokenHeaders(win, endpoint)[LAN_TOKEN_HEADER] || "";
     const query = token ? `?token=${encodeURIComponent(token)}` : "";
     return `ws://${formatLanHost(endpoint.host)}:${endpoint.httpPort}/ws${query}`;
   }
@@ -272,10 +278,10 @@ export function buildLanWsUrl(win = window, endpoint = null) {
 }
 
 /** LAN 配对客户端：GET 查询状态 / POST 配对码换 token（成功后持久化） */
-export function createPairingClient({ fetchImpl, storage, pairUrl = "/api/lan/pair", win } = {}) {
+export function createPairingClient({ fetchImpl, storage, pairUrl = "/api/lan/pair", win, binding, isCurrent = () => true } = {}) {
   const doFetch = fetchImpl || ((...args) => fetch(...args));
   const getStorage = () => storage || win?.localStorage;
-  const headers = () => ({ ...lanTokenHeaders(win || { localStorage: storage }), "Content-Type": "application/json" });
+  const headers = () => ({ ...lanTokenHeaders(win || { localStorage: storage }, binding), "Content-Type": "application/json" });
   return {
     async status() {
       const response = await doFetch(pairUrl, { headers: headers(), cache: "no-store" });
@@ -289,11 +295,12 @@ export function createPairingClient({ fetchImpl, storage, pairUrl = "/api/lan/pa
         body: JSON.stringify({ code })
       });
       const payload = await response.json().catch(() => ({}));
+      if (!isCurrent()) return { ok: false };
       if (!response.ok || payload.ok !== true || typeof payload.token !== "string") {
         return { ok: false };
       }
       try {
-        getStorage()?.setItem(LAN_TOKEN_STORAGE_KEY, payload.token);
+        getStorage()?.setItem(lanTokenStorageKey(binding), payload.token);
       } catch { /* ignore */ }
       return { ok: true, token: payload.token };
     }

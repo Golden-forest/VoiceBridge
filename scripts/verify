@@ -1,0 +1,10 @@
+#!/usr/bin/env bash
+set -euo pipefail
+cd "$(dirname "$0")/.."
+
+npm test
+npm --prefix hosted-pwa test
+node mobile/scripts/prepare-web.mjs
+npm --prefix mobile test
+node scripts/edge-functions.mjs > /dev/null
+git diff --check

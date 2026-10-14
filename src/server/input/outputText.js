@@ -1,7 +1,12 @@
 import { writeClipboard } from "./clipboard.js";
 import { pasteClipboard } from "./paste.js";
+import { assertInputActive, runDesktopInputOperation } from "./desktopInputQueue.js";
 
-export async function outputText(
+export function outputText(text, options = {}) {
+  return runDesktopInputOperation(() => writeOutputText(text, options));
+}
+
+async function writeOutputText(
   text,
   {
     autoPaste,
@@ -9,21 +14,23 @@ export async function outputText(
     pasteFn = defaultPasteFn,
     targetWindow = null,
     activateWindowFn = defaultActivateWindowFn,
-    logger = console
+    logger = console,
+    isActive = () => true
   } = {}
 ) {
-  // 激活窗口与写剪贴板并行执行：pbcopy 和 osascript 互不依赖，
-  // 粘贴按键在两者完成后才触发，顺序安全。
+  assertInputActive(isActive);
+  let activationError = null;
   const activatePromise = (autoPaste && targetWindow && targetWindow.appName)
     ? activateWindowFn(targetWindow.appName, targetWindow.windowTitle)
         .then((result) => {
-          if (!result.success) {
-            logger.warn?.(`Window activation failed: ${result.error}`);
+          if (result?.success === false) {
+            activationError = result.error || "无法激活目标窗口";
+            logger.warn?.(`Window activation failed: ${activationError}`);
           }
         })
         .catch((error) => {
-          const message = error instanceof Error ? error.message : String(error);
-          logger.warn?.(`Window activation error: ${message}`);
+          activationError = error instanceof Error ? error.message : String(error);
+          logger.warn?.(`Window activation error: ${activationError}`);
         })
     : Promise.resolve();
 
@@ -40,7 +47,12 @@ export async function outputText(
     };
   }
 
+  if (activationError) {
+    return { copied: true, pasted: false, pasteError: activationError };
+  }
+
   try {
+    assertInputActive(isActive);
     await pasteFn();
     return {
       copied: true,

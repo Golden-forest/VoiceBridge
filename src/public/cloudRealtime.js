@@ -114,7 +114,8 @@ export class CloudRealtime {
     this.ackChannel = ackChannel;
     ackChannel.on("broadcast", { event: "ack" }, ({ payload }) => {
       if (this.stopped || ackChannel !== this.ackChannel) return;
-      if (isAckMessage(payload, this.phoneDeviceId) && this.pendingRequests.has(payload.request_id)) {
+      const pending = this.pendingRequests.get(payload?.request_id);
+      if (isAckMessage(payload, this.phoneDeviceId) && pending?.targetDeviceId === payload.source_device_id) {
         try {
           this.onAck(payload);
         } catch (error) {
@@ -202,6 +203,7 @@ export class CloudRealtime {
     }
     const requestId = createRequestId();
     const channel = await this.getTargetChannel(targetDeviceId);
+    if (this.stopped || !this.ackChannel) throw new Error("云端连接已关闭");
     const ackPromise = this.addPendingRequest(requestId, targetDeviceId);
     let sendStatus;
     try {
@@ -245,6 +247,7 @@ export class CloudRealtime {
       targetWindowId
     });
     const channel = await this.getTargetChannel(targetDeviceId);
+    if (this.stopped || !this.ackChannel) throw new Error("云端连接已关闭");
     if (!channel) {
       throw new Error(`未找到桌面端通道：${targetDeviceId}`);
     }
@@ -421,13 +424,22 @@ export class CloudRealtime {
   }
 }
 
-export function getPhoneDeviceId() {
-  const key = "voicebridge_phone_device_id";
-  let value = localStorage.getItem(key);
+const memoryPhoneDeviceIds = new Map();
+
+export function getPhoneDeviceId(userId) {
+  if (!userId) throw new Error("登录后才能注册手机设备");
+  const key = `voicebridge_phone_device_id:${userId}`;
+  let value = memoryPhoneDeviceIds.get(userId);
+  try {
+    value = localStorage.getItem(key) || value;
+  } catch { /* Private browsing can disable storage. */ }
   if (!value) {
     value = crypto.randomUUID();
-    localStorage.setItem(key, value);
+    try {
+      localStorage.setItem(key, value);
+    } catch { /* Keep a stable ID for this page session. */ }
   }
+  memoryPhoneDeviceIds.set(userId, value);
   return value;
 }
 
