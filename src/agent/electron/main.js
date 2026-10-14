@@ -1,6 +1,8 @@
 import { app, BrowserWindow, clipboard, ipcMain, net, powerMonitor } from 'electron';
 import { isAuthApiError } from '@supabase/supabase-js';
 import { readFileSync, writeFileSync } from 'node:fs';
+import { rm } from 'node:fs/promises';
+import { runDesktopInputOperation } from '../../server/input/desktopInputQueue.js';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import QRCode from 'qrcode';
@@ -23,6 +25,8 @@ let desktopClient = null;
 let activeAgent = null;
 let pairingPollTimer = null;
 let initializing = null;
+let desktopGeneration = 0;
+let lanStarting = null;
 let agentLogger = null;
 let lanServer = null;
 let lanWatcher = null;
@@ -64,6 +68,13 @@ function saveDesktopSettings(settings) {
 // 也只降级为 LAN 不可用，不会让主进程崩溃。
 async function startLanServer() {
   if (lanServer) return lanServer;
+  if (lanStarting) return lanStarting;
+  const generation = desktopGeneration;
+  lanStarting = startLanServerInternal(generation).finally(() => { lanStarting = null; });
+  return lanStarting;
+}
+
+async function startLanServerInternal(generation) {
   const settings = loadDesktopSettings();
   if (!settings.lanMode) return null;
   try {
@@ -78,8 +89,7 @@ async function startLanServer() {
     // 证书和上传临时目录必须写到可写的 userData（asar 只读）。
     const rootDir = app.isPackaged ? app.getAppPath() : join(__dirname, '..', '..', '..');
     const userData = app.getPath('userData');
-    // Edge 逐次签名直连识别（Task 5）：LAN 上传识别通过桌面端匿名会话向
-    // Edge 申请一次性腾讯云签名，密钥永不出云端，也不打包进桌面安装包。
+    // LAN 语音通过可信 Edge /transcribe，由服务端校验设备与额度。
     const desktopConfig = getDesktopPublicConfig();
     const deviceId = activeAgent?.device?.id;
     if (!deviceId) {
@@ -92,7 +102,7 @@ async function startLanServer() {
     if (localAsrCredentials) {
       log('lan-local-asr-credentials-active', { region: localAsrCredentials.tencentAsrRegion || null });
     }
-    lanServer = await createLanServer({
+    const server = await createLanServer({
       rootDir,
       deviceId,
       ...(localAsrCredentials ? { config: { ...loadServerConfig(), ...localAsrCredentials } } : {}),
@@ -104,6 +114,7 @@ async function startLanServer() {
       supabaseUrl: desktopConfig.supabaseUrl,
       supabaseAnonKey: desktopConfig.supabaseAnonKey,
       getAccessToken: async () => {
+        if (generation !== desktopGeneration || !activeAgent) return null;
         try {
           const supabase = desktopClient || await getOrCreateDesktopClient();
           const { data } = await supabase.auth.getSession();
@@ -114,6 +125,11 @@ async function startLanServer() {
       },
       onPairingKnock: revealLanCode
     });
+    if (generation !== desktopGeneration || !activeAgent) {
+      await server.close({ revokeTokens: true });
+      return null;
+    }
+    lanServer = server;
     lanEndpointSignature = getLanEndpointSignature(lanServer);
     log('lan-started', { port: lanServer.port, httpPort: lanServer.httpPort, endpoints: lanServer.getEndpoints() });
     console.log(`VoiceBridge LAN pairing code: ${lanServer.pairingCode}`);
@@ -127,8 +143,12 @@ async function startLanServer() {
   }
 }
 
-async function stopLanServer() {
-  if (!lanServer) return;
+async function stopLanServer({ revokeTokens = false } = {}) {
+  if (lanStarting) await lanStarting;
+  if (!lanServer) {
+    if (revokeTokens) await rm(join(app.getPath('userData'), 'lan-pairing.json'), { force: true });
+    return;
+  }
   const server = lanServer;
   lanServer = null;
   lanEndpointSignature = '';
@@ -139,10 +159,11 @@ async function stopLanServer() {
   lanWatcher = null;
   sendLanState();
   try {
-    await server.close();
+    await server.close({ revokeTokens });
     log('lan-stopped');
   } catch (error) {
     log('lan-stop-failed', { error: error instanceof Error ? error.message : String(error) });
+    if (revokeTokens) throw error;
   }
 }
 
@@ -315,40 +336,52 @@ function watchAuthLifecycle(supabase) {
 }
 
 async function recoverAfterSignOut() {
+  desktopGeneration++;
   clearPairingPoll();
   await stopRealtimeOnly();
-  await stopLanServer();
+  await stopLanServer({ revokeTokens: true });
   currentPlan = null;
   return await initializeDesktop();
 }
 
 async function initializeDesktop() {
-  if (initializing) return initializing;
-  initializing = initializeDesktopInternal().finally(() => {
-    initializing = null;
+  const generation = desktopGeneration;
+  if (initializing?.generation === generation) return initializing.promise;
+  const entry = { generation, promise: null };
+  entry.promise = initializeDesktopInternal(generation).finally(() => {
+    if (initializing === entry) initializing = null;
   });
-  return initializing;
+  initializing = entry;
+  return entry.promise;
 }
 
-async function initializeDesktopInternal() {
+function assertDesktopGeneration(generation) {
+  if (generation !== desktopGeneration) throw new Error('已取消旧电脑会话操作。');
+}
+
+async function initializeDesktopInternal(generation = desktopGeneration) {
   clearPairingPoll();
   const supabase = await getOrCreateDesktopClient();
   const device = await loadOrCreateDevice();
   const runtimeUser = await ensureAnonymousSession(supabase);
+  assertDesktopGeneration(generation);
   if (!runtimeUser.is_anonymous) {
     await migrateLegacyDesktopSession(supabase, device);
+    assertDesktopGeneration(generation);
   }
   const status = await fetchPairingStatus({ supabase, deviceId: device.id });
+  assertDesktopGeneration(generation);
   if (status.paired) {
     return await goOnline({
       supabase,
       userId: status.user_id,
       device,
-      plan: status.plan
+      plan: status.plan,
+      generation
     });
   }
   try {
-    return await startPairing({ supabase, device });
+    return await startPairing({ supabase, device, generation });
   } catch (error) {
     if (error?.code !== 'device_conflict') throw error;
     // A stale anonymous runtime cannot safely reclaim an active device id.
@@ -356,7 +389,8 @@ async function initializeDesktopInternal() {
     // binding remains untouched and can be removed later from Connected Devices.
     const replacement = await rotateDeviceIdentity();
     log('device-identity-rotated', { previousDeviceId: device.id, deviceId: replacement.id });
-    return await startPairing({ supabase, device: replacement });
+    assertDesktopGeneration(generation);
+    return await startPairing({ supabase, device: replacement, generation });
   }
 }
 
@@ -408,7 +442,8 @@ async function fetchPairingStatus({ supabase, deviceId }) {
   return payload;
 }
 
-async function startPairing({ supabase, device }) {
+async function startPairing({ supabase, device, generation = desktopGeneration }) {
+  assertDesktopGeneration(generation);
   await stopRealtimeOnly();
   const config = getDesktopPublicConfig();
   const { data: sessionData } = await supabase.auth.getSession();
@@ -432,6 +467,7 @@ async function startPairing({ supabase, device }) {
     })
   });
   const payload = await response.json().catch(() => null);
+  assertDesktopGeneration(generation);
   if (!response.ok || !payload?.ok) {
     const error = new Error(payload?.message || '无法生成配对二维码。');
     error.code = payload?.code || '';
@@ -444,6 +480,7 @@ async function startPairing({ supabase, device }) {
     margin: 1,
     color: { dark: '#17202a', light: '#ffffff' }
   });
+  assertDesktopGeneration(generation);
   const state = sendDesktopState({
     mode: 'pairing',
     qrDataUrl,
@@ -451,11 +488,12 @@ async function startPairing({ supabase, device }) {
     deviceName: device.name,
     expiresAt: payload.expires_at
   });
-  schedulePairingPoll({ supabase, device });
+  schedulePairingPoll({ supabase, device, generation });
   return state;
 }
 
 async function startAdditionalPairing() {
+  const generation = desktopGeneration;
   if (!activeAgent?.device || !desktopClient) {
     throw new Error('电脑端尚未上线，请稍后再试。');
   }
@@ -477,6 +515,7 @@ async function startAdditionalPairing() {
     })
   });
   const payload = await response.json().catch(() => null);
+  assertDesktopGeneration(generation);
   if (!response.ok || !payload?.ok) {
     throw new Error(payload?.message || '无法生成新的配对二维码。');
   }
@@ -487,6 +526,7 @@ async function startAdditionalPairing() {
     margin: 1,
     color: { dark: '#17202a', light: '#ffffff' }
   });
+  assertDesktopGeneration(generation);
   const state = sendDesktopState({
     mode: 'additional-pairing',
     qrDataUrl,
@@ -519,13 +559,15 @@ function sendOnlineDesktopState() {
 
 function scheduleAdditionalPairingPoll() {
   clearPairingPoll();
+  const generation = desktopGeneration;
   const poll = async () => {
-    if (!activeAgent || !desktopClient) return;
+    if (generation !== desktopGeneration || !activeAgent || !desktopClient) return;
     try {
       const status = await fetchPairingStatus({
         supabase: desktopClient,
         deviceId: activeAgent.device.id
       });
+      if (generation !== desktopGeneration) return;
       if (!status.additional_pairing_pending) {
         clearPairingPoll();
         sendOnlineDesktopState();
@@ -534,12 +576,13 @@ function scheduleAdditionalPairingPoll() {
     } catch (error) {
       sendAgentStatus(`pairing:${error instanceof Error ? error.message : String(error)}`);
     }
-    pairingPollTimer = setTimeout(poll, 1500);
+    if (generation === desktopGeneration) pairingPollTimer = setTimeout(poll, 1500);
   };
   pairingPollTimer = setTimeout(poll, 1000);
 }
 
 async function cancelAdditionalPairing() {
+  const generation = desktopGeneration;
   clearPairingPoll();
   if (activeAgent?.device && desktopClient) {
     try {
@@ -566,6 +609,7 @@ async function cancelAdditionalPairing() {
       log('additional-pairing-cancel-failed', { error: error instanceof Error ? error.message : String(error) });
     }
   }
+  assertDesktopGeneration(generation);
   return sendOnlineDesktopState();
 }
 
@@ -573,30 +617,35 @@ function schedulePairingPoll(context) {
   clearPairingPoll();
   const poll = async () => {
     try {
+      if (context.generation !== desktopGeneration) return;
       const status = await fetchPairingStatus({
         supabase: context.supabase,
         deviceId: context.device.id
       });
+      if (context.generation !== desktopGeneration) return;
       if (status.paired) {
         clearPairingPoll();
         await goOnline({
           supabase: context.supabase,
           userId: status.user_id,
           device: context.device,
-          plan: status.plan
+          plan: status.plan,
+          generation: context.generation
         });
         return;
       }
     } catch (error) {
       sendAgentStatus(`pairing:${error instanceof Error ? error.message : String(error)}`);
     }
-    pairingPollTimer = setTimeout(poll, 1500);
+    if (context.generation === desktopGeneration) pairingPollTimer = setTimeout(poll, 1500);
   };
   pairingPollTimer = setTimeout(poll, 1000);
 }
 
-async function goOnline({ supabase, userId, device, plan = 'free' }) {
+async function goOnline({ supabase, userId, device, plan = 'free', generation = desktopGeneration }) {
+  assertDesktopGeneration(generation);
   await stopRealtimeOnly();
+  assertDesktopGeneration(generation);
   const settings = loadDesktopSettings();
   const runtime = await startRealtimeAgent({
     supabase,
@@ -604,8 +653,13 @@ async function goOnline({ supabase, userId, device, plan = 'free' }) {
     device,
     appVersion: app.getVersion(),
     reportWindowTitles: settings.reportWindowTitles,
-    onStatus: sendAgentStatus
+    onStatus: sendAgentStatus,
+    isActive: () => generation === desktopGeneration
   });
+  if (generation !== desktopGeneration) {
+    await runtime.stop();
+    assertDesktopGeneration(generation);
+  }
   // 先登记 activeAgent 再做后续步骤：若之后任何一步抛错，stopRealtimeOnly
   // 才能停掉已启动的 runtime，否则通道和定时器会泄漏到进程结束。
   activeAgent = { supabase, runtime, device, userId };
@@ -627,6 +681,7 @@ async function goOnline({ supabase, userId, device, plan = 'free' }) {
   } catch (error) {
     log('lan-endpoints-track-failed', { error: error instanceof Error ? error.message : String(error) });
   }
+  assertDesktopGeneration(generation);
   return sendOnlineDesktopState();
 }
 
@@ -643,14 +698,21 @@ async function stopRealtimeOnly() {
 }
 
 async function unpairDesktop() {
+  desktopGeneration++;
   clearPairingPoll();
   await stopRealtimeOnly();
+  await stopLanServer({ revokeTokens: true });
+  currentPlan = null;
   if (desktopClient) {
     const device = await loadOrCreateDevice();
-    await desktopClient.from('devices').update({
+    const { data: sessionData } = await desktopClient.auth.getSession();
+    const runtimeUserId = sessionData.session?.user?.id;
+    if (!runtimeUserId) throw new Error('电脑会话已失效，请重试。');
+    const { data: revokedDevice, error: revokeError } = await desktopClient.from('devices').update({
       status: 'revoked',
       updated_at: new Date().toISOString()
-    }).eq('id', device.id);
+    }).eq('id', device.id).eq('runtime_user_id', runtimeUserId).select('id').maybeSingle();
+    if (revokeError || !revokedDevice) throw new Error(revokeError?.message || '未能撤销电脑绑定，请重试。');
     suppressAuthRecovery = true;
     try {
       await desktopClient.auth.signOut();
@@ -676,6 +738,7 @@ function createWindow() {
     }
   });
   mainWindow.loadFile(join(__dirname, 'renderer.html'));
+  mainWindow.on('closed', () => { mainWindow = null; });
 }
 
 ipcMain.handle('voicebridge:version', () => app.getVersion());
@@ -689,13 +752,15 @@ ipcMain.handle('voicebridge:public-config', () => {
 });
 ipcMain.handle('voicebridge:lan-state', () => buildLanState(lanServer, lanCodeVisible));
 ipcMain.handle('voicebridge:initialize', () => initializeDesktop());
-ipcMain.handle('voicebridge:refresh-pairing', () => initializeDesktopInternal());
+ipcMain.handle('voicebridge:refresh-pairing', () => initializeDesktop());
 ipcMain.handle('voicebridge:show-pairing-qr', () => startAdditionalPairing());
 ipcMain.handle('voicebridge:cancel-pairing-qr', () => cancelAdditionalPairing());
 ipcMain.handle('voicebridge:unpair', () => unpairDesktop());
 ipcMain.handle('voicebridge:copy-text', (_event, value) => {
-  clipboard.writeText(String(value || ''));
-  return { ok: true };
+  return runDesktopInputOperation(() => {
+    clipboard.writeText(String(value || ''));
+    return { ok: true };
+  });
 });
 ipcMain.handle('voicebridge:update-settings', async (_event, updates) => {
   const settings = {
@@ -742,11 +807,19 @@ function wireLifecycleEvents() {
 }
 
 app.on('window-all-closed', () => {
+  desktopGeneration++;
   clearPairingPoll();
   void stopRealtimeOnly();
+  void stopLanServer();
   if (process.platform !== 'darwin') app.quit();
 });
 
-app.on('will-quit', () => {
-  void stopLanServer();
+let quitting = false;
+app.on('before-quit', (event) => {
+  if (quitting) return;
+  quitting = true;
+  event.preventDefault();
+  desktopGeneration++;
+  clearPairingPoll();
+  void Promise.all([stopRealtimeOnly(), stopLanServer()]).finally(() => app.quit());
 });

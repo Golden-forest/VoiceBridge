@@ -5,6 +5,7 @@ import path from "node:path";
 import fs from "node:fs/promises";
 import { loadOrCreateDevice, rotateDeviceIdentity } from "./deviceStore.js";
 import { handleDesktopMessage, startRealtimeAgent } from "./realtimeAgent.js";
+import { runDesktopInputOperation } from "../server/input/desktopInputQueue.js";
 
 test("handleDesktopMessage ignores messages for another device", async () => {
   let called = false;
@@ -639,6 +640,79 @@ test("startRealtimeAgent rebuilds channels when CLOSED arrives and recovers heal
 });
 
 const REBUILD_ECHO_WAIT_MS = 60;
+
+test("a desktop generation change blocks Realtime input even while initialization is in progress", async () => {
+  let active = true;
+  let messageCallback;
+  let release;
+  let scanning;
+  const scansStarted = new Promise((resolve) => { scanning = resolve; });
+  const scan = new Promise((resolve) => { release = resolve; });
+  const outputs = [];
+  const tracks = [];
+  const supabase = {
+    channel(topic) {
+      return {
+        on(kind, filter, callback) {
+          if (kind === "broadcast" && filter.event === "command") messageCallback = callback;
+          return this;
+        },
+        async subscribe(callback) { await callback?.("SUBSCRIBED"); return "ok"; },
+        async track(payload) { tracks.push(payload); },
+        async send() { return "ok"; }, async unsubscribe() {}, topic
+      };
+    },
+    async removeChannel() {}
+  };
+  const starting = startRealtimeAgent({ supabase, userId: "user-1",
+    device: { id: "desktop-1", name: "Desk", platform: "darwin" },
+    listWindows: async () => { scanning(); return scan; },
+    output: async (text) => { outputs.push(text); return { copied: true }; },
+    isActive: () => active, onStatus() {} });
+  let agent;
+  try {
+    await scansStarted;
+    active = false;
+    await messageCallback({ payload: { type: "insert_text", request_id: "old-request",
+      source_device_id: "phone-1", target_device_id: "desktop-1", text: "late text", auto_paste: true } });
+    release([]);
+    agent = await starting;
+    assert.deepEqual(outputs, []);
+    assert.deepEqual(tracks, [], "the old window scan must not republish online presence");
+  } finally {
+    release([]);
+    agent ||= await starting;
+    await agent.stop();
+  }
+});
+
+test("a queued cloud text checks its identity again before it can reach desktop output", async () => {
+  let active = true;
+  let release;
+  let entered;
+  const enteredQueue = new Promise((resolve) => { entered = resolve; });
+  const blocked = new Promise((resolve) => { release = resolve; });
+  const outputs = [];
+  const operation = runDesktopInputOperation(async () => { entered(); await blocked; });
+  await enteredQueue;
+  const receiving = handleDesktopMessage({ myDeviceId: "desktop-1", isActive: () => active,
+    payload: { type: "insert_text", request_id: "old-request", source_device_id: "phone-1",
+      target_device_id: "desktop-1", text: "late text", auto_paste: true },
+    output: async (text) => { outputs.push(text); return { copied: true, pasted: true }; } });
+  try {
+    active = false;
+    release();
+    await operation;
+    const result = await receiving;
+    assert.equal(result.ack.status, "failed");
+    assert.match(result.ack.detail, /已关闭/);
+    assert.deepEqual(outputs, []);
+  } finally {
+    release();
+    await operation;
+    await receiving;
+  }
+});
 
 async function waitForAgent(predicate, timeoutMs = 2000) {
   const startedAt = Date.now();

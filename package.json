@@ -16,10 +16,11 @@
     "mobile:prepare": "npm --prefix hosted-pwa run build && node mobile/scripts/prepare-web.mjs",
     "mobile:sync": "npm run mobile:prepare && npm --prefix mobile run sync",
     "start": "node src/server/index.js",
-    "test": "node --test"
+    "test": "node scripts/test.mjs",
+    "verify": "./scripts/verify"
   },
   "engines": {
-    "node": ">=20"
+    "node": "^22.18.0 || >=24.0.0"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.110.8",

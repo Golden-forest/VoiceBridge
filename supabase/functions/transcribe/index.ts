@@ -9,6 +9,7 @@ import { parsePcmWavDurationMs } from "../_shared/wav.ts";
 
 const PROVIDER = USAGE_PROVIDER_TENCENT_CLOUD;
 const MAX_AUDIO_BYTES = 3 * 1024 * 1024;
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 type SupabaseClientLike = ReturnType<typeof createClient<any, "public", any>>;
 const PLAN_CACHE_TTL_MS = 60_000;
 const planCache = new Map<string, { plan: PlanName; expiresAt: number }>();
@@ -33,6 +34,7 @@ Deno.serve(async (req) => {
   let audioSizeBytes = 0;
   let serviceClient: SupabaseClientLike | null = null;
   let usageReserved = false;
+  let providerStarted = false;
 
   try {
     const env = getSupabaseEnv();
@@ -71,9 +73,26 @@ Deno.serve(async (req) => {
     timing.authAt = Date.now();
 
     const formData = await req.formData();
+    const deviceId = formData.get("device_id");
+    if (deviceId !== null) {
+      if (typeof deviceId !== "string" || !UUID_PATTERN.test(deviceId)) {
+        return errorResponse("invalid_device", "电脑设备信息无效。", 400);
+      }
+      const { data: device, error: deviceError } = await serviceClient
+        .from("devices")
+        .select("user_id,paired_at")
+        .eq("id", deviceId)
+        .eq("runtime_user_id", userId)
+        .eq("status", "active")
+        .maybeSingle();
+      if (deviceError) throw deviceError;
+      if (!device?.paired_at || typeof device.user_id !== "string") {
+        return errorResponse("device_not_paired", "电脑设备尚未绑定当前账号，请重新扫码绑定。", 403);
+      }
+      userId = device.user_id;
+    }
     const audio = formData.get("audio");
     if (!(audio instanceof File)) {
-      durationMs = readClientDurationMs(formData);
       await recordUsage(serviceClient, { userId, requestId, durationMs, audioSizeBytes, status: "rejected", errorCode: "missing_audio" });
       return errorResponse("missing_audio", "没有收到音频文件。", 400);
     }
@@ -131,6 +150,7 @@ Deno.serve(async (req) => {
     timing.reservedAt = Date.now();
 
     const tencentEnv = getTencentEnv();
+    providerStarted = true;
     const text = await transcribeTencentWav({
       audioBytes,
       requestId,
@@ -163,7 +183,11 @@ Deno.serve(async (req) => {
     console.error("Transcribe function error:", error);
     if (userId && serviceClient) {
       if (usageReserved) {
-        EdgeRuntime.waitUntil(updateReservedUsage(serviceClient, { userId, requestId, status: "failed", errorCode: "transcription_failed" }));
+        EdgeRuntime.waitUntil(updateReservedUsage(serviceClient, {
+          userId, requestId,
+          status: providerStarted ? "unknown" : "failed",
+          errorCode: providerStarted ? "provider_result_unknown" : "transcription_failed"
+        }));
       } else {
         await recordUsage(serviceClient, {
           userId,
@@ -262,15 +286,16 @@ async function updateReservedUsage(
   }: {
     userId: string;
     requestId: string;
-    status: "success" | "failed";
+    status: "success" | "failed" | "unknown";
     errorCode?: string;
   }
 ) {
   const { error } = await serviceClient
     .from("usage_events")
-    .update({ status, error_code: errorCode || null })
+    .update({ status, error_code: errorCode || null, settled_at: new Date().toISOString() })
     .eq("user_id", userId)
-    .eq("request_id", requestId);
+    .eq("request_id", requestId)
+    .in("status", ["processing", "unknown"]);
   if (error) {
     console.error("Failed to update usage event:", error);
   }
@@ -321,9 +346,4 @@ function isWavFile(file: File) {
   const type = file.type.toLowerCase();
   const name = file.name.toLowerCase();
   return type === "audio/wav" || type === "audio/x-wav" || type === "audio/wave" || name.endsWith(".wav");
-}
-
-function readClientDurationMs(formData: FormData) {
-  const value = Number(formData.get("duration_ms"));
-  return Number.isFinite(value) && value > 0 ? value : null;
 }

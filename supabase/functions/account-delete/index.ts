@@ -41,17 +41,41 @@ Deno.serve(async (req) => {
     const userId = subject;
 
     // 拒绝删除管理员账号
-    const { data: profile } = await serviceClient
+    const { data: profile, error: profileError } = await serviceClient
       .from("profiles")
       .select("is_admin")
       .eq("user_id", userId)
       .maybeSingle();
+    if (profileError) throw profileError;
     if (profile?.is_admin === true) {
       return errorResponse("admin_protected", "管理员账号无法自行删除，请联系系统管理员。", 403);
     }
 
+    // An already-open provider checkout can still be paid after the local
+    // account is removed. Keep its owner mapping until trusted provider state
+    // settles it; closing a browser or a lease timeout does not cancel payment.
+    const { data: deletionState, error: checkoutError } = await serviceClient.rpc(
+      "begin_account_deletion", { p_user_id: userId }
+    );
+    if (checkoutError) throw checkoutError;
+    if (deletionState === "checkout_pending") {
+      return errorResponse("checkout_pending", "尚有未确认结束的结账请求，请等待支付状态确认或联系支持后再删除。", 409);
+    }
+    if (deletionState === "admin_protected") {
+      return errorResponse("admin_protected", "管理员账号无法自行删除，请联系系统管理员。", 403);
+    }
+    if (deletionState === "account_not_found") {
+      return errorResponse("account_not_found", "账号信息不存在，请重新登录后再试。", 404);
+    }
+    if (deletionState !== "account_deleting") throw new Error("Invalid account-deletion reservation response");
+
     // 尝试取消外部订阅（Paddle / Stripe），避免用户删除账号后仍被扣费
-    await cancelExternalSubscriptions(serviceClient, userId);
+    try {
+      await cancelExternalSubscriptions(serviceClient, userId);
+    } catch (cancelError) {
+      console.warn("Account retained because subscription cancellation failed:", cancelError);
+      return errorResponse("subscription_cancel_failed", "订阅尚未确认取消，账号和订阅记录已保留，请稍后重试。", 502);
+    }
 
     // 删除 auth.users 记录 —— 所有业务表通过 ON DELETE CASCADE 自动清理
     // （profiles, devices, device_pairings, subscriptions, usage_events,
@@ -66,57 +90,92 @@ Deno.serve(async (req) => {
     return jsonResponse({ ok: true });
   } catch (error) {
     console.error("Account deletion error:", error);
-    return errorResponse("delete_failed", error?.message || "账号删除失败，请稍后重试。", 500);
+    return errorResponse("delete_failed", error instanceof Error ? error.message : "账号删除失败，请稍后重试。", 500);
   }
 });
 
-/**
- * 在删除用户之前，尝试取消其活跃的外部订阅。
- * 失败不阻塞删除流程（仅记录日志），因为：
- * 1. 用户可能已经通过支付商门户自行取消了
- * 2. webhook 会同步状态
- * 3. 删账号本身就是"终止关系"的强信号
- */
+// Cancel every external subscription fact, including providers which are not
+// currently projected into subscriptions. Keep the entire account on any
+// uncertain result; a retry queries the provider and skips already-canceled
+// subscriptions instead of relying on webhook timing.
 async function cancelExternalSubscriptions(
   serviceClient: SupabaseClientLike,
   userId: string
 ) {
-  try {
-    const { data: sub } = await serviceClient
-      .from("subscriptions")
-      .select("source_provider,source_subscription_id,status")
-      .eq("user_id", userId)
-      .maybeSingle();
+  const { data: facts, error: factsError } = await serviceClient
+    .from("provider_subscriptions")
+    .select("provider,provider_subscription_id,status")
+    .eq("user_id", userId);
+  if (factsError) throw factsError;
+  const { data: current, error: currentError } = await serviceClient
+    .from("subscriptions")
+    .select("source_provider,source_subscription_id,status")
+    .eq("user_id", userId)
+    .maybeSingle();
+  if (currentError) throw currentError;
 
-    if (!sub || sub.status !== "active" || !sub.source_subscription_id) return;
-
-    const provider = sub.source_provider;
-    const subscriptionId = sub.source_subscription_id;
-
-    if (provider === "paddle") {
-      const paddleApiKey = Deno.env.get("PADDLE_API_KEY");
-      if (!paddleApiKey) return;
-      const baseUrl = paddleApiBaseUrl(getPaddleEnvironment());
-      await fetch(`${baseUrl}/subscriptions/${subscriptionId}`, {
-        method: "POST",
-        headers: {
-          "Authorization": `Bearer ${paddleApiKey}`,
-          "Content-Type": "application/json"
-        },
-        body: JSON.stringify({ status: "canceled" })
-      });
-    } else if (provider === "stripe") {
-      const stripeSecretKey = Deno.env.get("STRIPE_SECRET_KEY");
-      if (!stripeSecretKey) return;
-      await fetch(`https://api.stripe.com/v1/subscriptions/${subscriptionId}`, {
-        method: "DELETE",
-        headers: { "Authorization": `Bearer ${stripeSecretKey}` }
+  const subscriptions = new Map<string, { provider: string; id: string }>();
+  for (const sub of facts || []) {
+    if (sub.provider_subscription_id && !isTerminalSubscription(sub.provider, sub.status)) {
+      subscriptions.set(`${sub.provider}:${sub.provider_subscription_id}`, {
+        provider: sub.provider, id: sub.provider_subscription_id
       });
     }
-  } catch (error) {
-    // 非关键路径，仅记录
-    console.warn("Failed to cancel external subscription during account deletion:", error);
   }
+  if (current?.source_subscription_id && current.source_provider !== "admin"
+      && !isTerminalSubscription(current.source_provider, current.status)) {
+    subscriptions.set(`${current.source_provider}:${current.source_subscription_id}`, {
+      provider: current.source_provider, id: current.source_subscription_id
+    });
+  }
+
+  for (const { provider, id } of subscriptions.values()) {
+    let url: string;
+    let headers: Record<string, string>;
+    if (provider === "paddle") {
+      url = `${paddleApiBaseUrl(getPaddleEnvironment())}/subscriptions/${encodeURIComponent(id)}`;
+      headers = { Authorization: `Bearer ${requireEnv("PADDLE_API_KEY")}`, "Content-Type": "application/json" };
+    } else if (provider === "stripe") {
+      url = `https://api.stripe.com/v1/subscriptions/${encodeURIComponent(id)}`;
+      headers = { Authorization: `Bearer ${requireEnv("STRIPE_SECRET_KEY")}` };
+    } else {
+      throw new Error(`Cannot cancel subscription provider: ${provider}`);
+    }
+
+    const existing = await readSubscription(await fetch(url, {
+      headers, signal: AbortSignal.timeout(10_000)
+    }), provider);
+    if (isTerminalSubscription(provider, existing.status)) continue;
+    const cancelable = provider === "paddle"
+      ? ["active", "trialing", "past_due", "paused"]
+      : ["incomplete", "trialing", "active", "past_due", "unpaid", "paused"];
+    if (!cancelable.includes(existing.status || "")) throw new Error("Unknown subscription state");
+
+    const response = await fetch(provider === "paddle" ? `${url}/cancel` : url, {
+      method: provider === "paddle" ? "POST" : "DELETE",
+      headers,
+      ...(provider === "paddle" ? { body: JSON.stringify({ effective_from: "immediately" }) } : {}),
+      signal: AbortSignal.timeout(10_000)
+    });
+    const canceled = await readSubscription(response, provider);
+    if (canceled.status !== "canceled") throw new Error("Provider has not confirmed cancellation");
+  }
+}
+
+function isTerminalSubscription(provider: string, status: unknown): boolean {
+  // Stripe documents incomplete_expired as terminal: its invoice is voided
+  // and it will never generate another invoice. Paused/unpaid are resumable.
+  return status === "canceled" || (provider === "stripe" && status === "incomplete_expired");
+}
+
+async function readSubscription(response: Response, provider: string): Promise<{ status?: string }> {
+  if (!response.ok) throw new Error(`Subscription API returned ${response.status}`);
+  const body = await response.json();
+  const subscription = provider === "paddle" ? body?.data : body;
+  if (!subscription || typeof subscription.status !== "string") {
+    throw new Error("Invalid subscription API response");
+  }
+  return subscription;
 }
 
 function requireEnv(name: string) {

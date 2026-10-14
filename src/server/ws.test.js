@@ -2,10 +2,13 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import http from "node:http";
 import { WebSocket } from "ws";
+import net from "node:net";
+import { once } from "node:events";
 
 import { createWebSocketHub } from "./ws.js";
+import { runDesktopInputOperation } from "./input/desktopInputQueue.js";
 
-function startHub({ keyHandlers, output, onAsrPrefetch } = {}) {
+function startHub({ keyHandlers, output, authorize, trustOrigin, closeTimeoutMs, activateWindow } = {}) {
   const server = http.createServer();
   const hub = createWebSocketHub(server, {
     keyHandlers: keyHandlers || {
@@ -13,7 +16,7 @@ function startHub({ keyHandlers, output, onAsrPrefetch } = {}) {
       "paste": async () => { throw new Error("paste failed"); }
     },
     output: output || (async () => ({ copied: true, pasted: true })),
-    onAsrPrefetch
+    authorize, trustOrigin, closeTimeoutMs, activateWindow
   });
   return new Promise((resolve) => {
     server.listen(0, "127.0.0.1", () => {
@@ -74,6 +77,96 @@ test("key commands ack success to the sender socket", async () => {
   }
 });
 
+test("a queued LAN key rechecks its token after another desktop operation finishes", async () => {
+  let authorized = true;
+  let checks = 0;
+  let keyPresses = 0;
+  let release;
+  let entered;
+  const enteredQueue = new Promise((resolve) => { entered = resolve; });
+  const blocked = new Promise((resolve) => { release = resolve; });
+  const ctx = await startHub({ authorize: () => { checks++; return authorized; },
+    keyHandlers: { enter: async () => { keyPresses++; } } });
+  const client = connect(ctx.port);
+  let blocker;
+  try {
+    await client.opened;
+    await client.next();
+    blocker = runDesktopInputOperation(async () => { entered(); await blocked; });
+    await enteredQueue;
+    client.socket.send(JSON.stringify({ type: "key", key: "enter" }));
+    for (let tries = 0; checks < 2 && tries < 100; tries++) await new Promise((resolve) => setTimeout(resolve, 5));
+    assert.equal(checks, 2, "the key was accepted before the permission changed");
+    authorized = false;
+    release();
+    await blocker;
+    const ack = await client.next();
+    assert.equal(ack.status, "failed");
+    assert.match(ack.detail, /已关闭/);
+    assert.equal(keyPresses, 0);
+  } finally {
+    release();
+    await blocker;
+    await closeAll({ ...ctx, sockets: [client.socket] });
+  }
+});
+
+test("hub closes a WebSocket that never acknowledges the close frame within a deadline", async () => {
+  const ctx = await startHub({ closeTimeoutMs: 20 });
+  const socket = net.connect(ctx.port, "127.0.0.1");
+  await once(socket, "connect");
+  socket.write(`GET /ws HTTP/1.1\r\nHost: localhost:${ctx.port}\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\nSec-WebSocket-Version: 13\r\n\r\n`);
+  await once(socket, "data");
+  assert.equal(ctx.hub.clients.size, 1);
+  let timeout;
+  try {
+    await Promise.race([ctx.hub.close(), new Promise((_resolve, reject) => {
+      timeout = setTimeout(() => reject(new Error("close hung")), 1000);
+    })]);
+  } finally {
+    clearTimeout(timeout);
+  }
+  assert.equal(ctx.hub.clients.size, 0);
+  socket.destroy();
+  await new Promise((resolve) => ctx.server.close(resolve));
+});
+
+test("voice result phrases reuse command handling without a nested queue deadlock", async () => {
+  const calls = [];
+  const ctx = await startHub({ keyHandlers: { enter: async () => calls.push("enter"), delete: async () => calls.push("delete") },
+    output: async (text) => { calls.push(text); return { copied: true, pasted: true }; } });
+  const client = connect(ctx.port);
+  try {
+    await client.opened;
+    await client.next();
+    client.socket.send(JSON.stringify({ type: "phrase", text: "发送。", voiceCommand: true, autoPaste: true }));
+    const result = await client.next();
+    assert.equal(result.command, "send");
+    assert.equal(result.keyPressed, true);
+    assert.deepEqual(calls, ["enter"]);
+  } finally {
+    await closeAll({ ...ctx, sockets: [client.socket] });
+  }
+});
+
+test("LAN key commands refuse a failed selected-window activation", async () => {
+  let pressed = false;
+  const ctx = await startHub({ keyHandlers: { enter: async () => { pressed = true; } },
+    activateWindow: async () => ({ success: false, error: "window closed" }) });
+  const client = connect(ctx.port);
+  try {
+    await client.opened;
+    await client.next();
+    client.socket.send(JSON.stringify({ type: "key", key: "enter", targetWindow: { appName: "Notes", windowTitle: "Gone" } }));
+    const ack = await client.next();
+    assert.equal(ack.status, "failed");
+    assert.equal(ack.detail, "window closed");
+    assert.equal(pressed, false);
+  } finally {
+    await closeAll({ ...ctx, sockets: [client.socket] });
+  }
+});
+
 test("key commands ack failed with detail when the handler throws", async () => {
   const ctx = await startHub();
   const client = connect(ctx.port);
@@ -127,25 +220,6 @@ test("key acks go only to the sender, not other clients", async () => {
     assert.equal(other.messages.length, 1, "other client only saw its connection status");
   } finally {
     await closeAll({ ...ctx, sockets: [sender.socket, other.socket] });
-  }
-});
-
-test("asr-prefetch routes to the callback without any reply", async () => {
-  const seen = [];
-  const ctx = await startHub({ onAsrPrefetch: (durationMs) => seen.push(durationMs) });
-  const client = connect(ctx.port);
-  try {
-    await client.opened;
-    await client.next();
-
-    client.socket.send(JSON.stringify({ type: "asr-prefetch", duration_ms: 60000 }));
-    client.socket.send(JSON.stringify({ type: "asr-prefetch", duration_ms: -5 })); // 无效值忽略
-    await new Promise((resolve) => setTimeout(resolve, 100));
-
-    assert.deepEqual(seen, [60000]);
-    assert.equal(client.messages.length, 1, "no reply for fire-and-forget prefetch");
-  } finally {
-    await closeAll({ ...ctx, sockets: [client.socket] });
   }
 });
 

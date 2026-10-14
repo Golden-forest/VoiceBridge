@@ -7,7 +7,7 @@ const appSource = await readFile(new URL("./app.js", import.meta.url), "utf8");
 
 test("cloud and LAN modes share the direct WAV recorder path", () => {
   assert.match(appSource, /recordWavUntilStopped/);
-  assert.match(appSource, /onStopReady:\s*async \(blob\) => uploadAudio\(blob, "wav"\)/);
+  assert.match(appSource, /onStopReady:\s*async \(blob\) => uploadAudio\(blob, "wav", context\)/);
   assert.doesNotMatch(appSource, /new MediaRecorder/);
 });
 
@@ -186,3 +186,60 @@ function restoreBrowserGlobals(originalNavigator, originalWindow) {
   });
   globalThis.window = originalWindow;
 }
+
+test("cancel while microphone permission is pending releases the late stream without creating an audio context", async () => {
+  const originalNavigator = globalThis.navigator;
+  const originalWindow = globalThis.window;
+  const track = createTrack();
+  const context = createAudioContext();
+  let resolvePermission;
+  let contextsCreated = 0;
+  setBrowserGlobals({ stream: { getTracks: () => [track] }, context, onConstruct: () => contextsCreated++ });
+  navigator.mediaDevices.getUserMedia = () => new Promise((resolve) => { resolvePermission = resolve; });
+  const controller = new AbortController();
+  try {
+    const pending = recordWavUntilStopped({ signal: controller.signal, onStopReady: async () => assert.fail("cancelled recording must not upload") });
+    controller.abort();
+    resolvePermission({ getTracks: () => [track] });
+    await assert.rejects(pending, { name: "AbortError" });
+    assert.equal(track.stopCount, 1);
+    assert.equal(contextsCreated, 0);
+  } finally { restoreBrowserGlobals(originalNavigator, originalWindow); }
+});
+
+test("identity cancellation stops an active recorder without uploading", async () => {
+  const originalNavigator = globalThis.navigator;
+  const originalWindow = globalThis.window;
+  const track = createTrack();
+  const context = createAudioContext();
+  const controller = new AbortController();
+  setBrowserGlobals({ stream: { getTracks: () => [track] }, context });
+  try {
+    const recorder = await recordWavUntilStopped({ signal: controller.signal, onStopReady: async () => assert.fail("cancel must not upload") });
+    controller.abort();
+    await recorder.cancel();
+    await recorder.stop();
+    assert.equal(track.stopCount, 1);
+    assert.equal(context.closeCount, 1);
+    assert.equal(context.processor.onaudioprocess, null);
+  } finally { restoreBrowserGlobals(originalNavigator, originalWindow); }
+});
+
+test("microphone and audio context close before waiting for network upload", async () => {
+  const originalNavigator = globalThis.navigator;
+  const originalWindow = globalThis.window;
+  const track = createTrack();
+  const context = createAudioContext();
+  let completeUpload;
+  setBrowserGlobals({ stream: { getTracks: () => [track] }, context });
+  try {
+    const recorder = await recordWavUntilStopped({ onStopReady: () => new Promise((resolve) => { completeUpload = resolve; }) });
+    const pending = recorder.stop();
+    await new Promise((resolve) => setImmediate(resolve));
+    assert.equal(track.stopCount, 1);
+    assert.equal(context.closeCount, 1);
+    completeUpload();
+    await pending;
+    assert.equal(context.closeCount, 1);
+  } finally { restoreBrowserGlobals(originalNavigator, originalWindow); }
+});

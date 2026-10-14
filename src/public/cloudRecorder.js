@@ -1,6 +1,6 @@
 import { encodeWav16Mono } from "./wavEncoder.js";
 
-export async function recordWavUntilStopped({ onStopReady, maxDurationMs, onMaxDurationReached }) {
+export async function recordWavUntilStopped({ onStopReady, maxDurationMs, onMaxDurationReached, signal }) {
   let stream = null;
   let audioContext = null;
   let source = null;
@@ -10,8 +10,22 @@ export async function recordWavUntilStopped({ onStopReady, maxDurationMs, onMaxD
   let totalSamples = 0;
   let autoStopTriggered = false;
 
+  async function cancel() {
+    if (stopped) return;
+    stopped = true;
+    signal?.removeEventListener("abort", cancel);
+    if (processor) processor.onaudioprocess = null;
+    safeDisconnect(processor);
+    safeDisconnect(source);
+    safeStopTracks(stream);
+    chunks.length = 0;
+    await safeCloseAudioContext(audioContext);
+  }
+
   try {
+    if (signal?.aborted) throw new DOMException("录音已取消", "AbortError");
     stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    if (signal?.aborted) throw new DOMException("录音已取消", "AbortError");
     const AudioContextCtor = window.AudioContext || window.webkitAudioContext;
     try {
       audioContext = new AudioContextCtor({ sampleRate: 16000 });
@@ -43,6 +57,7 @@ export async function recordWavUntilStopped({ onStopReady, maxDurationMs, onMaxD
 
     source.connect(processor);
     processor.connect(audioContext.destination);
+    signal?.addEventListener("abort", cancel, { once: true });
   } catch (error) {
     if (processor) processor.onaudioprocess = null;
     safeDisconnect(processor);
@@ -53,9 +68,11 @@ export async function recordWavUntilStopped({ onStopReady, maxDurationMs, onMaxD
   }
 
   return {
+    cancel,
     async stop() {
       if (stopped) return;
       stopped = true;
+      signal?.removeEventListener("abort", cancel);
       processor.onaudioprocess = null;
       safeDisconnect(processor);
       safeDisconnect(source);
@@ -69,6 +86,10 @@ export async function recordWavUntilStopped({ onStopReady, maxDurationMs, onMaxD
           offset += chunk.length;
         }
         const blob = encodeWav16Mono(samples, audioContext.sampleRate);
+        chunks.length = 0;
+        const contextToClose = audioContext;
+        audioContext = null;
+        await safeCloseAudioContext(contextToClose);
         await onStopReady(blob);
       } finally {
         await safeCloseAudioContext(audioContext);

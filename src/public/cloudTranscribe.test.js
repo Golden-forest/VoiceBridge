@@ -1,575 +1,81 @@
-import test from "node:test";
 import assert from "node:assert/strict";
+import test from "node:test";
+import { transcribeCloudAudio, setAsrTimingListener } from "./cloudTranscribe.js";
 
-import {
-  transcribeCloudAudio,
-  prefetchDirectAsrSignature,
-  __clearAccessTokenCacheForTests,
-  __waitForPendingAsrReportsForTests
-} from "./cloudTranscribe.js";
-
-const BASE = "https://project.supabase.co";
-const TENCENT_URL = "https://asr.cloud.tencent.com/asr/flash/v1/123?signed=1";
-// 客户端把直连 URL 改写到 API 同源代理(Worker /asr/flash/* 透传腾讯,绕开 CORS)
-const PROXIED_TENCENT_URL = `${BASE}/asr/flash/v1/123?signed=1`;
-
-test("transcribeCloudAudio falls back to the relay when direct ASR is unavailable", async () => {
-  __clearAccessTokenCacheForTests();
-  const calls = [];
-  const supabase = createSupabaseClient({
-    url: BASE,
-    anonKey: "anon-key",
-    accessToken: "access-token"
-  });
-
-  const result = await transcribeCloudAudio({
-    allowDirectAsr: true,
-    supabase,
-    audio: new Blob(["wav"], { type: "audio/wav" }),
-    filename: "voicebridge.wav",
-    durationMs: 1234,
-    fetch: async (url, options) => {
-      calls.push({ url, options });
-      if (url.includes("issue-asr-request")) {
-        return jsonResponse(503, { ok: false, code: "direct_asr_unavailable", message: "直连识别暂不可用" });
-      }
-      return jsonResponse(200, { ok: true, request_id: "req-relay", text: "hello" });
-    }
-  });
-
-  assert.deepEqual(result, { ok: true, request_id: "req-relay", text: "hello" });
-  const relayCalls = calls.filter((c) => c.url.endsWith("/transcribe"));
-  assert.equal(relayCalls.length, 1);
-  assert.equal(relayCalls[0].url, `${BASE}/functions/v1/transcribe`);
-  assert.equal(relayCalls[0].options.method, "POST");
-  assert.equal(relayCalls[0].options.headers.apikey, "anon-key");
-  assert.equal(relayCalls[0].options.headers.Authorization, "Bearer access-token");
-  assert.equal(relayCalls[0].options.body.get("duration_ms"), "1234");
-  assert.equal(relayCalls[0].options.body.get("audio").name, "voicebridge.wav");
-});
-
-test("transcribeCloudAudio direct path: issue → Tencent POST → success report, no relay call", async () => {
-  __clearAccessTokenCacheForTests();
-  const calls = [];
-  const supabase = createSupabaseClient({
-    url: BASE,
-    anonKey: "anon-key",
-    accessToken: "access-token"
-  });
-
-  const result = await transcribeCloudAudio({
-    allowDirectAsr: true,
-    supabase,
-    audio: new Blob(["wav-bytes"], { type: "audio/wav" }),
-    durationMs: 1500,
-    fetch: async (url, options) => {
-      calls.push({ url, options });
-      if (url.includes("issue-asr-request")) {
-        assert.deepEqual(JSON.parse(options.body), { duration_ms: 1500, audio_size_bytes: 9 });
-        assert.equal(options.headers.Authorization, "Bearer access-token");
-        return jsonResponse(200, {
-          ok: true,
-          request_id: "req-direct",
-          url: TENCENT_URL,
-          headers: { Authorization: "TC3-Signed", "Content-Type": "application/json" },
-          expires_at: Math.floor(Date.now() / 1000) + 300
-        });
-      }
-      if (url === PROXIED_TENCENT_URL) {
-        assert.equal(options.method, "POST");
-        assert.equal(options.headers.Authorization, "TC3-Signed");
-        assert.equal(options.body.size, 9);
-        return jsonResponse(200, {
-          code: 0,
-          message: "success",
-          flash_result: [{ text: " 你好，" }, { text: "嗯世界。" }]
-        });
-      }
-      if (url.includes("report-asr-result")) {
-        return jsonResponse(200, { ok: true });
-      }
-      throw new Error(`unexpected fetch: ${url}`);
-    }
-  });
-
-  assert.equal(result.ok, true);
-  assert.equal(result.request_id, "req-direct");
-  // 语气词清理与 Edge 端 removeFillerWords 一致：“你好，嗯世界。” → “你好，世界。”
-  assert.equal(result.text, "你好，世界。");
-
-  // 成功路径的上报是 fire-and-forget：等它落地后再断言请求体。
-  await __waitForPendingAsrReportsForTests();
-  const report = calls.find((c) => c.url.includes("report-asr-result"));
-  assert.ok(report, "report-asr-result must be called");
-  assert.deepEqual(JSON.parse(report.options.body), {
-    request_id: "req-direct",
-    status: "success",
-    text_length: "你好，世界。".length,
-    duration_ms: 1500
-  });
-  assert.equal(report.options.keepalive, true);
-  assert.equal(report.options.headers.Authorization, "Bearer access-token");
-
-  assert.equal(calls.some((c) => c.url.endsWith("/transcribe")), false, "relay must not be used");
-});
-
-test("transcribeCloudAudio falls back to relay when Tencent returns a non-zero code, and reports failed", async () => {
-  __clearAccessTokenCacheForTests();
-  const calls = [];
-  const supabase = createSupabaseClient({ url: BASE, anonKey: "anon-key", accessToken: "access-token" });
-
-  const result = await transcribeCloudAudio({
-    allowDirectAsr: true,
-    supabase,
-    audio: new Blob(["wav"], { type: "audio/wav" }),
-    durationMs: 1000,
-    fetch: async (url, options) => {
-      calls.push({ url, options });
-      if (url.includes("issue-asr-request")) {
-        return jsonResponse(200, {
-          ok: true,
-          request_id: "req-2",
-          url: TENCENT_URL,
-          headers: { Authorization: "TC3" },
-          expires_at: Math.floor(Date.now() / 1000) + 300
-        });
-      }
-      if (url === PROXIED_TENCENT_URL) {
-        return jsonResponse(200, { code: 4003, message: "flash not enabled" });
-      }
-      if (url.includes("report-asr-result")) {
-        return jsonResponse(200, { ok: true });
-      }
-      return jsonResponse(200, { ok: true, request_id: "req-relay", text: "relay text" });
-    }
-  });
-
-  assert.equal(result.text, "relay text");
-  const report = calls.find((c) => c.url.includes("report-asr-result"));
-  assert.deepEqual(JSON.parse(report.options.body), {
-    request_id: "req-2",
-    status: "failed",
-    error_code: "tencent_4003",
-    duration_ms: 1000
-  });
-  assert.ok(calls.some((c) => c.url.endsWith("/transcribe")), "relay fallback must run");
-});
-
-test("transcribeCloudAudio falls back to relay when Tencent fetch throws, and reports failed", async () => {
-  __clearAccessTokenCacheForTests();
-  const calls = [];
-  const supabase = createSupabaseClient({ url: BASE, anonKey: "anon-key", accessToken: "access-token" });
-
-  const result = await transcribeCloudAudio({
-    allowDirectAsr: true,
-    supabase,
-    audio: new Blob(["wav"], { type: "audio/wav" }),
-    durationMs: 1000,
-    fetch: async (url, options) => {
-      calls.push({ url, options });
-      if (url.includes("issue-asr-request")) {
-        return jsonResponse(200, {
-          ok: true,
-          request_id: "req-3",
-          url: TENCENT_URL,
-          headers: { Authorization: "TC3" },
-          expires_at: Math.floor(Date.now() / 1000) + 300
-        });
-      }
-      if (url === PROXIED_TENCENT_URL) {
-        throw new Error("network down");
-      }
-      if (url.includes("report-asr-result")) {
-        return jsonResponse(200, { ok: true });
-      }
-      return jsonResponse(200, { ok: true, text: "relay ok" });
-    }
-  });
-
-  assert.equal(result.text, "relay ok");
-  const report = calls.find((c) => c.url.includes("report-asr-result"));
-  assert.equal(JSON.parse(report.options.body).status, "failed");
-});
-
-test("transcribeCloudAudio falls back to relay on a stale expires_at", async () => {
-  __clearAccessTokenCacheForTests();
-  const calls = [];
-  const supabase = createSupabaseClient({ url: BASE, anonKey: "anon-key", accessToken: "access-token" });
-
-  const result = await transcribeCloudAudio({
-    allowDirectAsr: true,
-    supabase,
-    audio: new Blob(["wav"], { type: "audio/wav" }),
-    durationMs: 1000,
-    fetch: async (url, options) => {
-      calls.push({ url, options });
-      if (url.includes("issue-asr-request")) {
-        return jsonResponse(200, {
-          ok: true,
-          request_id: "req-4",
-          url: TENCENT_URL,
-          headers: { Authorization: "TC3" },
-          expires_at: Math.floor(Date.now() / 1000) - 10
-        });
-      }
-      if (url.includes("report-asr-result")) {
-        return jsonResponse(200, { ok: true });
-      }
-      return jsonResponse(200, { ok: true, text: "relay ok" });
-    }
-  });
-
-  assert.equal(result.text, "relay ok");
-  assert.equal(calls.some((c) => c.url === PROXIED_TENCENT_URL), false,
-    "Tencent must not be called with a stale signature");
-});
-
-test("transcribeCloudAudio direct result survives a failed report-asr-result send", async () => {
-  __clearAccessTokenCacheForTests();
-  const supabase = createSupabaseClient({ url: BASE, anonKey: "anon-key", accessToken: "access-token" });
-
-  const result = await transcribeCloudAudio({
-    allowDirectAsr: true,
-    supabase,
-    audio: new Blob(["wav"], { type: "audio/wav" }),
-    durationMs: 1000,
-    fetch: async (url) => {
-      if (url.includes("issue-asr-request")) {
-        return jsonResponse(200, {
-          ok: true,
-          request_id: "req-5",
-          url: TENCENT_URL,
-          headers: { Authorization: "TC3" },
-          expires_at: Math.floor(Date.now() / 1000) + 300
-        });
-      }
-      if (url === PROXIED_TENCENT_URL) {
-        return jsonResponse(200, { code: 0, flash_result: [{ text: "直接成功" }] });
-      }
-      if (url.includes("report-asr-result")) {
-        throw new Error("report send failed");
-      }
-      throw new Error(`unexpected fetch: ${url}`);
-    }
-  });
-
-  assert.equal(result.text, "直接成功");
-  assert.equal(result.request_id, "req-5");
-});
-
-test("transcribeCloudAudio reports failed and falls back on an invalid issue payload with ok:true", async () => {
-  __clearAccessTokenCacheForTests();
-  const calls = [];
-  const supabase = createSupabaseClient({ url: BASE, anonKey: "anon-key", accessToken: "access-token" });
-
-  const result = await transcribeCloudAudio({
-    allowDirectAsr: true,
-    supabase,
-    audio: new Blob(["wav"], { type: "audio/wav" }),
-    durationMs: 1000,
-    fetch: async (url, options) => {
-      calls.push({ url, options });
-      if (url.includes("issue-asr-request")) {
-        // ok:true 但缺少签名 URL：必须上报 failed 再回退，避免服务端预留悬挂。
-        return jsonResponse(200, { ok: true, request_id: "req-invalid", headers: { Authorization: "TC3" } });
-      }
-      if (url.includes("report-asr-result")) {
-        return jsonResponse(200, { ok: true });
-      }
-      return jsonResponse(200, { ok: true, text: "relay ok" });
-    }
-  });
-
-  assert.equal(result.text, "relay ok");
-  const report = calls.find((c) => c.url.includes("report-asr-result"));
-  assert.ok(report, "report-asr-result must be called for an invalid issue payload");
-  assert.deepEqual(JSON.parse(report.options.body), {
-    request_id: "req-invalid",
-    status: "failed",
-    error_code: "invalid_issue_response",
-    duration_ms: 1000
-  });
-  assert.equal(calls.some((c) => c.url.endsWith("/transcribe")), true, "relay fallback must run");
-  assert.equal(calls.some((c) => c.url === PROXIED_TENCENT_URL), false,
-    "Tencent must not be called without a signed URL");
-});
-
-test("transcribeCloudAudio falls back to relay when the issue call itself throws", async () => {
-  __clearAccessTokenCacheForTests();
-  const supabase = createSupabaseClient({ url: BASE, anonKey: "anon-key", accessToken: "access-token" });
-
-  const result = await transcribeCloudAudio({
-    allowDirectAsr: true,
-    supabase,
-    audio: new Blob(["wav"], { type: "audio/wav" }),
-    durationMs: 1000,
-    fetch: async (url) => {
-      if (url.includes("issue-asr-request")) throw new Error("network down");
-      return jsonResponse(200, { ok: true, text: "relay ok" });
-    }
-  });
-
-  assert.equal(result.text, "relay ok");
-});
-
-test("transcribeCloudAudio throws the function error message for non-2xx JSON responses", async () => {
-  __clearAccessTokenCacheForTests();
-  const supabase = createSupabaseClient({
-    url: BASE,
-    anonKey: "anon-key",
-    accessToken: "access-token"
-  });
-
-  await assert.rejects(
-    () => transcribeCloudAudio({
-      supabase,
-      audio: new Blob(["wav"], { type: "audio/wav" }),
-      fetch: async (url) => {
-        if (url.includes("issue-asr-request")) {
-          return jsonResponse(503, { ok: false, code: "direct_asr_unavailable", message: "直连识别暂不可用，请使用回退通道。" });
-        }
-        return jsonResponse(429, {
-          ok: false,
-          code: "quota_exceeded",
-          message: "本月云端语音识别额度已用完。"
-        });
-      }
-    }),
-    /本月云端语音识别额度已用完/
-  );
-});
-
-test("transcribeCloudAudio requires a signed-in Supabase session", async () => {
-  __clearAccessTokenCacheForTests();
-  const supabase = createSupabaseClient({
-    url: BASE,
-    anonKey: "anon-key",
-    accessToken: ""
-  });
-
-  await assert.rejects(
-    () => transcribeCloudAudio({
-      supabase,
-      audio: new Blob(["wav"], { type: "audio/wav" }),
-      fetch: async () => {
-        throw new Error("fetch should not be called");
-      }
-    }),
-    /请先登录/
-  );
-});
-
-test("transcribeCloudAudio uses a valid prefetched signature without re-issuing", async () => {
-  __clearAccessTokenCacheForTests();
-  const calls = [];
-  const supabase = createSupabaseClient({ url: BASE, anonKey: "anon-key", accessToken: "access-token" });
-  const prefetched = {
-    ok: true,
-    request_id: "req-presigned",
-    url: TENCENT_URL,
-    headers: { Authorization: "TC3-Presigned", "Content-Type": "application/json" },
-    expires_at: Math.floor(Date.now() / 1000) + 300
-  };
-
-  const result = await transcribeCloudAudio({
-    allowDirectAsr: true,
-    supabase,
-    audio: new Blob(["wav-bytes"], { type: "audio/wav" }),
-    durationMs: 2000,
-    prefetchedIssue: Promise.resolve(prefetched),
-    fetch: async (url, options) => {
-      calls.push({ url, options });
-      if (url.includes("issue-asr-request")) {
-        throw new Error("issue-asr-request must not be called when a valid prefetched signature exists");
-      }
-      if (url === PROXIED_TENCENT_URL) {
-        assert.equal(options.headers.Authorization, "TC3-Presigned");
-        return jsonResponse(200, { code: 0, flash_result: [{ text: "预签名" }] });
-      }
-      if (url.includes("report-asr-result")) {
-        return jsonResponse(200, { ok: true });
-      }
-      throw new Error(`unexpected fetch: ${url}`);
-    }
-  });
-
-  assert.equal(result.ok, true);
-  assert.equal(result.request_id, "req-presigned");
-  assert.equal(result.text, "预签名");
-  assert.equal(calls.some((c) => c.url.includes("issue-asr-request")), false);
-
-  await __waitForPendingAsrReportsForTests();
-  const report = calls.find((c) => c.url.includes("report-asr-result"));
-  assert.ok(report, "report-asr-result must be called");
-  // 预签名按上限预留，上报必须回写实际时长结算配额。
-  assert.equal(JSON.parse(report.options.body).duration_ms, 2000);
-});
-
-test("transcribeCloudAudio ignores an expired prefetched signature and re-issues", async () => {
-  __clearAccessTokenCacheForTests();
-  const calls = [];
-  const supabase = createSupabaseClient({ url: BASE, anonKey: "anon-key", accessToken: "access-token" });
-  const stale = {
-    ok: true,
-    request_id: "req-stale",
-    url: TENCENT_URL,
-    headers: { Authorization: "TC3-Stale" },
-    expires_at: Math.floor(Date.now() / 1000) - 10
-  };
-
-  const result = await transcribeCloudAudio({
-    allowDirectAsr: true,
-    supabase,
-    audio: new Blob(["wav"], { type: "audio/wav" }),
-    durationMs: 1000,
-    prefetchedIssue: Promise.resolve(stale),
-    fetch: async (url, options) => {
-      calls.push({ url, options });
-      if (url.includes("issue-asr-request")) {
-        return jsonResponse(200, {
-          ok: true,
-          request_id: "req-fresh",
-          url: TENCENT_URL,
-          headers: { Authorization: "TC3-Fresh" },
-          expires_at: Math.floor(Date.now() / 1000) + 300
-        });
-      }
-      if (url === PROXIED_TENCENT_URL) {
-        assert.equal(options.headers.Authorization, "TC3-Fresh");
-        return jsonResponse(200, { code: 0, flash_result: [{ text: "回退" }] });
-      }
-      if (url.includes("report-asr-result")) {
-        return jsonResponse(200, { ok: true });
-      }
-      throw new Error(`unexpected fetch: ${url}`);
-    }
-  });
-
-  assert.equal(result.ok, true);
-  assert.equal(result.request_id, "req-fresh");
-  assert.equal(calls.some((c) => c.url.includes("issue-asr-request")), true);
-});
-
-test("prefetchDirectAsrSignature returns the issue payload and stays silent on failure", async () => {
-  __clearAccessTokenCacheForTests();
-  const supabase = createSupabaseClient({ url: BASE, anonKey: "anon-key", accessToken: "access-token" });
-
-  const ok = await prefetchDirectAsrSignature({
-    supabase,
-    durationMs: 60000,
-    fetch: async (url, options) => {
-      assert.equal(url, `${BASE}/functions/v1/issue-asr-request`);
-      const body = JSON.parse(options.body);
-      assert.equal(body.duration_ms, 60000);
-      assert.ok(body.audio_size_bytes > 0);
-      return jsonResponse(200, {
-        ok: true,
-        request_id: "req-pre",
-        url: TENCENT_URL,
-        headers: { Authorization: "TC3" },
-        expires_at: Math.floor(Date.now() / 1000) + 300
-      });
-    }
-  });
-  assert.equal(ok.request_id, "req-pre");
-
-  const failed = await prefetchDirectAsrSignature({
-    supabase,
-    durationMs: 60000,
-    fetch: async () => jsonResponse(429, { ok: false })
-  });
-  assert.equal(failed, null);
-
-  const thrown = await prefetchDirectAsrSignature({
-    supabase,
-    durationMs: 60000,
-    fetch: async () => { throw new Error("network down"); }
-  });
-  assert.equal(thrown, null);
-});
-
-function createSupabaseClient({ url, anonKey, accessToken }) {
-  return {
-    supabaseUrl: url,
-    supabaseKey: anonKey,
-    auth: {
-      async getSession() {
-        return {
-          data: {
-            session: accessToken ? { access_token: accessToken } : null
-          },
-          error: null
-        };
-      }
-    }
-  };
+const BASE = "https://example.invalid";
+const audio = new Blob(["wav"], { type: "audio/wav" });
+function client(readSession = () => ({ access_token: "token-A", user: { id: "A" } })) {
+  return { supabaseUrl: BASE, supabaseKey: "anon", auth: { async getSession() { return { data: { session: readSession() } }; } } };
+}
+function response(payload = { ok: true, text: " transcript " }, status = 200) {
+  return new Response(JSON.stringify(payload), { status, headers: { "content-type": "application/json" } });
 }
 
-function jsonResponse(status, payload) {
-  return {
-    ok: status >= 200 && status < 300,
-    status,
-    async json() {
-      return payload;
-    }
-  };
-}
-
-test("transcribeCloudAudio leaves a non-Tencent direct URL untouched (no proxy rewrite)", async () => {
-  __clearAccessTokenCacheForTests();
+test("relay sends actual audio, filename and duration without issuing a direct signature", async () => {
   const calls = [];
-  const supabase = createSupabaseClient({ url: BASE, anonKey: "anon-key", accessToken: "access-token" });
-  const otherVendorUrl = "https://asr.other-vendor.example/flash/v1/999?signed=1";
-  await transcribeCloudAudio({
-    allowDirectAsr: true,
-    supabase,
-    audio: new Blob(["wav-bytes"], { type: "audio/wav" }),
-    durationMs: 800,
-    fetch: async (url, options) => {
-      calls.push({ url, options });
-      if (url.includes("issue-asr-request")) {
-        return jsonResponse(200, {
-          ok: true,
-          request_id: "req-direct",
-          url: otherVendorUrl,
-          headers: { "Content-Type": "application/octet-stream" },
-          expires_at: Math.floor(Date.now() / 1000) + 60
-        });
-      }
-      if (url === otherVendorUrl) {
-        return jsonResponse(200, { code: 0, flash_result: [{ text: "原始域名直连" }] });
-      }
-      if (url.includes("report-asr-result")) return jsonResponse(200, { ok: true });
-      throw new Error(`unexpected fetch: ${url}`);
-    }
-  });
-  await __waitForPendingAsrReportsForTests();
-  // 非腾讯域名:不改写,原样直连;也绝不应出现被改写到 BASE 的调用。
-  assert.equal(calls.some((c) => c.url === otherVendorUrl), true,
-    "non-Tencent issue.url must be fetched verbatim");
-  assert.equal(calls.some((c) => c.url.startsWith(`${BASE}/asr/flash/`)), false,
-    "non-Tenant vendor URL must not be rewritten to the proxy path");
+  const result = await transcribeCloudAudio({ supabase: client(), audio, filename: "clip.wav", durationMs: 1234.6,
+    allowDirectAsr: true, prefetchedIssue: Promise.resolve({ request_id: "old-direct" }),
+    fetch: async (url, options) => { calls.push({ url, options }); return response(); } });
+  assert.equal(result.text, "transcript");
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].url, `${BASE}/functions/v1/transcribe`);
+  assert.equal(calls[0].options.headers.Authorization, "Bearer token-A");
+  assert.equal(calls[0].options.body.get("audio").name, "clip.wav");
+  assert.equal(calls[0].options.body.get("duration_ms"), "1235");
 });
 
-test("transcribeCloudAudio skips the direct attempt by default (browser CORS makes it always fail)", async () => {
-  __clearAccessTokenCacheForTests();
-  const calls = [];
-  const supabase = createSupabaseClient({ url: BASE, anonKey: "anon-key", accessToken: "access-token" });
-  const result = await transcribeCloudAudio({
-    supabase,
-    audio: new Blob(["wav"], { type: "audio/wav" }),
-    durationMs: 1234,
-    fetch: async (url, options) => {
-      calls.push({ url, options });
-      if (url.includes("issue-asr-request")) throw new Error("issue must not be called when direct is skipped");
-      if (url.endsWith("/transcribe")) return jsonResponse(200, { ok: true, request_id: "req-relay", text: "纯中转" });
-      if (url.includes("report-asr-result")) return jsonResponse(200, { ok: true });
-      throw new Error(`unexpected fetch: ${url}`);
-    }
-  });
-  assert.equal(result.text, "纯中转");
-  // 不允许出现任何直连尝试:无 issue 签名、无腾讯域名、无代理路径
-  assert.equal(calls.some((c) => c.url.includes("issue-asr-request")), false, "must not issue a direct signature");
-  assert.equal(calls.some((c) => /asr\.cloud\.tencent\.com|\/asr\/flash\//.test(c.url)), false, "must not touch Tencent or proxy path");
-  assert.equal(calls.filter((c) => c.url.endsWith("/transcribe")).length, 1, "exactly one relay call");
+test("each request uses the current account and independently refreshed token", async () => {
+  let session = { access_token: "token-A", user: { id: "A" } };
+  const supabase = client(() => session);
+  const tokens = [];
+  const fetch = async (_url, options) => { tokens.push(options.headers.Authorization); return response(); };
+  await transcribeCloudAudio({ supabase, audio, fetch });
+  session = { access_token: "token-B", user: { id: "B" } };
+  await transcribeCloudAudio({ supabase, audio, fetch });
+  session = { access_token: "token-B-refreshed", user: { id: "B" } };
+  await transcribeCloudAudio({ supabase, audio, fetch });
+  assert.deepEqual(tokens, ["Bearer token-A", "Bearer token-B", "Bearer token-B-refreshed"]);
+});
+
+test("a changed account or logout prevents uploading the old recording", async () => {
+  let calls = 0;
+  const fetch = async () => { calls++; return response(); };
+  await assert.rejects(transcribeCloudAudio({ supabase: client(() => ({ access_token: "token-B", user: { id: "B" } })), expectedUserId: "A", audio, fetch }), { name: "AbortError" });
+  await assert.rejects(transcribeCloudAudio({ supabase: client(() => null), audio, fetch }), /请先登录/);
+  assert.equal(calls, 0);
+});
+
+test("cancel during asynchronous session lookup prevents network activity", async () => {
+  let resolveSession;
+  const controller = new AbortController();
+  let calls = 0;
+  const supabase = { ...client(), auth: { getSession: () => new Promise((resolve) => { resolveSession = resolve; }) } };
+  const pending = transcribeCloudAudio({ supabase, audio, signal: controller.signal, fetch: async () => { calls++; return response(); } });
+  controller.abort();
+  resolveSession({ data: { session: { access_token: "A", user: { id: "A" } } } });
+  await assert.rejects(pending, { name: "AbortError" });
+  assert.equal(calls, 0);
+});
+
+test("cancel propagates to an in-flight relay and keeps cancellation distinct from timeout", async () => {
+  const controller = new AbortController();
+  let relaySignal;
+  const pending = transcribeCloudAudio({ supabase: client(), audio, signal: controller.signal,
+    fetch: async (_url, options) => { relaySignal = options.signal; return new Promise((_resolve, reject) => options.signal.addEventListener("abort", () => reject(new DOMException("aborted", "AbortError")), { once: true })); } });
+  await new Promise((resolve) => setImmediate(resolve));
+  controller.abort();
+  await assert.rejects(pending, { name: "AbortError" });
+  assert.equal(relaySignal.aborted, true);
+});
+
+test("relay API failure, malformed JSON, and empty transcript never report success", async () => {
+  await assert.rejects(transcribeCloudAudio({ supabase: client(), audio, fetch: async () => response({ ok: false, error: "quota exhausted" }, 429) }), /quota exhausted/);
+  await assert.rejects(transcribeCloudAudio({ supabase: client(), audio, fetch: async () => new Response("not JSON") }), /识别失败/);
+  await assert.rejects(transcribeCloudAudio({ supabase: client(), audio, fetch: async () => response({ ok: true, text: " " }) }), /没有返回可用文字/);
+});
+
+test("observability errors cannot discard a valid transcript", async () => {
+  setAsrTimingListener(() => { throw new Error("observer failed"); });
+  try { assert.equal((await transcribeCloudAudio({ supabase: client(), audio, fetch: async () => response() })).text, "transcript"); }
+  finally { setAsrTimingListener(null); }
 });

@@ -46,7 +46,9 @@ test("buffer preserves ASR punctuation, does not strip or add", async () => {
     setTimer: scheduler.setTimer,
     clearTimer: scheduler.clearTimer,
     outputTextFn: async (text, options) => {
-      outputs.push({ text, options });
+      assert.equal(typeof options.isActive, "function");
+      const { isActive, ...outputOptions } = options;
+      outputs.push({ text, options: outputOptions });
       return { copied: true, pasted: true, pasteError: null };
     }
   });
@@ -196,4 +198,50 @@ test("sentence-ending punctuation triggers instant flush", async () => {
   const r3 = await buf.handleText("今天天气不错");
   assert.equal(r3.flushed, false);
   assert.equal(r3.buffered, true);
+});
+
+test("idle punctuation output is canceled when its original socket loses permission", async () => {
+  let active = true;
+  const scheduler = createManualScheduler();
+  const outputs = [];
+  const buffer = createAsrTextOutputBuffer({ setTimer: scheduler.setTimer, clearTimer: scheduler.clearTimer,
+    outputTextFn: async (text) => { outputs.push(text); return { copied: true }; } });
+  await buffer.handleText("逗号", { autoPaste: true, isActive: () => active });
+  active = false;
+  await scheduler.runLastTimer();
+  assert.deepEqual(outputs, []);
+  assert.equal(buffer.getState().buffer, "");
+});
+
+test("a target change flushes the earlier buffer to its original window", async () => {
+  const scheduler = createManualScheduler();
+  const outputs = [];
+  const buffer = createAsrTextOutputBuffer({ setTimer: scheduler.setTimer, clearTimer: scheduler.clearTimer,
+    outputTextFn: async (text, options) => { outputs.push([text, options.targetWindow.windowTitle]); return { copied: true }; } });
+  await buffer.handleText("旧草稿", { autoPaste: true, targetWindow: { appName: "Notes", windowTitle: "A" } });
+  await buffer.handleText("新草稿", { autoPaste: true, targetWindow: { appName: "Notes", windowTitle: "B" }, immediate: true });
+  assert.deepEqual(outputs, [["旧草稿", "A"], ["新草稿", "B"]]);
+});
+
+test("independent phones cannot merge their buffered text even when the target window matches", async () => {
+  const scheduler = createManualScheduler();
+  const outputs = [];
+  const buffer = createAsrTextOutputBuffer({ setTimer: scheduler.setTimer, clearTimer: scheduler.clearTimer,
+    outputTextFn: async (text) => { outputs.push(text); return { copied: true }; } });
+  const targetWindow = { appName: "Notes", windowTitle: "Shared" };
+  await buffer.handleText("手机一", { sourceIdentity: "phone-1", targetWindow });
+  await buffer.handleText("手机二", { sourceIdentity: "phone-2", targetWindow });
+  assert.deepEqual(outputs, ["手机一"]);
+  await scheduler.runLastTimer();
+  assert.deepEqual(outputs, ["手机一", "手机二"]);
+});
+
+test("voice keys refuse to act when their selected window cannot be activated", async () => {
+  let keys = 0;
+  const buffer = createAsrTextOutputBuffer({ pressEnterFn: async () => { keys++; },
+    activateWindowFn: async () => ({ success: false, error: "window closed" }), logger: { warn() {} } });
+  const result = await buffer.handleText("发送", { targetWindow: { appName: "Notes", windowTitle: "Gone" } });
+  assert.equal(keys, 0);
+  assert.equal(result.keyPressed, false);
+  assert.equal(result.keyError, "window closed");
 });

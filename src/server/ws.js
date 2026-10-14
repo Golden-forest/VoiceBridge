@@ -1,8 +1,10 @@
 import { WebSocket, WebSocketServer } from "ws";
 import { pressEnter, pressUndo, pressCtrlC, pressEscape, pressDelete, pressArrow, pasteClipboard } from "./input/paste.js";
 import { outputText } from "./input/outputText.js";
-import { isLoopbackRequest } from "./lanPairing.js";
 import { MESSAGE_TYPES } from "../shared/protocol.js";
+import { runDesktopInputOperation } from "./input/desktopInputQueue.js";
+import { createAsrTextOutputBuffer } from "./input/asrTextOutputBuffer.js";
+import { activateWindow as activateDesktopWindow } from "./input/windowManager.js";
 
 const MAX_BUFFER_SIZE = 64 * 1024;
 
@@ -24,17 +26,34 @@ export function createWebSocketHub(server, {
   authorize,
   keyHandlers = DEFAULT_KEY_HANDLERS,
   output = outputText,
-  onAsrPrefetch
+  trustOrigin = () => true,
+  closeTimeoutMs = 500,
+  activateWindow = activateDesktopWindow
 } = {}) {
-  const wss = new WebSocketServer({ server, path: "/ws", maxPayload: 1024 * 1024 });
+  let closing = false;
+  let closePromise = null;
+  const wss = new WebSocketServer({
+    server, path: "/ws", maxPayload: 1024 * 1024,
+    verifyClient: ({ req }, done) => {
+      if (closing || !trustOrigin(req)) return done(false, 403, "Forbidden");
+      if (authorize && !authorize(req)) return done(false, 401, "Unauthorized");
+      done(true);
+    }
+  });
   const clients = new Set();
+  const requests = new WeakMap();
+  const voiceOutput = createAsrTextOutputBuffer({
+    outputTextFn: output,
+    pressEnterFn: keyHandlers.enter,
+    pressDeleteFn: keyHandlers.delete,
+    isActive: () => !closing,
+    activateWindowFn: activateWindow,
+    onFlush: ({ text, output: result }) => broadcast({ type: "output", text, ...result, buffered: false })
+  });
 
   wss.on("connection", (socket, req) => {
-    if (authorize && !isLoopbackRequest(req) && !authorize(req)) {
-      socket.close(4001, "unauthorized");
-      return;
-    }
     clients.add(socket);
+    requests.set(socket, req);
     send(socket, {
       type: "status",
       status: "connected",
@@ -43,7 +62,14 @@ export function createWebSocketHub(server, {
 
     socket.on("close", () => clients.delete(socket));
     socket.on("error", () => clients.delete(socket));
+    const requestIsActive = () => !closing && socket.readyState === WebSocket.OPEN &&
+      (!authorize || authorize(req));
     socket.on("message", async (data) => {
+      if (closing) return;
+      if (authorize && !authorize(req)) {
+        socket.close(4001, "unauthorized");
+        return;
+      }
       try {
         const payload = JSON.parse(data);
         switch (payload.type) {
@@ -56,7 +82,15 @@ export function createWebSocketHub(server, {
               break;
             }
             try {
-              await handler();
+              await runDesktopInputOperation(async () => {
+                if (!requestIsActive()) throw new Error("电脑输入通道已关闭。");
+                if (payload.targetWindow?.appName) {
+                  const result = await activateWindow(payload.targetWindow.appName, payload.targetWindow.windowTitle);
+                  if (result?.success === false) throw new Error(result.error || "无法激活目标窗口");
+                  if (!requestIsActive()) throw new Error("电脑输入通道已关闭。");
+                }
+                return handler();
+              });
               send(socket, { type: "ack", key: payload.key, status: "success", detail: `key:${payload.key}` });
             } catch (error) {
               send(socket, {
@@ -70,18 +104,24 @@ export function createWebSocketHub(server, {
           }
           case "phrase":
             if (typeof payload.text === "string" && payload.text.length <= 10000) {
-              const result = await output(payload.text, {
-                autoPaste: Boolean(payload.autoPaste),
-                targetWindow: payload.targetWindow || null
+              const result = await runDesktopInputOperation(() => {
+                if (!requestIsActive()) throw new Error("电脑输入通道已关闭。");
+                const options = {
+                  autoPaste: Boolean(payload.autoPaste),
+                  targetWindow: payload.targetWindow || null,
+                  sourceIdentity: socket,
+                  isActive: requestIsActive
+                };
+                if (payload.voiceCommand === true) {
+                  return voiceOutput.handleText(payload.text, { ...options, immediate: true });
+                }
+                return output(payload.text, options);
               });
-              if (socket.readyState === WebSocket.OPEN) broadcast({ type: "output", ...result });
-            }
-            break;
-          // 录音开始即预取识别签名（LAN 延迟优化）：与录音并行做跨境签名往返，
-          // 说完话上传音频时直接识别。fire-and-forget，不回复。
-          case "asr-prefetch":
-            if (Number.isFinite(payload.duration_ms) && payload.duration_ms > 0) {
-              onAsrPrefetch?.(payload.duration_ms);
+              if (socket.readyState === WebSocket.OPEN && !result.flushed) {
+                broadcast({ type: "output", ...(result.output ? { ...result.output,
+                  command: result.command, keyPressed: result.keyPressed, keyError: result.keyError
+                } : result) });
+              }
             }
             break;
           default:
@@ -114,10 +154,31 @@ export function createWebSocketHub(server, {
   }
 
   function close() {
-    wss.close();
+    if (closePromise) return closePromise;
+    closing = true;
+    voiceOutput.clear();
+    closePromise = new Promise((resolve) => {
+      const timer = setTimeout(() => {
+        for (const socket of wss.clients) socket.terminate();
+      }, closeTimeoutMs);
+      for (const socket of wss.clients) socket.close(1001, "server shutting down");
+      wss.close(() => {
+        clearTimeout(timer);
+        clients.clear();
+        resolve();
+      });
+    });
+    return closePromise;
   }
 
-  return { broadcast, close, clients };
+  function revalidateClients() {
+    if (!authorize) return;
+    for (const socket of clients) {
+      if (!authorize(requests.get(socket))) socket.close(4001, "unauthorized");
+    }
+  }
+
+  return { broadcast, close, clients, revalidateClients };
 }
 
 function send(socket, payload) {

@@ -11,7 +11,7 @@ import { createUploadRouter } from "./routes/upload.js";
 import { createCommandsRouter } from "./routes/commands.js";
 import { createWebSocketHub } from "./ws.js";
 import { createLanPairing } from "./lanPairing.js";
-import { createAsrPrefetchCache, resolveAsrChannel } from "./asr/directEdgeAsr.js";
+import { isTrustedLanOrigin, NATIVE_LAN_ORIGINS } from "./lanOrigins.js";
 import { ensureCertificates } from "./certs.js";
 import { listWindows } from "./input/windowManager.js";
 
@@ -51,7 +51,7 @@ function sweepStaleUploads(dir, now = Date.now()) {
  *   且 token 属于与登录态同信任级的本机凭证，不应放进应用包目录）
  * @param {() => Promise<string|null>} [options.getAccessToken] Supabase 会话 access token 提供者
  *   （Electron 内嵌时来自 agent 匿名会话）。提供后，本地缺少腾讯云凭证时上传识别
- *   改走 Edge 逐次签名直连通道（密钥永不出云端）。
+ *   改走可信 Edge transcribe 转发通道。
  * @param {string} [options.supabaseUrl] Edge 所在 Supabase URL（默认 config.supabaseUrl）
  * @param {string} [options.supabaseAnonKey] Supabase anon key（默认 config.supabaseAnonKey）
  * @param {object} [options.logger] 错误日志输出（默认 console）
@@ -70,13 +70,16 @@ export async function createLanServer({
   supabaseUrl,
   supabaseAnonKey,
   onPairingKnock,
+  output,
   logger = console
 } = {}) {
   if (!rootDir) {
     throw new Error("createLanServer requires rootDir");
   }
 
-  // Edge 直连识别上下文（Task 5）：只在本地缺少腾讯云凭证时由 transcriber 启用。
+  let closed = false;
+  let closePromise = null;
+  // Edge 转发只在缺少自带腾讯凭证时启用。
   const edgeAsr = (typeof getAccessToken === "function" && (supabaseUrl ?? config.supabaseUrl))
     ? {
       getAccessToken,
@@ -84,11 +87,6 @@ export async function createLanServer({
       supabaseUrl: supabaseUrl ?? config.supabaseUrl,
       supabaseAnonKey: supabaseAnonKey ?? config.supabaseAnonKey
     }
-    : null;
-  // LAN 签名预取只服务 Edge 通道。本地腾讯凭证通道已经由电脑直接签名，
-  // 不应再创建云端配额预留或发起无用的跨境请求。
-  const asrPrefetch = resolveAsrChannel(config, edgeAsr) === "edge"
-    ? createAsrPrefetchCache({ ...edgeAsr })
     : null;
 
   const publicDir = path.join(rootDir, "src/public");
@@ -128,15 +126,25 @@ export async function createLanServer({
       hasTencentCredentials: Boolean(config.tencentSecretId && config.tencentSecretKey)
     });
   });
+  let resolvedPort;
+  const trustOrigin = (req) => isTrustedLanOrigin(req, {
+    hosts: ["localhost", "127.0.0.1", ...listLocalIps()], port: resolvedPort
+  });
+  app.use("/api", (req, res, next) => {
+    if (closed) return res.status(503).json({ ok: false, error: "电脑输入通道已关闭。" });
+    if (!trustOrigin(req)) return res.status(403).json({ ok: false, error: "不允许此网页来源访问电脑端。" });
+    next();
+  });
   // ---- 局域网配对门禁 ----
   // /api/health 与配对接口本身保持开放；其余 /api 路由和 WS 需要配对 token
-  //（本机回环访问免配对，本地开发不受影响）。手机端在 LAN 页面输入配对码。
+  //（回环请求同样需要 token）。手机端在 LAN 页面输入配对码。
   // pairingTokensPath 提供时 token 落盘（滑动 TTL，续期防抖写回，close 时
   // flush），服务重启（网络切换重建 / App 更新）不再要求手机重新输码。
   const loadInitialTokens = async () => {
     if (!pairingTokensPath) return null;
     try {
       const parsed = JSON.parse(await fs.readFile(pairingTokensPath, "utf8"));
+      if ((parsed.deviceId || null) !== (deviceId || null)) return null;
       return Array.isArray(parsed?.tokens) ? parsed.tokens : null;
     } catch {
       return null; // 首次运行或文件损坏：按无历史 token 处理
@@ -144,25 +152,26 @@ export async function createLanServer({
   };
   const initialTokens = await loadInitialTokens();
   let pairingSaveTimer = null;
-  const persistPairingTokens = async () => {
-    if (!pairingTokensPath) return;
-    try {
-      await fs.writeFile(
-        pairingTokensPath,
-        `${JSON.stringify({ tokens: pairing.exportTokens() }, null, 2)}\n`,
-        "utf8"
-      );
-    } catch (error) {
-      // 持久化失败只影响重启后的配对状态，不影响本次会话的门禁。
+  let pendingPersist = Promise.resolve();
+  const persistPairingTokens = () => {
+    const result = pendingPersist.then(async () => {
+      if (!pairingTokensPath) return;
+      await fs.writeFile(pairingTokensPath,
+        `${JSON.stringify({ deviceId: deviceId || null, tokens: pairing.exportTokens() }, null, 2)}\n`,
+        { encoding: "utf8", mode: 0o600 });
+      await fs.chmod(pairingTokensPath, 0o600);
+    });
+    pendingPersist = result.catch((error) => {
       logger.warn?.(`LAN pairing token persist failed: ${error?.message || error}`);
-    }
+    });
+    return result;
   };
   const schedulePersistPairingTokens = () => {
     if (!pairingTokensPath) return;
     if (pairingSaveTimer) return;
     pairingSaveTimer = setTimeout(() => {
       pairingSaveTimer = null;
-      void persistPairingTokens();
+      void persistPairingTokens().catch(() => {});
     }, 5000);
     pairingSaveTimer.unref?.();
   };
@@ -198,6 +207,18 @@ export async function createLanServer({
     }
     res.json({ ok: true, token });
   });
+  app.delete("/api/lan/pair", async (req, res) => {
+    if (!pairing.hasValidToken(req)) return res.status(401).json({ ok: false, error: "需要局域网配对。" });
+    pairing.revokeRequestToken(req);
+    tlsWsHub.revalidateClients();
+    httpWsHub?.revalidateClients();
+    try {
+      await persistPairingTokens();
+      res.json({ ok: true });
+    } catch {
+      res.status(500).json({ ok: false, error: "未能保存撤销状态，请重试。" });
+    }
+  });
   app.use("/api", pairing.createMiddleware());
 
   app.get("/api/windows", async (_req, res) => {
@@ -218,7 +239,7 @@ export async function createLanServer({
   // HTTP 端口，避免 WKWebView 拒绝桌面端的自签名 HTTPS 证书。只给 Capacitor
   // 本地 origin 开 CORS；普通浏览器访问页面仍重定向到 HTTPS，以保留录音所需
   // 的 secure context。
-  const nativeOrigins = new Set(["capacitor://localhost", "http://localhost", "https://localhost"]);
+  const nativeOrigins = NATIVE_LAN_ORIGINS;
   redirectApp.use((req, res, next) => {
     const origin = String(req.headers.origin || "");
     if (nativeOrigins.has(origin)) {
@@ -279,12 +300,13 @@ export async function createLanServer({
     });
 
   const requestedPort = port ?? config.port;
-  const resolvedPort = await listen(tlsServer, requestedPort);
+  resolvedPort = await listen(tlsServer, requestedPort);
   // 注意：WS hub 必须在 TLS listen 成功之后再挂载；端口冲突时提前挂载会让
   // ws 触发第二次未被捕获的 EADDRINUSE（见 createLanServer.test.js）。
   const tlsWsHub = createWebSocketHub(tlsServer, {
     authorize: (req) => pairing.isAuthorizedRequest(req),
-    onAsrPrefetch: (durationMs) => asrPrefetch?.begin(durationMs)
+    trustOrigin,
+    ...(output ? { output } : {})
   });
   let httpWsHub = null;
   const wsHub = {
@@ -293,7 +315,12 @@ export async function createLanServer({
       httpWsHub?.broadcast(payload);
     }
   };
-  app.use("/api", createUploadRouter({ config, wsHub, tmpDir: uploadTmpDir, edgeAsr, asrPrefetch }));
+  const uploadRouter = createUploadRouter({
+    config, wsHub, tmpDir: uploadTmpDir, edgeAsr, output,
+    isActive: () => !closed,
+    authorize: (req) => pairing.isAuthorizedRequest(req)
+  });
+  app.use("/api", uploadRouter);
   let resolvedHttpPort;
   try {
     resolvedHttpPort = await listen(redirectServer, httpPort ?? resolvedPort + 1);
@@ -301,14 +328,15 @@ export async function createLanServer({
     // WebSocketServer 转成未捕获异常。
     httpWsHub = createWebSocketHub(redirectServer, {
       authorize: (req) => pairing.isAuthorizedRequest(req),
-      onAsrPrefetch: (durationMs) => asrPrefetch?.begin(durationMs)
+      trustOrigin,
+      ...(output ? { output } : {})
     });
   } catch (error) {
     // HTTP 端口被占用时不能留下已绑定的 TLS 服务和 WS hub —— 先关干净再抛出。
     try {
-      tlsWsHub.close();
-      httpWsHub?.close();
-      await asrPrefetch?.close();
+      closed = true;
+      uploadRouter.close();
+      await Promise.all([tlsWsHub.close(), httpWsHub?.close()]);
     } catch (closeError) {
       logger.error?.("LAN WebSocket hub close failed during abort:", closeError?.message || closeError);
     }
@@ -330,27 +358,36 @@ export async function createLanServer({
         httpPort: resolvedHttpPort
       }));
     },
-    async close() {
-      try {
-        tlsWsHub.close();
-        httpWsHub?.close();
-      } catch (error) {
-        logger.error?.("LAN WebSocket hub close failed:", error?.message || error);
+    close({ revokeTokens = false } = {}) {
+      if (revokeTokens) pairing.revokeAll();
+      if (closePromise) {
+        if (!revokeTokens) return closePromise;
+        return closePromise.then(async () => {
+          if (pairingSaveTimer) clearTimeout(pairingSaveTimer);
+          pairingSaveTimer = null;
+          await pendingPersist;
+          if (pairingTokensPath) await fs.rm(pairingTokensPath, { force: true });
+          await persistPairingTokens();
+        });
       }
-      await Promise.all([closeServer(tlsServer), closeServer(redirectServer)]);
-      // 关闭未消费的签名预留（网络切换重建服务等场景），避免配额行悬挂。
-      try {
-        await asrPrefetch?.close();
-      } catch (error) {
-        logger.warn?.(`ASR prefetch close failed: ${error?.message || error}`);
-      }
+      closed = true;
+      uploadRouter.close();
+      closePromise = (async () => {
+        await Promise.all([tlsWsHub.close(), httpWsHub?.close()]);
+        await Promise.all([closeServer(tlsServer), closeServer(redirectServer)]);
       // 网络切换等场景会 stop/start 重建服务：挂起的防抖写盘必须先落下去，
       // 否则重建后的新实例读不到刚续期过的 token。
       if (pairingSaveTimer) {
         clearTimeout(pairingSaveTimer);
         pairingSaveTimer = null;
       }
+      if (revokeTokens && pairingTokensPath) {
+        await pendingPersist;
+        await fs.rm(pairingTokensPath, { force: true });
+      }
       await persistPairingTokens();
+      })();
+      return closePromise;
     }
   };
 }

@@ -35,7 +35,7 @@ test("tokens expire after tokenTtlMs", () => {
   assert.equal(pairing.isValidToken(token), false, "expired token stays deleted");
 });
 
-test("isAuthorizedRequest accepts header token, query token and loopback", () => {
+test("isAuthorizedRequest accepts valid tokens and requires pairing on loopback too", () => {
   const pairing = createLanPairing();
   const token = pairing.pair(pairing.code);
 
@@ -43,7 +43,7 @@ test("isAuthorizedRequest accepts header token, query token and loopback", () =>
   assert.equal(pairing.isAuthorizedRequest(fakeRequest({ url: "/ws?token=" + encodeURIComponent(token) })), true);
   assert.equal(pairing.isAuthorizedRequest(fakeRequest({ headers: { "x-vb-lan-token": "forged" } })), false);
   assert.equal(pairing.isAuthorizedRequest(fakeRequest()), false, "no token -> denied");
-  assert.equal(pairing.isAuthorizedRequest(fakeRequest({ remoteAddress: "127.0.0.1" })), true, "loopback exempt");
+  assert.equal(pairing.isAuthorizedRequest(fakeRequest({ remoteAddress: "127.0.0.1" })), false, "loopback needs a token");
   assert.equal(isLoopbackRequest(fakeRequest({ remoteAddress: "::ffff:127.0.0.1" })), true);
 });
 
@@ -54,8 +54,7 @@ test("middleware lets authorized requests through and 401s the rest", () => {
 
   let nextCalls = 0;
   middleware(fakeRequest({ headers: { "x-vb-lan-token": token } }), null, () => { nextCalls++; });
-  middleware(fakeRequest({ remoteAddress: "::1" }), null, () => { nextCalls++; });
-  assert.equal(nextCalls, 2);
+  assert.equal(nextCalls, 1);
 
   const sent = [];
   const res = {
@@ -63,8 +62,17 @@ test("middleware lets authorized requests through and 401s the rest", () => {
     json(body) { sent.push({ code: this.statusCode, body }); }
   };
   middleware(fakeRequest(), res, () => { nextCalls++; });
-  assert.equal(nextCalls, 2, "unauthorized request must not reach next()");
+  assert.equal(nextCalls, 1, "unauthorized request must not reach next()");
   assert.deepEqual(sent, [{ code: 401, body: { ok: false, error: "需要局域网配对，请在手机端输入配对码。" } }]);
+});
+
+test("revokeAll invalidates persisted and current tokens", () => {
+  const pairing = createLanPairing({ initialTokens: [{ token: "old", expiresAt: Date.now() + 5000 }] });
+  const fresh = pairing.pair(pairing.code);
+  pairing.revokeAll();
+  assert.equal(pairing.isValidToken("old"), false);
+  assert.equal(pairing.isValidToken(fresh), false);
+  assert.deepEqual(pairing.exportTokens(), []);
 });
 
 test("each server instance generates an independent code", () => {

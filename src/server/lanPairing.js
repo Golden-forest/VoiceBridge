@@ -3,7 +3,7 @@ import crypto from "node:crypto";
 // 局域网配对门禁：LAN 页面模式（手机直接访问 https://<lan-ip>:<port>）下，
 // 同网段任何设备都能访问桌面端服务。历史模式靠浏览器证书告警作为唯一屏障，
 // 这里补一个最小门禁：桌面端显示 6 位配对码，手机输入一次换取长期 token
-//（localStorage 持久化，服务端内存保存）。回环地址（本机开发）免配对。
+//（localStorage 持久化，服务端内存保存）。回环地址同样需要配对。
 //
 // 不引入新加密方案：配对码 = 随机数字，token = crypto.randomUUID()，仅做
 // 服务端字符串比对（brief 批准的取舍：明文比对不是常数时间，理论上可计时
@@ -51,7 +51,8 @@ export function createLanPairing({
   backoffCapMs = DEFAULT_BACKOFF_CAP_MS,
   now = Date.now,
   initialTokens = null,
-  onTokensChanged = null
+  onTokensChanged = null,
+  allowLoopback = false
 } = {}) {
   let code = generateCode(codeLength);
   let codeExpiresAt = now() + codeTtlMs;
@@ -152,9 +153,21 @@ export function createLanPairing({
       return entries;
     },
 
-    /** 请求是否已通过门禁（本机免配对；否则校验 token） */
+    revokeAll() {
+      tokens.clear();
+      rotateCode();
+      onTokensChanged?.();
+    },
+
+    revokeRequestToken(req) {
+      const removed = tokens.delete(tokenFromRequest(req));
+      if (removed) onTokensChanged?.();
+      return removed;
+    },
+
+    /** 本机请求也需要 token；仅显式开发配置允许回环豁免。 */
     isAuthorizedRequest(req) {
-      if (isLoopbackRequest(req)) return true;
+      if (allowLoopback && isLoopbackRequest(req)) return true;
       return this.isValidToken(tokenFromRequest(req));
     },
 

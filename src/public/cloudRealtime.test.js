@@ -12,9 +12,11 @@ test("getPhoneDeviceId reuses a stable localStorage id", () => {
   };
 
   try {
-    const deviceId = getPhoneDeviceId();
+    const deviceId = getPhoneDeviceId("account-A");
     assert.equal(typeof deviceId, "string");
-    assert.equal(getPhoneDeviceId(), deviceId);
+    assert.equal(getPhoneDeviceId("account-A"), deviceId);
+    assert.notEqual(getPhoneDeviceId("account-B"), deviceId);
+    assert.throws(() => getPhoneDeviceId(), /登录/);
   } finally {
     globalThis.localStorage = originalLocalStorage;
   }
@@ -195,6 +197,16 @@ test("CloudRealtime sendText resolves only after a success ack", async () => {
   assert.equal(earlyResult, "pending");
 
   const [requestId] = realtime.pendingRequests.keys();
+  ackHandler({
+    payload: {
+      type: "ack",
+      request_id: requestId,
+      source_device_id: "other-desktop",
+      target_device_id: "phone-1",
+      status: "success"
+    }
+  });
+  assert.equal(realtime.pendingRequests.has(requestId), true, "another desktop cannot acknowledge the selected desktop's request");
   ackHandler({
     payload: {
       type: "ack",

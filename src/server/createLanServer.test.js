@@ -7,6 +7,8 @@ import path from "node:path";
 import fs from "node:fs/promises";
 import { createLanServer } from "./createLanServer.js";
 import { listLocalIps } from "./network/getLocalIp.js";
+import { WebSocket } from "ws";
+import { once } from "node:events";
 
 function httpsGetJson(port, pathname) {
   return new Promise((resolve, reject) => {
@@ -54,7 +56,7 @@ function portClosed(port) {
   });
 }
 
-function httpsPostJson(port, pathname, payload) {
+function httpsPostJson(port, pathname, payload, { method = "POST", token } = {}) {
   const body = JSON.stringify(payload);
   return new Promise((resolve, reject) => {
     const req = https.request(
@@ -62,8 +64,9 @@ function httpsPostJson(port, pathname, payload) {
         host: "127.0.0.1",
         port,
         path: pathname,
-        method: "POST",
-        headers: { "Content-Type": "application/json", "Content-Length": Buffer.byteLength(body) },
+        method,
+        headers: { "Content-Type": "application/json", "Content-Length": Buffer.byteLength(body),
+          ...(token ? { "x-vb-lan-token": token } : {}) },
         rejectUnauthorized: false
       },
       (res) => {
@@ -134,7 +137,7 @@ test("createLanServer exposes token-protected APIs to the packaged native app ov
       Origin: "capacitor://localhost"
     });
     assert.equal(response.status, 200);
-    assert.deepEqual(response.body, { ok: true, paired: true });
+    assert.deepEqual(response.body, { ok: true, paired: false });
     assert.equal(response.headers["access-control-allow-origin"], "capacitor://localhost");
   } finally {
     await lan.close();
@@ -196,16 +199,15 @@ test("createLanServer requires rootDir", async () => {
   await assert.rejects(createLanServer({}), /rootDir/);
 });
 
-test("createLanServer exposes a pairing code and loopback access is pre-authorized", async () => {
+test("createLanServer exposes a pairing code and loopback access requires pairing", async () => {
   const rootDir = await fs.mkdtemp(path.join(os.tmpdir(), "voicebridge-lan-"));
   const lan = await createLanServer({ rootDir, port: 0, config: {} });
 
   assert.match(lan.pairingCode, /^\d{6}$/);
 
-  // 回环（本机开发）免配对
   const loopback = await httpsGetJson(lan.port, "/api/lan/pair");
   assert.equal(loopback.status, 200);
-  assert.deepEqual(loopback.body, { ok: true, paired: true });
+  assert.deepEqual(loopback.body, { ok: true, paired: false });
 
   await lan.close();
 });
@@ -314,51 +316,20 @@ test("createLanServer honors separate writable certsDir and tmpDir", async () =>
 
 // --- Task 5: Edge 签名直连识别通过 createLanServer 选项打通 ---
 
-import { execFile } from "node:child_process";
-import { promisify } from "node:util";
-import { spawn } from "node:child_process";
-
-const execFileAsync = promisify(execFile);
-
-async function hasFfmpeg() {
-  try {
-    await execFileAsync("ffmpeg", ["-version"], { timeout: 5000 });
-    return true;
-  } catch {
-    return false;
-  }
-}
-
-function startStubEdgeServer() {
-  const seen = { issue: null, report: null, tencentBody: null };
-  let tencentUrl = "";
+function startStubEdgeServer({ waitForResponse } = {}) {
+  const seen = { relay: null };
   const server = http.createServer((req, res) => {
     const chunks = [];
     req.on("data", (chunk) => chunks.push(chunk));
-    req.on("end", () => {
+    req.on("end", async () => {
       const raw = Buffer.concat(chunks);
-      if (req.url === "/functions/v1/issue-asr-request") {
-        seen.issue = { headers: req.headers, body: JSON.parse(raw.toString("utf8")) };
+      if (req.url === "/functions/v1/transcribe") {
+        const form = await new Response(raw, { headers: { "Content-Type": req.headers["content-type"] } }).formData();
+        seen.relay = { headers: req.headers, deviceId: form.get("device_id"),
+          audio: Buffer.from(await form.get("audio").arrayBuffer()) };
+        await waitForResponse?.();
         res.setHeader("Content-Type", "application/json");
-        res.end(JSON.stringify({
-          ok: true,
-          request_id: "req-lan-1",
-          url: `${tencentUrl}/asr`,
-          headers: { "X-TC-Test": "signed" },
-          expires_at: Math.floor(Date.now() / 1000) + 300
-        }));
-        return;
-      }
-      if (req.url === "/functions/v1/report-asr-result") {
-        seen.report = JSON.parse(raw.toString("utf8"));
-        res.setHeader("Content-Type", "application/json");
-        res.end(JSON.stringify({ ok: true }));
-        return;
-      }
-      if (req.url === "/asr") {
-        seen.tencentBody = raw;
-        res.setHeader("Content-Type", "application/json");
-        res.end(JSON.stringify({ code: 0, flash_result: [{ text: "嗯，你好局域网" }] }));
+        res.end(JSON.stringify({ ok: true, text: "嗯，你好局域网" }));
         return;
       }
       res.statusCode = 404;
@@ -368,7 +339,6 @@ function startStubEdgeServer() {
   return {
     server,
     seen,
-    setTencentUrl: (url) => { tencentUrl = url; },
     listen: () => new Promise((resolve) => server.listen(0, "127.0.0.1", () => resolve(server.address().port)))
   };
 }
@@ -395,11 +365,12 @@ function makeSilenceWav() {
   return Buffer.concat([header, data]);
 }
 
-function httpsPostMultipart(port, pathname, fieldName, filename, contentType, fileBuffer) {
+function httpsPostMultipart(port, pathname, fieldName, filename, contentType, fileBuffer, { token, fields = {} } = {}) {
   const boundary = `----vb${Date.now()}`;
   const parts = [
     `--${boundary}\r\nContent-Disposition: form-data; name="${fieldName}"; filename="${filename}"\r\nContent-Type: ${contentType}\r\n\r\n`,
     fileBuffer,
+    ...Object.entries(fields).map(([name, value]) => `\r\n--${boundary}\r\nContent-Disposition: form-data; name="${name}"\r\n\r\n${value}`),
     `\r\n--${boundary}--\r\n`
   ];
   const body = Buffer.concat(parts.map((part) => (Buffer.isBuffer(part) ? part : Buffer.from(part))));
@@ -412,7 +383,8 @@ function httpsPostMultipart(port, pathname, fieldName, filename, contentType, fi
         method: "POST",
         headers: {
           "Content-Type": `multipart/form-data; boundary=${boundary}`,
-          "Content-Length": body.length
+          "Content-Length": body.length,
+          ...(token ? { "x-vb-lan-token": token } : {})
         },
         rejectUnauthorized: false
       },
@@ -431,12 +403,12 @@ function httpsPostMultipart(port, pathname, fieldName, filename, contentType, fi
   });
 }
 
-test("createLanServer routes uploads through the edge-signed channel when local tencent credentials are absent", { skip: !(await hasFfmpeg()) }, async () => {
+test("createLanServer forwards WAV through the trusted relay without real desktop output", async () => {
   const rootDir = await fs.mkdtemp(path.join(os.tmpdir(), "voicebridge-lan-edge-"));
   const stub = startStubEdgeServer();
   const stubPort = await stub.listen();
-  stub.setTencentUrl(`http://127.0.0.1:${stubPort}`);
   let tokenCalls = 0;
+  const outputs = [];
 
   const lan = await createLanServer({
     rootDir,
@@ -445,6 +417,7 @@ test("createLanServer routes uploads through the edge-signed channel when local 
     config: { asrProvider: "tencent", tencentSecretId: "", tencentSecretKey: "" },
     supabaseUrl: `http://127.0.0.1:${stubPort}`,
     supabaseAnonKey: "anon-test",
+    output: async (text) => { outputs.push(text); return { copied: true, pasted: false }; },
     getAccessToken: async () => {
       tokenCalls += 1;
       return "lan-token";
@@ -453,7 +426,8 @@ test("createLanServer routes uploads through the edge-signed channel when local 
 
   try {
     const wav = makeSilenceWav();
-    const result = await httpsPostMultipart(lan.port, "/api/upload", "audio", "voice.wav", "audio/wav", wav);
+    const token = (await httpsPostJson(lan.port, "/api/lan/pair", { code: lan.pairingCode })).body.token;
+    const result = await httpsPostMultipart(lan.port, "/api/upload", "audio", "voice.wav", "audio/wav", wav, { token });
 
     assert.equal(result.status, 200, JSON.stringify(result.body));
     assert.equal(result.body.ok, true);
@@ -461,20 +435,151 @@ test("createLanServer routes uploads through the edge-signed channel when local 
     assert.equal(result.body.text, "你好局域网");
 
     assert.equal(tokenCalls, 1, "token provider is plumbed through createLanServer options");
-    assert.equal(stub.seen.issue.headers.authorization, "Bearer lan-token");
-    assert.equal(stub.seen.issue.headers.apikey, "anon-test");
-    assert.ok(stub.seen.issue.body.duration_ms > 0);
-    assert.equal(stub.seen.issue.body.device_id, "11111111-1111-4111-8111-111111111111");
-    assert.ok(stub.seen.tencentBody && stub.seen.tencentBody.length > 44, "converted wav posted to signed tencent url");
-    assert.deepEqual(stub.seen.report, {
-      request_id: "req-lan-1",
-      status: "success",
-      device_id: "11111111-1111-4111-8111-111111111111",
-      text_length: "你好局域网".length,
-      duration_ms: 101 // makeSilenceWav 的固定时长，随上报结算实际用量
-    });
+    assert.equal(stub.seen.relay.headers.authorization, "Bearer lan-token");
+    assert.equal(stub.seen.relay.headers.apikey, "anon-test");
+    assert.equal(stub.seen.relay.deviceId, "11111111-1111-4111-8111-111111111111");
+    assert.deepEqual(stub.seen.relay.audio, wav);
+    assert.deepEqual(outputs, ["你好局域网"]);
+    const deferred = await httpsPostMultipart(lan.port, "/api/upload", "audio", "voice.wav", "audio/wav", wav,
+      { token, fields: { deferOutput: "true", autoPaste: "true" } });
+    assert.equal(deferred.body.text, "你好局域网");
+    assert.equal(deferred.body.output.deferred, true);
+    assert.deepEqual(outputs, ["你好局域网"], "deferred recognition never touches the desktop");
   } finally {
     await lan.close();
     await new Promise((resolve) => stub.server.close(resolve));
+  }
+});
+
+test("LAN WebSocket rejects untrusted Origin and unpaired loopback before accepting a connection", async () => {
+  const rootDir = await fs.mkdtemp(path.join(os.tmpdir(), "vb-origin-"));
+  const lan = await createLanServer({ rootDir, port: 0, httpPort: 0, config: {},
+    output: async () => assert.fail("untrusted connection must never output") });
+  const connectRejected = (origin, token) => new Promise((resolve, reject) => {
+    const socket = new WebSocket(`ws://127.0.0.1:${lan.httpPort}/ws${token ? `?token=${token}` : ""}`, { origin });
+    socket.on("open", () => { socket.terminate(); reject(new Error("unexpected open")); });
+    socket.on("unexpected-response", (_req, res) => { res.resume(); socket.terminate(); resolve(res.statusCode); });
+    socket.on("error", () => {});
+  });
+  try {
+    assert.equal(await connectRejected("capacitor://localhost"), 401);
+    const token = (await httpsPostJson(lan.port, "/api/lan/pair", { code: lan.pairingCode })).body.token;
+    assert.equal(await connectRejected("https://untrusted.example", token), 403);
+    const socket = new WebSocket(`ws://127.0.0.1:${lan.httpPort}/ws?token=${token}`, { origin: "capacitor://localhost" });
+    await once(socket, "open");
+    const closed = once(socket, "close");
+    await lan.close();
+    assert.equal((await closed)[0], 1001);
+    assert.equal(await portClosed(lan.port), true);
+    assert.equal(await portClosed(lan.httpPort), true);
+  } finally {
+    await lan.close();
+    await fs.rm(rootDir, { recursive: true, force: true });
+  }
+});
+
+test("LAN token persistence is device-scoped and close can revoke every token", async () => {
+  const rootDir = await fs.mkdtemp(path.join(os.tmpdir(), "vb-revoke-"));
+  const pairingTokensPath = path.join(rootDir, "tokens.json");
+  const first = await createLanServer({ rootDir, deviceId: "desktop-A", port: 0, httpPort: 0, config: {}, pairingTokensPath });
+  const token = (await httpsPostJson(first.port, "/api/lan/pair", { code: first.pairingCode })).body.token;
+  await first.close();
+  const second = await createLanServer({ rootDir, deviceId: "desktop-B", port: 0, httpPort: 0, config: {}, pairingTokensPath });
+  try {
+    const probe = await httpGetJson(second.httpPort, "/api/lan/pair", { "x-vb-lan-token": token });
+    assert.equal(probe.body.paired, false, "old desktop identity cannot authorize the replacement");
+    await httpsPostJson(second.port, "/api/lan/pair", { code: second.pairingCode });
+    await second.close({ revokeTokens: true });
+    assert.deepEqual(JSON.parse(await fs.readFile(pairingTokensPath, "utf8")).tokens, []);
+  } finally {
+    await second.close();
+    await fs.rm(rootDir, { recursive: true, force: true });
+  }
+});
+
+test("phone logout revokes its token and live sockets without disconnecting another phone", async () => {
+  const rootDir = await fs.mkdtemp(path.join(os.tmpdir(), "vb-phone-revoke-"));
+  const pairingTokensPath = path.join(rootDir, "tokens.json");
+  const lan = await createLanServer({ rootDir, port: 0, httpPort: 0, config: {}, pairingTokensPath });
+  let socket;
+  try {
+    const first = (await httpsPostJson(lan.port, "/api/lan/pair", { code: lan.pairingCode })).body.token;
+    const other = (await httpsPostJson(lan.port, "/api/lan/pair", { code: lan.pairingCode })).body.token;
+    socket = new WebSocket(`ws://127.0.0.1:${lan.httpPort}/ws?token=${first}`, { origin: "capacitor://localhost" });
+    await once(socket, "open");
+    const closing = once(socket, "close");
+    const revoked = await httpsPostJson(lan.port, "/api/lan/pair", {}, { method: "DELETE", token: first });
+    assert.equal(revoked.status, 200);
+    assert.equal((await closing)[0], 4001);
+    assert.equal((await httpGetJson(lan.httpPort, "/api/lan/pair", { "x-vb-lan-token": first })).body.paired, false);
+    assert.equal((await httpGetJson(lan.httpPort, "/api/lan/pair", { "x-vb-lan-token": other })).body.paired, true);
+    const tokens = JSON.parse(await fs.readFile(pairingTokensPath, "utf8")).tokens;
+    assert.equal(tokens.some((entry) => entry.token === first), false);
+    assert.equal(tokens.some((entry) => entry.token === other), true);
+  } finally {
+    socket?.terminate();
+    await lan.close();
+    await fs.rm(rootDir, { recursive: true, force: true });
+  }
+});
+
+test("an ASR response arriving after LAN closes cannot output to the desktop", async () => {
+  let release;
+  const blocked = new Promise((resolve) => { release = resolve; });
+  const rootDir = await fs.mkdtemp(path.join(os.tmpdir(), "vb-late-asr-"));
+  const outputs = [];
+  const stub = startStubEdgeServer({ waitForResponse: () => blocked });
+  const stubPort = await stub.listen();
+  const lan = await createLanServer({ rootDir, deviceId: "desktop-1", port: 0, httpPort: 0,
+    config: { asrProvider: "tencent" }, supabaseUrl: `http://127.0.0.1:${stubPort}`, supabaseAnonKey: "anon",
+    getAccessToken: async () => "token", output: async (text) => { outputs.push(text); return { copied: true }; } });
+  try {
+    const token = (await httpsPostJson(lan.port, "/api/lan/pair", { code: lan.pairingCode })).body.token;
+    const uploading = httpsPostMultipart(lan.port, "/api/upload", "audio", "voice.wav", "audio/wav", makeSilenceWav(), { token }).catch(() => null);
+    for (let tries = 0; !stub.seen.relay && tries < 100; tries++) await new Promise((resolve) => setTimeout(resolve, 5));
+    assert.ok(stub.seen.relay, "relay must be in flight before closing");
+    await lan.close({ revokeTokens: true });
+    release();
+    await uploading;
+    await new Promise((resolve) => setTimeout(resolve, 30));
+    assert.deepEqual(outputs, []);
+  } finally {
+    release();
+    await lan.close();
+    stub.server.closeAllConnections();
+    await new Promise((resolve) => stub.server.close(resolve));
+    await fs.rm(rootDir, { recursive: true, force: true });
+  }
+});
+
+test("revoking a phone token during ASR cancels its upload output while other phones remain authorized", async () => {
+  let release;
+  const blocked = new Promise((resolve) => { release = resolve; });
+  const rootDir = await fs.mkdtemp(path.join(os.tmpdir(), "vb-revoked-asr-"));
+  const outputs = [];
+  const stub = startStubEdgeServer({ waitForResponse: () => blocked });
+  const stubPort = await stub.listen();
+  const lan = await createLanServer({ rootDir, deviceId: "desktop-1", port: 0, httpPort: 0,
+    config: { asrProvider: "tencent" }, supabaseUrl: `http://127.0.0.1:${stubPort}`, supabaseAnonKey: "anon",
+    getAccessToken: async () => "token", output: async (text) => { outputs.push(text); return { copied: true }; } });
+  try {
+    const token = (await httpsPostJson(lan.port, "/api/lan/pair", { code: lan.pairingCode })).body.token;
+    const other = (await httpsPostJson(lan.port, "/api/lan/pair", { code: lan.pairingCode })).body.token;
+    const uploading = httpsPostMultipart(lan.port, "/api/upload", "audio", "voice.wav", "audio/wav", makeSilenceWav(), { token });
+    for (let tries = 0; !stub.seen.relay && tries < 100; tries++) await new Promise((resolve) => setTimeout(resolve, 5));
+    assert.ok(stub.seen.relay, "relay must be in flight before revoking this phone");
+    assert.equal((await httpsPostJson(lan.port, "/api/lan/pair", {}, { method: "DELETE", token })).status, 200);
+    release();
+    const result = await uploading;
+    assert.equal(result.status, 503);
+    assert.match(result.body.error, /已关闭/);
+    assert.deepEqual(outputs, []);
+    assert.equal((await httpGetJson(lan.httpPort, "/api/lan/pair", { "x-vb-lan-token": other })).body.paired, true);
+  } finally {
+    release();
+    await lan.close();
+    stub.server.closeAllConnections();
+    await new Promise((resolve) => stub.server.close(resolve));
+    await fs.rm(rootDir, { recursive: true, force: true });
   }
 });

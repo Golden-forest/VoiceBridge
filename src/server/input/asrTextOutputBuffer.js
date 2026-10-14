@@ -1,5 +1,7 @@
 import { pressDelete, pressEnter } from "./paste.js";
 import { outputText } from "./outputText.js";
+import { assertInputActive, runDesktopInputOperation } from "./desktopInputQueue.js";
+import { activateWindow } from "./windowManager.js";
 
 const DEFAULT_FLUSH_DELAY_MS = 2_800;
 const DEFAULT_MERGE_WINDOW_MS = 2_000;
@@ -35,18 +37,29 @@ export function createAsrTextOutputBuffer({
   pressEnterFn = pressEnter,
   pressDeleteFn = pressDelete,
   onFlush = () => {},
-  logger = console
+  logger = console,
+  isActive = () => true,
+  activateWindowFn = activateWindow
 } = {}) {
   let buffer = "";
   let lastInputAt = null;
   let flushTimer = null;
   let pendingOptions = defaultOutputOptions();
+  let bufferSource = null;
 
   async function handleText(rawText, options = {}) {
     // 信任 ASR 返回的标点，不做 strip
     const text = typeof rawText === "string" ? rawText.trim() : "";
     if (!text) {
       return buildResult({ text, buffered: Boolean(buffer) });
+    }
+
+    if (buffer && !pendingOptions.isActive()) resetBuffer();
+    const nextOptions = normalizeOutputOptions(options);
+    if (buffer && (bufferSource !== (options.sourceIdentity || null) ||
+        JSON.stringify(pendingOptions.targetWindow) !== JSON.stringify(nextOptions.targetWindow) ||
+        pendingOptions.autoPaste !== nextOptions.autoPaste)) {
+      await flushPending({ reason: "output-target-changed" });
     }
 
     // 语音命令需要 strip 标点来匹配（如"句号。"→"句号"）
@@ -70,6 +83,7 @@ export function createAsrTextOutputBuffer({
   }
 
   async function appendToBuffer(text, options) {
+    const nextOptions = normalizeOutputOptions(options);
     const currentTime = now();
     if (
       buffer &&
@@ -80,8 +94,9 @@ export function createAsrTextOutputBuffer({
     }
 
     buffer += text;
+    bufferSource = options.sourceIdentity || null;
     lastInputAt = currentTime;
-    pendingOptions = normalizeOutputOptions(options);
+    pendingOptions = nextOptions;
     scheduleFlush();
   }
 
@@ -104,7 +119,7 @@ export function createAsrTextOutputBuffer({
 
     if (command.name === "send") {
       const flushResult = await flushPending({ reason: "send-command" });
-      const keyError = await pressKey(pressEnterFn);
+      const keyError = await pressKey(pressEnterFn, options);
       return buildResult({
         text,
         command: command.name,
@@ -134,7 +149,7 @@ export function createAsrTextOutputBuffer({
         });
       }
 
-      const keyError = await pressKey(pressDeleteFn);
+      const keyError = await pressKey(pressDeleteFn, options);
       return buildResult({
         text,
         command: command.name,
@@ -157,6 +172,7 @@ export function createAsrTextOutputBuffer({
   }
 
   async function flushPending({ reason = "manual" } = {}) {
+    if (buffer && (!isActive() || !pendingOptions.isActive())) resetBuffer();
     if (!buffer) {
       return buildResult({ text: "", flushed: false, buffered: false });
     }
@@ -165,6 +181,7 @@ export function createAsrTextOutputBuffer({
     const text = buffer;
     const options = pendingOptions;
     buffer = "";
+    bufferSource = null;
     lastInputAt = null;
     pendingOptions = defaultOutputOptions();
 
@@ -184,7 +201,15 @@ export function createAsrTextOutputBuffer({
     cancelFlush();
     flushTimer = setTimer(async () => {
       flushTimer = null;
-      await flushPending({ reason: "idle" });
+      try {
+        await runDesktopInputOperation(() => {
+          assertInputActive(isActive);
+          return flushPending({ reason: "idle" });
+        });
+      } catch (error) {
+        resetBuffer();
+        logger.warn?.(`Buffered ASR flush canceled: ${error.message}`);
+      }
     }, flushDelayMs);
   }
 
@@ -198,13 +223,17 @@ export function createAsrTextOutputBuffer({
   function resetBuffer() {
     cancelFlush();
     buffer = "";
+    bufferSource = null;
     lastInputAt = null;
     pendingOptions = defaultOutputOptions();
   }
 
   async function writeOutput(text, options) {
     try {
-      return await outputTextFn(text, options);
+      assertInputActive(isActive);
+      const operationIsActive = () => isActive() && options.isActive();
+      assertInputActive(operationIsActive);
+      return await outputTextFn(text, { ...options, isActive: operationIsActive });
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       logger.warn?.(`Buffered ASR output failed: ${message}`);
@@ -216,8 +245,16 @@ export function createAsrTextOutputBuffer({
     }
   }
 
-  async function pressKey(fn) {
+  async function pressKey(fn, options) {
     try {
+      assertInputActive(isActive);
+      assertInputActive(normalizeOutputOptions(options).isActive);
+      if (options.targetWindow?.appName) {
+        const result = await activateWindowFn(options.targetWindow.appName, options.targetWindow.windowTitle);
+        if (result?.success === false) throw new Error(result.error || "无法激活目标窗口");
+        assertInputActive(isActive);
+        assertInputActive(normalizeOutputOptions(options).isActive);
+      }
       await fn();
       return null;
     } catch (error) {
@@ -236,8 +273,15 @@ export function createAsrTextOutputBuffer({
   }
 
   return {
-    handleText,
-    flush: flushPending,
+    handleText: (...args) => runDesktopInputOperation(() => {
+      assertInputActive(isActive);
+      assertInputActive(normalizeOutputOptions(args[1] || {}).isActive);
+      return handleText(...args);
+    }),
+    flush: (...args) => runDesktopInputOperation(() => {
+      assertInputActive(isActive);
+      return flushPending(...args);
+    }),
     clear: resetBuffer,
     getState
   };
@@ -277,13 +321,17 @@ function pendingOutput(buffered) {
 function normalizeOutputOptions(options) {
   return {
     autoPaste: Boolean(options.autoPaste),
-    targetWindow: options.targetWindow || null
+    targetWindow: options.targetWindow || null,
+    isActive: typeof options.isActive === "function" ? options.isActive : alwaysActive
   };
 }
 
 function defaultOutputOptions() {
   return {
     autoPaste: false,
-    targetWindow: null
+    targetWindow: null,
+    isActive: alwaysActive
   };
 }
+
+function alwaysActive() { return true; }

@@ -38,19 +38,12 @@ CF_PROJECT_NAME="voicebridge"
 PWA_DIR="${PROJECT_ROOT}/hosted-pwa"
 PWA_DIST="${PWA_DIR}/dist"
 
-# Edge Functions 列表（config.toml 中定义的所有函数）
-# 格式："函数名:是否验证JWT"
-EDGE_FUNCTIONS=(
-  "transcribe:false"
-  "device-pairing:false"
-  "issue-asr-request:false"
-  "report-asr-result:false"
-  "billing-create-checkout-session:true"
-  "billing-create-portal-session:true"
-  "billing-get-client-context:true"
-  "stripe-webhook:false"
-  "paddle-webhook:false"
-)
+# config.toml 是唯一函数清单；漏配置、漏实现或缺少 JWT 设置立即失败。
+FUNCTION_MANIFEST="$(node "${PROJECT_ROOT}/scripts/edge-functions.mjs")"
+EDGE_FUNCTIONS=()
+while IFS= read -r entry; do
+  EDGE_FUNCTIONS+=("${entry}")
+done <<< "${FUNCTION_MANIFEST}"
 
 # ── 帮助 ─────────────────────────────────────────────
 show_help() {
@@ -188,9 +181,9 @@ deploy_backend() {
 
 # ── 全量部署 ──────────────────────────────────────────
 deploy_all() {
-  deploy_frontend
-  echo ""
   deploy_backend
+  echo ""
+  deploy_frontend
 }
 
 # ── 参数解析 ──────────────────────────────────────────

@@ -28,6 +28,12 @@ function getSupabaseClient() {
   return supabase;
 }
 
+function getUserId() {
+  const userId = globalThis.window?.VoiceBridgeAuth?.user?.id;
+  if (!userId) throw new Error(t('commandStore.loginRequired'));
+  return userId;
+}
+
 // snake_case DB row -> camelCase client command
 function fromDb(row, { source, plan }) {
   if (!row) return null;
@@ -76,7 +82,7 @@ export const commandStore = {
   // Read private commands, global presets, and the current plan concurrently.
   async list() {
     const supabase = getSupabaseClient();
-    const userId = globalThis.window?.VoiceBridgeAuth?.user?.id;
+    const userId = getUserId();
     const [usersResult, presetsResult, subscriptionResult] = await Promise.all([
       supabase
         .from("user_commands")
@@ -113,9 +119,11 @@ export const commandStore = {
       throw new Error(t('commandStore.missingFields'));
     }
     const supabase = getSupabaseClient();
+    const userId = getUserId();
     const { data, error } = await supabase
       .from("user_commands")
       .insert({
+        user_id: userId,
         text,
         label,
         category
@@ -163,6 +171,7 @@ export const commandStore = {
       .from("user_commands")
       .update(dbUpdates)
       .eq("id", id)
+      .eq("user_id", getUserId())
       .select("*")
       .maybeSingle();
     if (error) throw wrapError(error, t('commandStore.updateFailed'));
@@ -179,7 +188,8 @@ export const commandStore = {
     const { error, count } = await supabase
       .from("user_commands")
       .delete({ count: "exact" })
-      .eq("id", id);
+      .eq("id", id)
+      .eq("user_id", getUserId());
     if (error) throw wrapError(error, t('commandStore.deleteFailed'));
     if (!count || count === 0) throw new NotFoundError(t('commandStore.notExist'));
     return { ok: true };
