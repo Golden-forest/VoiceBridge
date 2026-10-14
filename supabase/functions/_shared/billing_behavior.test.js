@@ -144,11 +144,17 @@ test("Stripe signed completed/expired sessions close their checkout attempt", as
 
 async function deleting({ facts = [], current = null, fetch: fetchImpl, queryError = null, checkout = [], checkoutError = null } = {}) {
   let deleted = 0;
+  const rpcCalls = [];
   const client = {
     auth: { getClaims: async () => ({ data: { claims: { sub: userId } }, error: null }), admin: {
       deleteUser: async () => { deleted++; return { error: null }; }
     } },
     rpc: async (fn, params) => {
+      rpcCalls.push({ fn, params });
+      if (fn === "clear_account_deletion_request") {
+        assert.equal(params.p_user_id, userId);
+        return { data: true, error: null };
+      }
       assert.equal(fn, "begin_account_deletion");
       assert.equal(params.p_user_id, userId);
       return { data: checkout.length ? "checkout_pending" : "account_deleting", error: checkoutError };
@@ -164,7 +170,7 @@ async function deleting({ facts = [], current = null, fetch: fetchImpl, queryErr
     createClient: () => client, getPaddleEnvironment: () => "production",
     paddleApiBaseUrl: () => "https://local.invalid", fetch: fetchImpl
   });
-  return { ...loaded, deleted: () => deleted };
+  return { ...loaded, deleted: () => deleted, rpcCalls };
 }
 
 const paddleCurrent = { source_provider: "paddle", source_subscription_id: "sub_active", status: "active" };
@@ -190,7 +196,7 @@ test("account deletion fails closed when pending-checkout state cannot be read",
 
 test("account deletion keeps account on cancellation HTTP error, timeout and non-canceled response", async () => {
   for (const failure of ["http", "timeout", "not-canceled"]) {
-    const { handler, deleted } = await deleting({ current: paddleCurrent,
+    const { handler, deleted, rpcCalls } = await deleting({ current: paddleCurrent,
       fetch: async (_url, init) => {
         if (!init.method) return Response.json({ data: { status: "active" } });
         if (failure === "timeout") throw new Error("timeout");
@@ -202,12 +208,14 @@ test("account deletion keeps account on cancellation HTTP error, timeout and non
     assert.equal(response.status, 502);
     assert.equal((await response.json()).code, "subscription_cancel_failed");
     assert.equal(deleted(), 0);
+    assert.equal(rpcCalls.filter((call) => call.fn === "clear_account_deletion_request").length, 1,
+      "cancellation failure releases the deletion intent so purchases stay possible");
   }
 });
 
 test("account deletion cancels all live provider facts, deduplicates projection and skips already canceled provider", async () => {
   const calls = [];
-  const { handler, deleted } = await deleting({
+  const { handler, deleted, rpcCalls } = await deleting({
     facts: [
       { provider: "paddle", provider_subscription_id: "sub_active", status: "trialing" },
       { provider: "stripe", provider_subscription_id: "sub_due", status: "past_due" },
@@ -222,6 +230,8 @@ test("account deletion cancels all live provider facts, deduplicates projection 
   });
   assert.equal((await handler(postJson())).status, 200);
   assert.equal(deleted(), 1);
+  assert.equal(rpcCalls.filter((call) => call.fn === "clear_account_deletion_request").length, 0,
+    "successful deletion never releases the deletion intent");
   const cancellations = calls.filter(c => c.method);
   assert.equal(cancellations.length, 2);
   assert.match(cancellations[0].url, /\/subscriptions\/sub_active\/cancel$/);

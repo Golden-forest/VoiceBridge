@@ -74,6 +74,9 @@ Deno.serve(async (req) => {
       await cancelExternalSubscriptions(serviceClient, userId);
     } catch (cancelError) {
       console.warn("Account retained because subscription cancellation failed:", cancelError);
+      // 取消失败发生在任何不可逆步骤之前：释放删除意图，否则用户从此永远无法再购买。
+      const { error: releaseError } = await serviceClient.rpc("clear_account_deletion_request", { p_user_id: userId });
+      if (releaseError) console.error("Failed to release account deletion request:", releaseError);
       return errorResponse("subscription_cancel_failed", "订阅尚未确认取消，账号和订阅记录已保留，请稍后重试。", 502);
     }
 

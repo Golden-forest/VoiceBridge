@@ -438,3 +438,37 @@ test("email and password forms cannot update a different identity or display a s
     if (allowed) assert.deepEqual(JSON.parse(JSON.stringify(submitted)), form === "email" ? { email: "new@example.invalid" } : { password: "secret123" });
   }
 });
+
+test("a transient presence flap does not tear down a healthy native LAN connection", () => {
+  const disconnected = [];
+  let lanActive = true;
+  let endpointPresent = false;
+  const c = harness({
+    isNativeLanActive: () => lanActive,
+    disconnectNativeLan: () => { lanActive = false; disconnected.push(1); },
+    nativeLanEndpoint: { host: "192.168.1.10", port: 3000, httpPort: 3001 },
+    findMatchingLanEndpoint: (stored, endpoints) => endpointPresent,
+    LanProbe: class { bindWindow() {} setEndpoints() {} },
+    maybeRestoreNativeLan: async () => {},
+    scheduleLanAffordanceRefresh: () => {},
+    nativeLanEndpointMissCount: 0
+  });
+  load(c, ["updateCloudLanEndpoints"]);
+  const flap = () => c.updateCloudLanEndpoints([]);
+  flap();
+  assert.equal(disconnected.length, 0, "two consecutive missing-presence updates keep the LAN link");
+  flap();
+  assert.equal(disconnected.length, 0, "a single flap must not kill the healthy direct link");
+  flap();
+  assert.equal(disconnected.length, 1, "sustained absence disconnects");
+  // 端点回到 presence 列表 → 缺失计数复位，随后的短抖动不再累积误杀
+  lanActive = true;
+  endpointPresent = true;
+  c.updateCloudLanEndpoints([{ deviceId: "desktop-A", lanEndpoints: [{ host: "192.168.1.10", port: 3000 }] }]);
+  endpointPresent = false;
+  flap();
+  flap();
+  assert.equal(disconnected.length, 1, "a matching presence update resets the miss counter");
+  flap();
+  assert.equal(disconnected.length, 2, "the counter restarts after a reset");
+});

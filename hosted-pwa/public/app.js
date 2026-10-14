@@ -144,12 +144,19 @@ async function requestLanCommands(path, init = {}) {
 // 绝不弹错误提示。
 let lanProbe = null;
 let lanAffordanceTimer = null;
+// presence 抖动会短暂送来缺桌面的列表（GFW 黑洞期为常态）；连续多次缺失才认定
+// 桌面真的离开，一两次缺失不拆健康直连。
+let nativeLanEndpointMissCount = 0;
 
 function updateCloudLanEndpoints(desktopDevices) {
   if (!isCloudMode) return;
   const selected = desktopDevices.find((device) => device.deviceId === selectedCloudDeviceId);
   const endpoints = Array.isArray(selected?.lanEndpoints) ? selected.lanEndpoints : [];
-  if (isNativeLanActive() && !findMatchingLanEndpoint(nativeLanEndpoint, endpoints)) disconnectNativeLan();
+  if (isNativeLanActive() && !findMatchingLanEndpoint(nativeLanEndpoint, endpoints)) {
+    if (++nativeLanEndpointMissCount >= 3) disconnectNativeLan();
+  } else {
+    nativeLanEndpointMissCount = 0;
+  }
   if (!lanProbe) {
     lanProbe = new LanProbe();
     lanProbe.bindWindow(window);

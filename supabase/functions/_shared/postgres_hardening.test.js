@@ -36,7 +36,9 @@ test("isolated PostgreSQL migration, checkout concurrency and conservative usage
       "0019_fix_claim_checkout_all_ambiguous.sql", "0020_fix_claim_checkout_out_params.sql",
       "20260804042520_fix_billing_event_effect_contract.sql", "20261011141803_harden_billing_checkout_and_asr_settlement.sql",
       "20261012014407_serialize_account_deletion_with_checkout.sql",
-      "20261012014916_retain_checkout_owner_until_subscription_fact.sql"
+      "20261012014916_retain_checkout_owner_until_subscription_fact.sql",
+      "20261014103000_recover_stale_checkout_attempts.sql",
+      "20261014103100_clear_deletion_request_after_cancel_failure.sql"
     ]) await psql(await readFile(new URL(`../../migrations/${name}`, import.meta.url), "utf8"));
 
     const first = "11111111-1111-4111-8111-111111111111";
@@ -45,7 +47,9 @@ test("isolated PostgreSQL migration, checkout concurrency and conservative usage
     const deleteFirst = "44444444-4444-4444-8444-444444444444";
     const checkoutFirst = "55555555-5555-4555-8555-555555555555";
     const lateFactUser = "66666666-6666-4666-8666-666666666666";
-    await psql(`insert into auth.users(id) values('${first}'),('${quotaUser}'),('${billingUser}'),('${deleteFirst}'),('${checkoutFirst}'),('${lateFactUser}')`);
+    const staleUser = "77777777-7777-4777-8777-777777777777";
+    const releaseUser = "88888888-8888-4888-8888-888888888888";
+    await psql(`insert into auth.users(id) values('${first}'),('${quotaUser}'),('${billingUser}'),('${deleteFirst}'),('${checkoutFirst}'),('${lateFactUser}'),('${staleUser}'),('${releaseUser}')`);
     const claim = async () => JSON.parse((await psql(`select public.claim_checkout_attempt('${first}', 'paddle')`)).stdout.trim());
     const results = await Promise.all([claim(), claim()]);
     assert.equal(results.filter(r => r.acquired).length, 1, "only one concurrent creator");
@@ -103,6 +107,33 @@ test("isolated PostgreSQL migration, checkout concurrency and conservative usage
     assert.equal((await psql(`select public.process_billing_event('paddle','evt_subscription_later','subscription.created',now(),'{}'::jsonb,'${lateSubscription}'::jsonb)`)).stdout.trim(), "processed");
     assert.equal(JSON.parse((await psql(`select public.claim_checkout_attempt('${lateFactUser}','paddle')`)).stdout.trim()).status, "entitlement_exists");
     assert.equal((await psql(`select public.begin_account_deletion('${lateFactUser}')`)).stdout.trim(), "account_deleting");
+
+    // An ambiguous provider failure (timeout/5xx with no recorded transaction)
+    // must not lock purchases and deletion forever. After a bounded window the
+    // stale attempt retires and both flows proceed on a fresh attempt.
+    const staleAttempt = JSON.parse((await psql(`select public.claim_checkout_attempt('${staleUser}','paddle')`)).stdout.trim());
+    assert.equal(staleAttempt.acquired, true);
+    assert.equal((await psql(`select public.start_checkout_provider_request('${staleAttempt.id}','${staleAttempt.lease_token}')`)).stdout.trim(), "t");
+    await psql(`update public.billing_checkout_attempts set provider_request_started_at=now()-interval '16 minutes', updated_at=now()-interval '16 minutes' where id='${staleAttempt.id}'`);
+    const recovered = JSON.parse((await psql(`select public.claim_checkout_attempt('${staleUser}','paddle')`)).stdout.trim());
+    assert.equal(recovered.acquired, true, "a stale uncertain provider request is retired, not a lifetime lock");
+    assert.notEqual(recovered.id, staleAttempt.id);
+    assert.equal((await psql(`select status from public.billing_checkout_attempts where id='${staleAttempt.id}'`)).stdout.trim(), "expired");
+    // Fresh uncertainty stays fenced inside the window (regression guard).
+    assert.equal(JSON.parse((await psql(`select public.claim_checkout_attempt('${staleUser}','paddle')`)).stdout.trim()).acquired, false);
+    assert.equal((await psql(`select public.begin_account_deletion('${staleUser}')`)).stdout.trim(), "checkout_pending");
+    await psql(`update public.billing_checkout_attempts set provider_request_started_at=now()-interval '16 minutes', updated_at=now()-interval '16 minutes' where user_id='${staleUser}'`);
+    assert.equal((await psql(`select public.begin_account_deletion('${staleUser}')`)).stdout.trim(), "account_deleting", "a stale attempt no longer blocks deletion");
+
+    // A provider-cancellation failure releases the deletion intent so the
+    // user is not permanently forbidden from buying again.
+    assert.equal((await psql(`select public.begin_account_deletion('${releaseUser}')`)).stdout.trim(), "account_deleting");
+    assert.equal(JSON.parse((await psql(`select public.claim_checkout_attempt('${releaseUser}','paddle')`)).stdout.trim()).status, "account_deleting");
+    assert.equal((await psql(`select public.clear_account_deletion_request('${releaseUser}')`)).stdout.trim(), "t");
+    assert.equal(JSON.parse((await psql(`select public.claim_checkout_attempt('${releaseUser}','paddle')`)).stdout.trim()).acquired, true, "releasing the deletion intent reopens purchases");
+    assert.equal((await psql(`select account_deletion_requested_at is null from public.profiles where user_id='${releaseUser}'`)).stdout.trim(), "t");
+    const clearPrivileges = (await psql(`select has_function_privilege('authenticated','public.clear_account_deletion_request(uuid)','execute'),has_function_privilege('service_role','public.clear_account_deletion_request(uuid)','execute')`)).stdout.trim();
+    assert.equal(clearPrivileges, "f|t");
 
     await psql(`insert into public.usage_events(user_id,request_id,provider,mode,audio_duration_ms,audio_size_bytes,status,created_at)
       values('${quotaUser}',gen_random_uuid(),'tencent_cloud','cloud',590000,100,'processing',now()-interval '20 minutes')`);
