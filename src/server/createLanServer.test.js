@@ -490,7 +490,8 @@ test("LAN token persistence is device-scoped and close can revoke every token", 
     assert.equal(probe.body.paired, false, "old desktop identity cannot authorize the replacement");
     await httpsPostJson(second.port, "/api/lan/pair", { code: second.pairingCode });
     await second.close({ revokeTokens: true });
-    assert.deepEqual(JSON.parse(await fs.readFile(pairingTokensPath, "utf8")).tokens, []);
+    await assert.rejects(() => fs.readFile(pairingTokensPath, "utf8"), /ENOENT/,
+      "revocation removes the pairing file entirely, matching the Electron stopLanServer path");
   } finally {
     await second.close();
     await fs.rm(rootDir, { recursive: true, force: true });

@@ -144,10 +144,10 @@ async function handleInvoiceEvent({
 }
 
 async function settleCheckoutAttempt(serviceClient: SupabaseClientLike, sessionId: string, status: "completed" | "expired") {
-  const { error } = await serviceClient.from("billing_checkout_attempts")
-    .update({ status, updated_at: new Date().toISOString(), last_error: null })
-    .eq("provider", "stripe").eq("provider_transaction_id", sessionId)
-    .in("status", ["creating", "open"]);
+  const { error } = await serviceClient.rpc("settle_stripe_checkout_attempt", {
+    p_provider_transaction_id: sessionId,
+    p_status: status
+  });
   if (error) throw error;
 }
 

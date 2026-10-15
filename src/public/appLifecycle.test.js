@@ -472,3 +472,27 @@ test("a transient presence flap does not tear down a healthy native LAN connecti
   flap();
   assert.equal(disconnected.length, 2, "the counter restarts after a reset");
 });
+
+test("an error frame from the desktop surfaces haptic and toast feedback", () => {
+  const sockets = [];
+  const feedback = [];
+  const toasts = [];
+  class Socket {
+    static OPEN = 1;
+    constructor(url) { this.url = url; this.listeners = {}; this.readyState = 1; sockets.push(this); }
+    addEventListener(event, handler) { this.listeners[event] = handler; }
+    close(code) { this.closed = true; this.listeners.close?.({ code }); }
+  }
+  const c = harness({
+    WebSocket: Socket,
+    performNativeFeedback: (kind) => feedback.push(kind),
+    showToast: (message, isError) => toasts.push([message, isError])
+  });
+  load(c, [...lanFunctions, "connectWebSocket"]);
+  c.nativeLanEndpoint = { host: "192.168.1.10", port: 3000, httpPort: 3001, ...c.currentLanBinding() };
+  c.connectWebSocket();
+  sockets[0].listeners.open();
+  sockets[0].listeners.message({ data: JSON.stringify({ type: "error", message: "电脑输入通道已关闭。" }) });
+  assert.deepEqual(feedback, ["error"], "error frames trigger error haptics");
+  assert.deepEqual(toasts, [["电脑输入通道已关闭。", true]], "error frames surface the message as an error toast");
+});

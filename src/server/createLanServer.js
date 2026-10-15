@@ -366,8 +366,9 @@ export async function createLanServer({
           if (pairingSaveTimer) clearTimeout(pairingSaveTimer);
           pairingSaveTimer = null;
           await pendingPersist;
+          // 撤销即终态：文件删除后不得再以空 token 列表复活（与 Electron
+          // stopLanServer 的裸 rm 路径保持同一落盘契约）。
           if (pairingTokensPath) await fs.rm(pairingTokensPath, { force: true });
-          await persistPairingTokens();
         });
       }
       closed = true;
@@ -384,6 +385,7 @@ export async function createLanServer({
       if (revokeTokens && pairingTokensPath) {
         await pendingPersist;
         await fs.rm(pairingTokensPath, { force: true });
+        return;
       }
       await persistPairingTokens();
       })();

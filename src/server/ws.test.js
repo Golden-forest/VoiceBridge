@@ -242,3 +242,21 @@ test("phrase output is still broadcast to every client", async () => {
     await closeAll({ ...ctx, sockets: [sender.socket, other.socket] });
   }
 });
+
+test("a phrase rejected by the input channel returns an error frame to the sender", async () => {
+  let authorized = true;
+  const ctx = await startHub({ authorize: () => authorized, output: async () => ({ copied: true, pasted: true }) });
+  const sender = connect(ctx.port);
+  try {
+    await sender.opened;
+    await sender.next();
+    // 手机端撤销配对 token 的瞬间：socket 仍开着，但请求已不再有效。
+    authorized = false;
+    sender.socket.send(JSON.stringify({ type: "phrase", text: "hi", autoPaste: false }));
+    const frame = await sender.next();
+    assert.equal(frame.type, "error", "the phone must learn its optimistic toast was wrong");
+    assert.match(frame.message, /配对已被撤销/);
+  } finally {
+    await closeAll({ ...ctx, sockets: [sender.socket] });
+  }
+});

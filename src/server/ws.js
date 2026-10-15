@@ -65,8 +65,14 @@ export function createWebSocketHub(server, {
     const requestIsActive = () => !closing && socket.readyState === WebSocket.OPEN &&
       (!authorize || authorize(req));
     socket.on("message", async (data) => {
-      if (closing) return;
+      if (closing) {
+        // 手机端发 phrase 前已弹乐观成功 toast：静默丢弃会让用户误以为已输入。
+        send(socket, { type: "error", message: "电脑输入通道已关闭。" });
+        return;
+      }
       if (authorize && !authorize(req)) {
+        // 先回错误帧再关连接：让手机把乐观成功 toast 纠正为失败提示。
+        send(socket, { type: "error", message: "本设备的配对已被撤销，请重新配对。" });
         socket.close(4001, "unauthorized");
         return;
       }
@@ -104,19 +110,30 @@ export function createWebSocketHub(server, {
           }
           case "phrase":
             if (typeof payload.text === "string" && payload.text.length <= 10000) {
-              const result = await runDesktopInputOperation(() => {
-                if (!requestIsActive()) throw new Error("电脑输入通道已关闭。");
-                const options = {
-                  autoPaste: Boolean(payload.autoPaste),
-                  targetWindow: payload.targetWindow || null,
-                  sourceIdentity: socket,
-                  isActive: requestIsActive
-                };
-                if (payload.voiceCommand === true) {
-                  return voiceOutput.handleText(payload.text, { ...options, immediate: true });
-                }
-                return output(payload.text, options);
-              });
+              let result;
+              try {
+                result = await runDesktopInputOperation(() => {
+                  if (!requestIsActive()) throw new Error("电脑输入通道已关闭。");
+                  const options = {
+                    autoPaste: Boolean(payload.autoPaste),
+                    targetWindow: payload.targetWindow || null,
+                    sourceIdentity: socket,
+                    isActive: requestIsActive
+                  };
+                  if (payload.voiceCommand === true) {
+                    return voiceOutput.handleText(payload.text, { ...options, immediate: true });
+                  }
+                  return output(payload.text, options);
+                });
+              } catch (error) {
+                // 手机端发 phrase 前已弹过乐观成功 toast：失败必须回帧，
+                // 否则用户以为文字已输入而实际什么都没发生。
+                send(socket, {
+                  type: "error",
+                  message: error instanceof Error ? error.message : String(error)
+                });
+                break;
+              }
               if (socket.readyState === WebSocket.OPEN && !result.flushed) {
                 broadcast({ type: "output", ...(result.output ? { ...result.output,
                   command: result.command, keyPressed: result.keyPressed, keyError: result.keyError

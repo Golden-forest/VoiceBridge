@@ -154,6 +154,24 @@ deploy_functions() {
   fi
   ok "supabase 已认证"
 
+  # 发布门（AGENTS.md 发版顺序）：Direct ASR 端点随本次部署返回 410，旧桌面端
+  # 撞 410 后必须能立刻下载到新版安装包。对应版本的 GitHub release 三平台资产
+  # 齐备才放行；确认与桌面端无关的紧急修复可用 VB_SKIP_RELEASE_GATE=1 跳过。
+  if [[ "${VB_SKIP_RELEASE_GATE:-}" != "1" ]]; then
+    local version asset_count
+    version=$(node -p "require('${PROJECT_ROOT}/package.json').version")
+    if ! gh release view "v${version}" >/dev/null 2>&1; then
+      fail "GitHub release v${version} 不存在：先构建并上传三平台桌面包再部署 Edge Functions。确认无桌面影响时可用 VB_SKIP_RELEASE_GATE=1 跳过。"
+    fi
+    asset_count=$(gh release view "v${version}" --json assets -q '.assets | length')
+    if [[ "${asset_count}" -lt 3 ]]; then
+      fail "GitHub release v${version} 桌面资产不足 3 个（当前 ${asset_count}）：三平台包全部可下载后才允许退役旧端点。"
+    fi
+    ok "发布门通过：v${version} 的三平台桌面包已可下载"
+  else
+    warn "已跳过发布门（VB_SKIP_RELEASE_GATE=1）"
+  fi
+
   cd "${PROJECT_ROOT}"
 
   for entry in "${EDGE_FUNCTIONS[@]}"; do

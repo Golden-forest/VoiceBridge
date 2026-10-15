@@ -78,15 +78,12 @@ Deno.serve(async (req) => {
       if (typeof deviceId !== "string" || !UUID_PATTERN.test(deviceId)) {
         return errorResponse("invalid_device", "电脑设备信息无效。", 400);
       }
-      const { data: device, error: deviceError } = await serviceClient
-        .from("devices")
-        .select("user_id,paired_at")
-        .eq("id", deviceId)
-        .eq("runtime_user_id", userId)
-        .eq("status", "active")
-        .maybeSingle();
+      const { data: device, error: deviceError } = await serviceClient.rpc(
+        "resolve_transcribe_device",
+        { p_device_id: deviceId, p_runtime_user_id: userId }
+      );
       if (deviceError) throw deviceError;
-      if (!device?.paired_at || typeof device.user_id !== "string") {
+      if (!device?.paired || typeof device.user_id !== "string") {
         return errorResponse("device_not_paired", "电脑设备尚未绑定当前账号，请重新扫码绑定。", 403);
       }
       userId = device.user_id;

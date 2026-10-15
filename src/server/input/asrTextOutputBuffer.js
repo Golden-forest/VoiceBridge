@@ -230,7 +230,6 @@ export function createAsrTextOutputBuffer({
 
   async function writeOutput(text, options) {
     try {
-      assertInputActive(isActive);
       const operationIsActive = () => isActive() && options.isActive();
       assertInputActive(operationIsActive);
       return await outputTextFn(text, { ...options, isActive: operationIsActive });
@@ -247,13 +246,13 @@ export function createAsrTextOutputBuffer({
 
   async function pressKey(fn, options) {
     try {
-      assertInputActive(isActive);
-      assertInputActive(normalizeOutputOptions(options).isActive);
+      const normalized = normalizeOutputOptions(options);
+      const operationIsActive = () => isActive() && normalized.isActive();
+      assertInputActive(operationIsActive);
       if (options.targetWindow?.appName) {
         const result = await activateWindowFn(options.targetWindow.appName, options.targetWindow.windowTitle);
         if (result?.success === false) throw new Error(result.error || "无法激活目标窗口");
-        assertInputActive(isActive);
-        assertInputActive(normalizeOutputOptions(options).isActive);
+        assertInputActive(operationIsActive);
       }
       await fn();
       return null;
