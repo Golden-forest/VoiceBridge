@@ -133,12 +133,14 @@ test("Stripe same-status updates use distinct signed event IDs and preserve the 
 
 test("Stripe signed completed/expired sessions close their checkout attempt", async () => {
   for (const status of ["completed", "expired"]) {
-    const { handler, request, updates } = await stripeWebhook();
+    const { handler, request, rpcCalls, updates } = await stripeWebhook();
     const event = { id: "evt_session", type: `checkout.session.${status}`, created: 1767225600,
       data: { object: { id: "cs_test" } } };
     assert.equal((await handler(request(event))).status, 200);
-    assert.equal(updates[0].table, "billing_checkout_attempts");
-    assert.equal(updates[0].params.status, status);
+    const settle = rpcCalls.find((p) => p.p_provider_transaction_id === "cs_test");
+    assert.ok(settle, "settlement goes through settle_stripe_checkout_attempt, not a direct table write");
+    assert.equal(settle.p_status, status);
+    assert.equal(updates.length, 0, "no direct billing table writes from the webhook");
   }
 });
 

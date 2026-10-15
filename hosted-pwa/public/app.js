@@ -2557,6 +2557,7 @@ function connectWebSocket() {
       // Deferred uploads return text only to their requesting phone via HTTP.
       // Other clients' result broadcasts must never overwrite this phone's draft.
       if (payload.message) {
+        if (payload.type === "error") performNativeFeedback("error");
         showToast(payload.message, payload.type === "error");
       }
       if (payload.type === "output") {

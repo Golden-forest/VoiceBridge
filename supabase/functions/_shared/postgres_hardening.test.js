@@ -32,13 +32,15 @@ test("isolated PostgreSQL migration, checkout concurrency and conservative usage
     `);
     for (const name of [
       "0001_cloud_core.sql", "0002_transcribe_usage_reservations.sql", "0003_auto_create_profile.sql",
+      "0004_device_pairing.sql",
       "0011_admin_plan.sql", "0016_migrate_stripe_to_paddle.sql", "0017_fix_integer_overflow.sql",
       "0019_fix_claim_checkout_all_ambiguous.sql", "0020_fix_claim_checkout_out_params.sql",
       "20260804042520_fix_billing_event_effect_contract.sql", "20261011141803_harden_billing_checkout_and_asr_settlement.sql",
       "20261012014407_serialize_account_deletion_with_checkout.sql",
       "20261012014916_retain_checkout_owner_until_subscription_fact.sql",
       "20261014103000_recover_stale_checkout_attempts.sql",
-      "20261014103100_clear_deletion_request_after_cancel_failure.sql"
+      "20261014103100_clear_deletion_request_after_cancel_failure.sql",
+      "20261015093000_rpc_device_and_checkout_settlement.sql"
     ]) await psql(await readFile(new URL(`../../migrations/${name}`, import.meta.url), "utf8"));
 
     const first = "11111111-1111-4111-8111-111111111111";
@@ -134,6 +136,29 @@ test("isolated PostgreSQL migration, checkout concurrency and conservative usage
     assert.equal((await psql(`select account_deletion_requested_at is null from public.profiles where user_id='${releaseUser}'`)).stdout.trim(), "t");
     const clearPrivileges = (await psql(`select has_function_privilege('authenticated','public.clear_account_deletion_request(uuid)','execute'),has_function_privilege('service_role','public.clear_account_deletion_request(uuid)','execute')`)).stdout.trim();
     assert.equal(clearPrivileges, "f|t");
+
+    // Device-ownership authorization and Stripe checkout settlement live in
+    // RPCs so this SQL suite exercises them end to end.
+    const deviceOwner = "99999999-9999-4999-8999-999999999999";
+    const runtimeUser = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
+    const desktopId = "dddddddd-dddd-4ddd-8ddd-dddddddddddd";
+    await psql(`insert into auth.users(id) values('${deviceOwner}'),('${runtimeUser}')`);
+    await psql(`insert into public.devices(id, user_id, name, device_type, platform, status, runtime_user_id, paired_at)
+      values('${desktopId}', '${deviceOwner}', 'test-desktop', 'desktop', 'darwin', 'active', '${runtimeUser}', now())`);
+    const resolve = (runtime) => psql(`select public.resolve_transcribe_device('${desktopId}', '${runtime}')`);
+    assert.equal((await resolve(runtimeUser)).stdout.trim(), `{"paired": true, "user_id": "${deviceOwner}"}`);
+    assert.equal((await resolve(deviceOwner)).stdout.trim(), '{"paired": false}', "a foreign runtime account cannot transcribe through the device");
+    await psql(`update public.devices set status='revoked' where id='${desktopId}'`);
+    assert.equal((await resolve(runtimeUser)).stdout.trim(), '{"paired": false}', "a revoked device cannot transcribe");
+    await psql(`insert into public.billing_checkout_attempts(user_id, provider, status, expires_at, lease_token, provider_transaction_id)
+      values('${deviceOwner}', 'stripe', 'open', now() + interval '5 minutes', gen_random_uuid(), 'cs_sql_test')`);
+    assert.equal((await psql(`select public.settle_stripe_checkout_attempt('cs_sql_test','completed')`)).stdout.trim(), "1");
+    assert.equal((await psql(`select status from public.billing_checkout_attempts where provider_transaction_id='cs_sql_test'`)).stdout.trim(), "completed");
+    assert.equal((await psql(`select public.settle_stripe_checkout_attempt('cs_sql_test','completed')`)).stdout.trim(), "0", "settlement is idempotent");
+    assert.equal((await psql(`select public.settle_stripe_checkout_attempt('cs_missing','expired')`)).stdout.trim(), "0");
+    await assert.rejects(psql(`select public.settle_stripe_checkout_attempt('cs_sql_test','failed')`), /Invalid checkout settlement status/);
+    const rpcPrivileges = (await psql(`select has_function_privilege('authenticated','public.resolve_transcribe_device(uuid,uuid)','execute'),has_function_privilege('service_role','public.settle_stripe_checkout_attempt(text,text)','execute')`)).stdout.trim();
+    assert.equal(rpcPrivileges, "f|t");
 
     await psql(`insert into public.usage_events(user_id,request_id,provider,mode,audio_duration_ms,audio_size_bytes,status,created_at)
       values('${quotaUser}',gen_random_uuid(),'tencent_cloud','cloud',590000,100,'processing',now()-interval '20 minutes')`);

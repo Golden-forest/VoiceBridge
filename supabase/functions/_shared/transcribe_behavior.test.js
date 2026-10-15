@@ -29,17 +29,17 @@ async function transcribing({ runtime = "runtime", target = { user_id: "owner", 
   const service = {
     async rpc(fn, params) {
       rpcCalls.push({ fn, params });
+      if (fn === "resolve_transcribe_device") {
+        const matched = target && target.id === params.p_device_id
+          && target.runtime_user_id === params.p_runtime_user_id
+          && target.status === "active" && Boolean(target.paired_at);
+        return { data: matched ? { paired: true, user_id: target.user_id } : { paired: false }, error: null };
+      }
       const error_code = params.p_audio_duration_ms > maxMs ? "audio_too_long" : quotaError;
       if (!error_code) rows.push({ user_id: params.p_user_id, request_id: params.p_request_id, status: "processing", audio_duration_ms: params.p_audio_duration_ms });
       return { data: { plan: "free", max_audio_ms: maxMs, error_code }, error: null };
     },
     from(table) {
-      if (table === "devices") {
-        const filters = [];
-        return { select() { return this; }, eq(k, v) { filters.push([k, v]); return this; },
-          async maybeSingle() { return { data: target && filters.every(([k,v]) => target[k] === v) ? target : null, error: null }; }
-        };
-      }
       return {
         async insert(row) { rows.push(row); return { error: null }; },
         update(cols) {
@@ -65,8 +65,10 @@ test("relay authorizes runtime device and bills owner by verified WAV duration",
   const response = await handler(audioRequest({ durationMs: 1200, clientDurationMs: 1 }));
   assert.equal(response.status, 200);
   assert.equal((await response.json()).text, "测试文本");
-  assert.equal(rpcCalls[0].params.p_user_id, "owner");
-  assert.equal(rpcCalls[0].params.p_audio_duration_ms, 1200);
+  assert.equal(rpcCalls[0].fn, "resolve_transcribe_device");
+  const reserve = rpcCalls.find((call) => call.fn !== "resolve_transcribe_device");
+  assert.equal(reserve.params.p_user_id, "owner");
+  assert.equal(reserve.params.p_audio_duration_ms, 1200);
   await flush(); assert.equal(rows[0].status, "success"); assert.ok(rows[0].settled_at);
 });
 
@@ -82,7 +84,8 @@ test("relay rejects foreign, revoked and unpaired devices before provider or quo
     const response = await handler(audioRequest());
     assert.equal(response.status, 403);
     assert.equal((await response.json()).code, "device_not_paired");
-    assert.equal(rpcCalls.length, 0); assert.equal(providerCalls(), 0);
+    assert.equal(rpcCalls.filter((call) => call.fn !== "resolve_transcribe_device").length, 0);
+    assert.equal(providerCalls(), 0);
   }
 });
 
