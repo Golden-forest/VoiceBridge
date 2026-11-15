@@ -4,14 +4,16 @@ import { jsonResponse, corsHeaders } from "./cors.ts";
 
 // Load an authored Deno handler unchanged except its external imports. Tests
 // supply service/provider dependencies and never contact a cloud account.
-export async function loadEdgeHandler(relativePath, stubs = {}) {
+// extraEnv overrides/adds Deno.env values (e.g. DASHSCOPE_API_KEY) per test.
+export async function loadEdgeHandler(relativePath, stubs = {}, extraEnv = {}) {
   let handler;
   const env = {
     SUPABASE_URL: "https://local.invalid", SUPABASE_ANON_KEY: "anon",
     SUPABASE_SERVICE_ROLE_KEY: "service", PADDLE_API_KEY: "dummy",
     STRIPE_SECRET_KEY: "dummy", STRIPE_WEBHOOK_SECRET: "dummy", STRIPE_PRO_MONTHLY_PRICE_ID: "price_test",
     STRIPE_SUCCESS_URL: "https://local.invalid/success", STRIPE_CANCEL_URL: "https://local.invalid/cancel",
-    TENCENT_SECRET_ID: "dummy", TENCENT_SECRET_KEY: "dummy"
+    TENCENT_SECRET_ID: "dummy", TENCENT_SECRET_KEY: "dummy",
+    ...extraEnv
   };
   const source = (await readFile(new URL(relativePath, import.meta.url), "utf8"))
     .replace(/^import\s+[\s\S]*?\s+from\s+["'][^"']+["'];/gm, "");

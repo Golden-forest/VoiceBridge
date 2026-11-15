@@ -2,6 +2,7 @@ import { CloudRealtime, getPhoneDeviceId, isDesktopDeviceCandidate } from "./clo
 import { createBillingSession, invokeBillingFunction } from "./billing.js";
 import { recordWavUntilStopped } from "./cloudRecorder.js";
 import { transcribeCloudAudio, setAsrTimingListener } from "./cloudTranscribe.js";
+import { ASR_ENGINES, getPreferredAsrEngine, setPreferredAsrEngine } from "./asrEngine.js";
 import { createRecordingTimingStore } from "./timingRecorder.js";
 import { commandStore } from "./commandStore.js";
 import { isProtocolCompatible } from "../shared/protocol.js";
@@ -2467,11 +2468,12 @@ async function uploadAudio(blob, extension, context = captureRecordingContext())
     if (!blob.size) { showToast(t('record.noVoice'), true); return; }
     showToast(t('record.recognizing'));
     let payload;
+    const engine = getPreferredAsrEngine(window.localStorage);
     if (isCloudMode && !context.lanEndpoint) {
       recordingTiming.note({ encodeMs: Math.round(performance.now() - stopStartedAt), bytes: blob.size });
       payload = await transcribeCloudAudio({
         audio: blob, filename: `voicebridge.${extension}`, durationMs: context.durationMs,
-        expectedUserId: context.userId, signal: controller.signal
+        expectedUserId: context.userId, engine, signal: controller.signal
       });
       if (!isCurrentRecordingIdentity(context)) return;
       recordingTiming.note({ transcribedMs: Math.round(performance.now() - stopStartedAt) });
@@ -2481,6 +2483,7 @@ async function uploadAudio(blob, extension, context = captureRecordingContext())
       // Wait for this phone's context checks before any desktop output.
       formData.append("deferOutput", "true");
       formData.append("autoPaste", "false");
+      if (engine) formData.append("engine", engine);
       const url = context.lanEndpoint ? `${buildNativeLanBaseUrl(context.lanEndpoint)}/api/upload` : "/api/upload";
       timeout = setTimeout(() => controller.abort(), 30_000);
       const response = await fetch(url, {
@@ -2686,6 +2689,7 @@ class AccountDrawer {
       if (!isCurrentIdentity(authVersion) || !this._isOpen) return;
       body.replaceChildren(
         this._renderLanguage(),
+        this._renderEngine(),
         this._renderPlan(data),
         this._renderPricing(data),
         this._renderUsage(data),
@@ -2775,6 +2779,36 @@ class AccountDrawer {
       select.appendChild(opt);
     }
     select.addEventListener("change", () => setLocale(select.value));
+    row.appendChild(select);
+    section.appendChild(row);
+    return section;
+  }
+
+  // 识别引擎（云端/局域网上传共用）：空 = 跟随服务端默认。选了未配置的引擎
+  // 时服务端会明确报错，而不是静默回退——方便对比各家识别效果。
+  _renderEngine() {
+    const section = document.createElement("div");
+    section.className = "account-section";
+
+    const title = document.createElement("p");
+    title.className = "account-section-title";
+    title.textContent = t('account.engineTitle');
+    section.appendChild(title);
+
+    const row = document.createElement("div");
+    row.className = "account-row";
+    const select = document.createElement("select");
+    select.className = "profile-edit-input";
+    select.style.marginTop = "0";
+    const preferred = getPreferredAsrEngine(window.localStorage);
+    for (const { value, labelKey } of ASR_ENGINES) {
+      const opt = document.createElement("option");
+      opt.value = value;
+      opt.textContent = t(labelKey);
+      if (value === preferred) opt.selected = true;
+      select.appendChild(opt);
+    }
+    select.addEventListener("change", () => setPreferredAsrEngine(window.localStorage, select.value));
     row.appendChild(select);
     section.appendChild(row);
     return section;

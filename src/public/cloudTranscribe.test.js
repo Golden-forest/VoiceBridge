@@ -24,6 +24,15 @@ test("relay sends actual audio, filename and duration without issuing a direct s
   assert.equal(calls[0].options.body.get("duration_ms"), "1235");
 });
 
+test("relay sends the selected engine and omits the field for the default engine", async () => {
+  const bodies = [];
+  const fetch = async (_url, options) => { bodies.push(options.body); return response(); };
+  await transcribeCloudAudio({ supabase: client(), audio, engine: "qwen", fetch });
+  await transcribeCloudAudio({ supabase: client(), audio, fetch });
+  assert.equal(bodies[0].get("engine"), "qwen");
+  assert.equal(bodies[1].get("engine"), null);
+});
+
 test("each request uses the current account and independently refreshed token", async () => {
   let session = { access_token: "token-A", user: { id: "A" } };
   const supabase = client(() => session);

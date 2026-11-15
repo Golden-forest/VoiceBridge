@@ -28,6 +28,14 @@ test("LAN sends WAV and desktop identity only to the trusted relay", async () =>
   assert.equal(calls.length, 1);
 });
 
+test("relay forwards a non-default engine selection with the upload", async () => {
+  const text = await transcribeViaEdgeAsr({ ...context, engine: "qwen", fetchImpl: async (_url, options) => {
+    assert.equal(options.body.get("engine"), "qwen");
+    return response({ ok: true, text: "千问中继文本" });
+  }});
+  assert.equal(text, "千问中继文本");
+});
+
 for (const status of [401, 403, 413, 429]) {
   test(`relay preserves ${status} rejection without retrying or client billing reports`, async () => {
     let calls = 0;

@@ -325,7 +325,7 @@ function startStubEdgeServer({ waitForResponse } = {}) {
       const raw = Buffer.concat(chunks);
       if (req.url === "/functions/v1/transcribe") {
         const form = await new Response(raw, { headers: { "Content-Type": req.headers["content-type"] } }).formData();
-        seen.relay = { headers: req.headers, deviceId: form.get("device_id"),
+        seen.relay = { headers: req.headers, deviceId: form.get("device_id"), engine: form.get("engine"),
           audio: Buffer.from(await form.get("audio").arrayBuffer()) };
         await waitForResponse?.();
         res.setHeader("Content-Type", "application/json");
@@ -445,6 +445,40 @@ test("createLanServer forwards WAV through the trusted relay without real deskto
     assert.equal(deferred.body.text, "你好局域网");
     assert.equal(deferred.body.output.deferred, true);
     assert.deepEqual(outputs, ["你好局域网"], "deferred recognition never touches the desktop");
+  } finally {
+    await lan.close();
+    await new Promise((resolve) => stub.server.close(resolve));
+  }
+});
+
+test("LAN upload forwards the selected engine to the trusted relay and rejects unknown engines", async () => {
+  const rootDir = await fs.mkdtemp(path.join(os.tmpdir(), "voicebridge-lan-engine-"));
+  const stub = startStubEdgeServer();
+  const stubPort = await stub.listen();
+
+  const lan = await createLanServer({
+    rootDir,
+    deviceId: "11111111-1111-4111-8111-111111111111",
+    port: 0,
+    config: { asrProvider: "tencent", tencentSecretId: "", tencentSecretKey: "" },
+    supabaseUrl: `http://127.0.0.1:${stubPort}`,
+    supabaseAnonKey: "anon-test",
+    output: async () => ({ copied: false, pasted: false }),
+    getAccessToken: async () => "lan-token"
+  });
+
+  try {
+    const wav = makeSilenceWav();
+    const token = (await httpsPostJson(lan.port, "/api/lan/pair", { code: lan.pairingCode })).body.token;
+    const qwen = await httpsPostMultipart(lan.port, "/api/upload", "audio", "voice.wav", "audio/wav", wav,
+      { token, fields: { engine: "qwen" } });
+    assert.equal(qwen.status, 200, JSON.stringify(qwen.body));
+    assert.equal(stub.seen.relay.engine, "qwen");
+
+    const invalid = await httpsPostMultipart(lan.port, "/api/upload", "audio", "voice.wav", "audio/wav", wav,
+      { token, fields: { engine: "baidu" } });
+    assert.equal(invalid.status, 400);
+    assert.equal(invalid.body.ok, false);
   } finally {
     await lan.close();
     await new Promise((resolve) => stub.server.close(resolve));

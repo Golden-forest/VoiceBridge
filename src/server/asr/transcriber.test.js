@@ -96,3 +96,49 @@ test("transcribeAudio transcribes phone wav via edge channel without ffmpeg", as
     await fs.rm(tmpDir, { recursive: true, force: true });
   }
 });
+
+test("engine=qwen relays through the trusted edge even when local Tencent credentials exist", async () => {
+  const { filePath, tmpDir } = await writeReadyWav();
+  const json = (payload, ok = true) => ({ ok, json: async () => payload });
+  const edgeAsr = {
+    getAccessToken: async () => "token",
+    deviceId: "desktop-1",
+    supabaseUrl: "https://edge.test",
+    supabaseAnonKey: "anon",
+    fetchImpl: async (_url, options) => {
+      assert.equal(options.body.get("engine"), "qwen");
+      return json({ ok: true, text: "千问文本" });
+    }
+  };
+  try {
+    const text = await transcribeAudio(
+      { filePath, tmpDir, engine: "qwen" },
+      { asrProvider: "tencent", tencentSecretId: "local-id", tencentSecretKey: "local-key" },
+      edgeAsr
+    );
+    assert.equal(text, "千问文本");
+  } finally {
+    await fs.rm(tmpDir, { recursive: true, force: true });
+  }
+});
+
+test("engine=qwen without the trusted edge relay fails with a clear message", async () => {
+  const { filePath, tmpDir } = await writeReadyWav();
+  try {
+    await assert.rejects(
+      () => transcribeAudio(
+        { filePath, tmpDir, engine: "qwen" },
+        { asrProvider: "tencent", tencentSecretId: "local-id", tencentSecretKey: "local-key" },
+        null
+      ),
+      (error) => {
+        assert.equal(error.statusCode, 500);
+        assert.match(error.publicMessage, /千问/);
+        assert.match(error.publicMessage, /登录/);
+        return true;
+      }
+    );
+  } finally {
+    await fs.rm(tmpDir, { recursive: true, force: true });
+  }
+});

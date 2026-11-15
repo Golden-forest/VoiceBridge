@@ -302,6 +302,12 @@ export default {
     languageTitle: '语言',
     languageZhCN: '简体中文',
     languageEn: 'English',
+
+    // 识别引擎（云端/局域网共用同一选择）
+    engineTitle: '识别引擎',
+    engineDefault: '跟随默认',
+    engineTencent: '腾讯云',
+    engineQwen: '千问（通义）',
   },
 
   // === Auth Overlay ===

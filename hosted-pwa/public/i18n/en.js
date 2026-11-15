@@ -294,6 +294,11 @@ export default {
     languageTitle: 'Language',
     languageZhCN: '简体中文',
     languageEn: 'English',
+
+    engineTitle: 'Speech engine',
+    engineDefault: 'Follow default',
+    engineTencent: 'Tencent Cloud',
+    engineQwen: 'Qwen (Tongyi)',
   },
 
   // === Auth Overlay ===

@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { loadEdgeHandler } from "./edge_test_support.js";
 import { parsePcmWavDurationMs } from "./wav.ts";
-import { ERROR_CODE_QUOTA_EXCEEDED, USAGE_PROVIDER_TENCENT_CLOUD } from "./contracts.ts";
+import { ERROR_CODE_QUOTA_EXCEEDED, USAGE_PROVIDER_QWEN_CLOUD, USAGE_PROVIDER_TENCENT_CLOUD } from "./contracts.ts";
 
 const deviceId = "11111111-1111-4111-8111-111111111111";
 function wav(durationMs) {
@@ -15,17 +15,18 @@ function wav(durationMs) {
   ascii(36, "data"); view.setUint32(40, dataBytes, true);
   return bytes;
 }
-function audioRequest({ durationMs = 1000, clientDurationMs = 1, device = deviceId, bytes = wav(durationMs) } = {}) {
+function audioRequest({ durationMs = 1000, clientDurationMs = 1, device = deviceId, bytes = wav(durationMs), engine = null } = {}) {
   const body = new FormData();
   body.set("audio", new File([bytes], "voice.wav", { type: "audio/wav" }));
   body.set("duration_ms", String(clientDurationMs));
   if (device !== null) body.set("device_id", device);
+  if (engine !== null) body.set("engine", engine);
   return new Request("https://local.invalid/transcribe", { method: "POST", headers: { Authorization: "Bearer runtime" }, body });
 }
 
-async function transcribing({ runtime = "runtime", target = { user_id: "owner", runtime_user_id: "runtime", status: "active", paired_at: "2026-01-01", id: deviceId }, providerError = null, maxMs = 60000, quotaError = null } = {}) {
+async function transcribing({ runtime = "runtime", target = { user_id: "owner", runtime_user_id: "runtime", status: "active", paired_at: "2026-01-01", id: deviceId }, providerError = null, qwenError = null, maxMs = 60000, quotaError = null, qwenEnabled = false } = {}) {
   const rpcCalls = [], rows = [];
-  let providerCalls = 0;
+  let providerCalls = 0, qwenProviderCalls = 0;
   const service = {
     async rpc(fn, params) {
       rpcCalls.push({ fn, params });
@@ -54,10 +55,11 @@ async function transcribing({ runtime = "runtime", target = { user_id: "owner", 
   const loaded = await loadEdgeHandler("../transcribe/index.ts", {
     createClient: (_url, key) => key === "service" ? service : { auth: { getClaims: async () => ({ data: { claims: { sub: runtime } }, error: null }) } },
     verifySupabaseJwt: async () => null, parsePcmWavDurationMs,
-    ERROR_CODE_QUOTA_EXCEEDED, USAGE_PROVIDER_TENCENT_CLOUD,
-    transcribeTencentWav: async () => { providerCalls++; if (providerError) throw providerError; return "测试文本"; }
-  });
-  return { ...loaded, rows, rpcCalls, providerCalls: () => providerCalls };
+    ERROR_CODE_QUOTA_EXCEEDED, USAGE_PROVIDER_TENCENT_CLOUD, USAGE_PROVIDER_QWEN_CLOUD,
+    transcribeTencentWav: async () => { providerCalls++; if (providerError) throw providerError; return "测试文本"; },
+    transcribeQwenWav: async () => { qwenProviderCalls++; if (qwenError) throw qwenError; return "千问文本"; }
+  }, qwenEnabled ? { DASHSCOPE_API_KEY: "sk-dashscope", DASHSCOPE_BASE_URL: "https://example.invalid/v1" } : {});
+  return { ...loaded, rows, rpcCalls, providerCalls: () => providerCalls, qwenProviderCalls: () => qwenProviderCalls };
 }
 
 test("relay authorizes runtime device and bills owner by verified WAV duration", async () => {
@@ -107,6 +109,55 @@ test("relay propagates quota failure and retains uncertain provider consumption"
   await uncertain.flush();
   assert.equal(uncertain.rows[0].status, "unknown");
   assert.equal(uncertain.rows[0].error_code, "provider_result_unknown");
+});
+
+test("relay routes engine=qwen to the Qwen provider and bills it as qwen_cloud", async () => {
+  const { handler, rpcCalls, providerCalls, qwenProviderCalls } = await transcribing({ qwenEnabled: true });
+  const response = await handler(audioRequest({ engine: "qwen" }));
+  assert.equal(response.status, 200);
+  assert.equal((await response.json()).text, "千问文本");
+  assert.equal(qwenProviderCalls(), 1);
+  assert.equal(providerCalls(), 0);
+  const reserve = rpcCalls.find((call) => call.fn !== "resolve_transcribe_device");
+  assert.equal(reserve.params.p_provider, "qwen_cloud");
+});
+
+test("relay keeps tencent as the default engine without a form field", async () => {
+  const { handler, providerCalls, qwenProviderCalls, rpcCalls } = await transcribing({ qwenEnabled: true });
+  assert.equal((await handler(audioRequest({ engine: null }))).status, 200);
+  assert.equal(providerCalls(), 1);
+  assert.equal(qwenProviderCalls(), 0);
+  const reserve = rpcCalls.find((call) => call.fn !== "resolve_transcribe_device");
+  assert.equal(reserve.params.p_provider, "tencent_cloud");
+});
+
+test("relay rejects the qwen engine when DASHSCOPE_API_KEY is not configured", async () => {
+  const { handler, rpcCalls, providerCalls, qwenProviderCalls, rows } = await transcribing();
+  const response = await handler(audioRequest({ engine: "qwen" }));
+  assert.equal(response.status, 400);
+  assert.equal((await response.json()).code, "engine_unavailable");
+  assert.equal(providerCalls(), 0);
+  assert.equal(qwenProviderCalls(), 0);
+  assert.equal(rpcCalls.filter((call) => call.fn !== "resolve_transcribe_device").length, 0);
+  assert.equal(rows[0].status, "rejected");
+  assert.equal(rows[0].error_code, "engine_unavailable");
+});
+
+test("relay rejects unknown engine values before quota reservation", async () => {
+  const { handler, rpcCalls, providerCalls, qwenProviderCalls } = await transcribing({ qwenEnabled: true });
+  const response = await handler(audioRequest({ engine: "baidu" }));
+  assert.equal(response.status, 400);
+  assert.equal((await response.json()).code, "engine_unavailable");
+  assert.equal(providerCalls() + qwenProviderCalls(), 0);
+  assert.equal(rpcCalls.filter((call) => call.fn !== "resolve_transcribe_device").length, 0);
+});
+
+test("relay marks a failed qwen transcription as uncertain provider consumption", async () => {
+  const failing = await transcribing({ qwenEnabled: true, qwenError: new Error("qwen timeout") });
+  assert.equal((await failing.handler(audioRequest({ engine: "qwen" }))).status, 500);
+  await failing.flush();
+  assert.equal(failing.rows[0].status, "unknown");
+  assert.equal(failing.rows[0].error_code, "provider_result_unknown");
 });
 
 test("trusted WAV parser rejects inconsistent headers and multiple data chunks", () => {
