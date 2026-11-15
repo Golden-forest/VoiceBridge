@@ -12,19 +12,25 @@ const TENCENT_MAX_AUDIO_BYTES = 3 * 1024 * 1024;
 
 // edgeAsr（可选）：{ getAccessToken, supabaseUrl, supabaseAnonKey }。本地缺少
 // 腾讯云凭证时改走可信 Edge relay；自带本地凭证保持原本地路径。
-export async function transcribeAudio({ filePath, tmpDir }, config, edgeAsr) {
-  if (config.asrProvider !== "tencent") {
-    const error = new Error(`Unsupported ASR provider: ${config.asrProvider}`);
+// options.engine（可选）：本次请求的引擎选择（"" = 跟随 config.asrProvider 默认）。
+export async function transcribeAudio({ filePath, tmpDir, engine = "" }, config, edgeAsr) {
+  if (engine !== "" && engine !== "tencent" && engine !== "qwen") {
+    const error = new Error(`Unsupported ASR engine: ${engine}`);
     error.statusCode = 500;
-    error.publicMessage = `当前只启用了腾讯云 ASR，暂不支持 ${config.asrProvider}。`;
+    error.publicMessage = `不支持的识别引擎：${engine}。`;
     throw error;
   }
+  const provider = engine || (config.asrProvider === "qwen" ? "qwen" : "tencent");
 
-  const channel = resolveAsrChannel(config, edgeAsr);
+  const channel = resolveAsrChannel(config, edgeAsr, provider);
   if (channel === "none") {
-    const error = new Error("Tencent Cloud credentials are not configured");
+    const error = new Error(provider === "qwen"
+      ? "Qwen engine requires the trusted edge relay"
+      : "Tencent Cloud credentials are not configured");
     error.statusCode = 500;
-    error.publicMessage = "电脑端缺少腾讯云 SecretId 或 SecretKey，请先配置 .env。";
+    error.publicMessage = provider === "qwen"
+      ? "千问引擎需要电脑端登录云端账号后才能使用，请先在桌面端登录。"
+      : "电脑端缺少腾讯云 SecretId 或 SecretKey，请先配置 .env。";
     throw error;
   }
 
@@ -53,7 +59,7 @@ export async function transcribeAudio({ filePath, tmpDir }, config, edgeAsr) {
       });
     } else {
       const wavBuffer = await fs.readFile(converted.path);
-      raw = await transcribeViaEdgeAsr({ wavBuffer, ...edgeAsr });
+      raw = await transcribeViaEdgeAsr({ wavBuffer, engine: provider, ...edgeAsr });
     }
     return removeFillerWords(raw);
   } finally {

@@ -13,6 +13,7 @@ export async function transcribeCloudAudio({
   filename = "voicebridge.wav",
   durationMs,
   expectedUserId,
+  engine = "",
   signal,
   fetch: fetchImpl = globalThis.fetch
 } = {}) {
@@ -35,6 +36,7 @@ export async function transcribeCloudAudio({
   const body = new FormData();
   body.append("audio", audio, filename);
   if (Number.isFinite(durationMs) && durationMs > 0) body.append("duration_ms", String(Math.round(durationMs)));
+  if (engine) body.append("engine", engine);
   const controller = new AbortController();
   const abort = () => controller.abort();
   signal?.addEventListener("abort", abort, { once: true });

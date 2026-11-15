@@ -79,8 +79,16 @@ export function createUploadRouter({ config, wsHub, tmpDir, edgeAsr, output, isA
         message: "正在识别..."
       });
 
+      const engine = typeof req.body.engine === "string" ? req.body.engine : "";
+      if (engine !== "" && engine !== "tencent" && engine !== "qwen") {
+        return res.status(400).json({
+          ok: false,
+          error: `不支持的识别引擎：${engine}。`
+        });
+      }
+
       assertInputActive(requestIsActive);
-      const rawText = await transcribeAudio({ filePath, tmpDir }, config, edgeAsr);
+      const rawText = await transcribeAudio({ filePath, tmpDir, engine }, config, edgeAsr);
       assertInputActive(requestIsActive);
       if (req.body.deferOutput === "true") {
         return res.json({

@@ -7,8 +7,10 @@ function relayError(message, statusCode = 502) {
   return error;
 }
 
-export function resolveAsrChannel(config, edgeAsr) {
-  if (config.tencentSecretId && config.tencentSecretKey) return "local";
+export function resolveAsrChannel(config, edgeAsr, engine = "tencent") {
+  // 千问凭证只配置在云端（Supabase secrets），本地一律走可信 Edge 中继，
+  // 不在桌面端维护第二套千问实现。
+  if (engine !== "qwen" && config.tencentSecretId && config.tencentSecretKey) return "local";
   if (typeof edgeAsr?.getAccessToken === "function" && edgeAsr.deviceId &&
       edgeAsr.supabaseUrl && edgeAsr.supabaseAnonKey) return "edge";
   return "none";
@@ -17,7 +19,7 @@ export function resolveAsrChannel(config, edgeAsr) {
 // The trusted relay verifies audio, device ownership and usage. No Tencent
 // signature, caller-reported billing result or external upload URL reaches LAN.
 export async function transcribeViaEdgeAsr({
-  wavBuffer, getAccessToken, deviceId, supabaseUrl, supabaseAnonKey,
+  wavBuffer, getAccessToken, deviceId, supabaseUrl, supabaseAnonKey, engine = "",
   fetchImpl = globalThis.fetch, timeoutMs = TRANSCRIBE_TIMEOUT_MS
 }) {
   const accessToken = await Promise.resolve().then(getAccessToken).catch(() => null);
@@ -27,6 +29,7 @@ export async function transcribeViaEdgeAsr({
   const form = new FormData();
   form.append("audio", new Blob([wavBuffer], { type: "audio/wav" }), "voice.wav");
   form.append("device_id", deviceId);
+  if (engine) form.append("engine", engine);
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {

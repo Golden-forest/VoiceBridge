@@ -1,13 +1,14 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 import { corsHeaders, jsonResponse } from "../_shared/cors.ts";
-import { ERROR_CODE_QUOTA_EXCEEDED, USAGE_PROVIDER_TENCENT_CLOUD } from "../_shared/contracts.ts";
+import { ERROR_CODE_QUOTA_EXCEEDED, USAGE_PROVIDER_QWEN_CLOUD, USAGE_PROVIDER_TENCENT_CLOUD } from "../_shared/contracts.ts";
 import { verifySupabaseJwt } from "../_shared/local_jwt.ts";
 import type { PlanName } from "../_shared/plan_limits.ts";
+import { transcribeQwenWav } from "../_shared/qwen_asr.ts";
 import { transcribeTencentWav } from "../_shared/tencent_asr.ts";
 import { parsePcmWavDurationMs } from "../_shared/wav.ts";
 
-const PROVIDER = USAGE_PROVIDER_TENCENT_CLOUD;
+type AsrEngine = "tencent" | "qwen";
 const MAX_AUDIO_BYTES = 3 * 1024 * 1024;
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 type SupabaseClientLike = ReturnType<typeof createClient<any, "public", any>>;
@@ -88,26 +89,31 @@ Deno.serve(async (req) => {
       }
       userId = device.user_id;
     }
+    const engine = resolveEngine(formData.get("engine"));
+    if (engine.errorCode) {
+      await recordUsage(serviceClient, { userId, requestId, durationMs, audioSizeBytes, status: "rejected", errorCode: engine.errorCode, provider: engine.provider });
+      return errorResponse(engine.errorCode, engine.message, 400);
+    }
     const audio = formData.get("audio");
     if (!(audio instanceof File)) {
-      await recordUsage(serviceClient, { userId, requestId, durationMs, audioSizeBytes, status: "rejected", errorCode: "missing_audio" });
+      await recordUsage(serviceClient, { userId, requestId, durationMs, audioSizeBytes, status: "rejected", errorCode: "missing_audio", provider: engine.provider });
       return errorResponse("missing_audio", "没有收到音频文件。", 400);
     }
 
     audioSizeBytes = audio.size;
     if (!isWavFile(audio)) {
-      await recordUsage(serviceClient, { userId, requestId, durationMs, audioSizeBytes, status: "rejected", errorCode: "unsupported_audio_format" });
+      await recordUsage(serviceClient, { userId, requestId, durationMs, audioSizeBytes, status: "rejected", errorCode: "unsupported_audio_format", provider: engine.provider });
       return errorResponse("unsupported_audio_format", "云端识别目前仅支持 WAV 音频。", 415);
     }
     if (audioSizeBytes > MAX_AUDIO_BYTES) {
-      await recordUsage(serviceClient, { userId, requestId, durationMs, audioSizeBytes, status: "rejected", errorCode: "audio_too_large" });
+      await recordUsage(serviceClient, { userId, requestId, durationMs, audioSizeBytes, status: "rejected", errorCode: "audio_too_large", provider: engine.provider });
       return errorResponse("audio_too_large", "音频文件太大，请缩短录音后再试。", 413);
     }
 
     const audioBytes = new Uint8Array(await audio.arrayBuffer());
     const resolvedDurationMs = parsePcmWavDurationMs(audioBytes);
     if (typeof resolvedDurationMs !== "number" || !Number.isFinite(resolvedDurationMs) || resolvedDurationMs <= 0) {
-      await recordUsage(serviceClient, { userId, requestId, durationMs, audioSizeBytes, status: "rejected", errorCode: "invalid_duration" });
+      await recordUsage(serviceClient, { userId, requestId, durationMs, audioSizeBytes, status: "rejected", errorCode: "invalid_duration", provider: engine.provider });
       return errorResponse("invalid_duration", "无法确认音频时长，请重新录音后再试。", 400);
     }
     durationMs = resolvedDurationMs;
@@ -120,7 +126,8 @@ Deno.serve(async (req) => {
       requestId,
       durationMs,
       audioSizeBytes,
-      cachedPlan
+      cachedPlan,
+      provider: engine.provider
     });
     planCache.set(userId, {
       plan: reservation.plan,
@@ -128,7 +135,7 @@ Deno.serve(async (req) => {
     });
     const reservationError = reservation.errorCode;
     if (reservationError) {
-      await recordUsage(serviceClient, { userId, requestId, durationMs, audioSizeBytes, status: "rejected", errorCode: reservationError });
+      await recordUsage(serviceClient, { userId, requestId, durationMs, audioSizeBytes, status: "rejected", errorCode: reservationError, provider: engine.provider });
       if (reservationError === "audio_too_long") {
         return errorResponse(
           reservationError,
@@ -146,22 +153,33 @@ Deno.serve(async (req) => {
     usageReserved = true;
     timing.reservedAt = Date.now();
 
-    const tencentEnv = getTencentEnv();
     providerStarted = true;
-    const text = await transcribeTencentWav({
-      audioBytes,
-      requestId,
-      config: {
-        secretId: tencentEnv.secretId,
-        secretKey: tencentEnv.secretKey,
-        appId: tencentEnv.appId,
-        region: tencentEnv.region,
-        engServiceType: tencentEnv.engServiceType
-      }
-    });
+    let text: string;
+    if (engine.engine === "qwen") {
+      const qwenEnv = getQwenEnv();
+      text = await transcribeQwenWav({
+        audioBytes,
+        requestId,
+        config: qwenEnv
+      });
+    } else {
+      const tencentEnv = getTencentEnv();
+      text = await transcribeTencentWav({
+        audioBytes,
+        requestId,
+        config: {
+          secretId: tencentEnv.secretId,
+          secretKey: tencentEnv.secretKey,
+          appId: tencentEnv.appId,
+          region: tencentEnv.region,
+          engServiceType: tencentEnv.engServiceType
+        }
+      });
+    }
     timing.asrAt = Date.now();
     console.info("Transcribe stage timing", {
       request_id: requestId,
+      engine: engine.engine,
       auth_ms: timing.authAt - timing.start,
       form_data_ms: timing.formDataAt - timing.authAt,
       reserve_rpc_ms: timing.reservedAt - timing.formDataAt,
@@ -218,6 +236,44 @@ function getTencentEnv() {
   };
 }
 
+function getQwenEnv() {
+  return {
+    apiKey: requireEnv("DASHSCOPE_API_KEY"),
+    baseUrl: Deno.env.get("DASHSCOPE_BASE_URL") || undefined,
+    model: Deno.env.get("DASHSCOPE_ASR_MODEL") || undefined
+  };
+}
+
+// 引擎由请求的 engine 字段选择；缺省回落 ASR_DEFAULT_ENGINE 环境变量（默认
+// tencent）。显式选择了未配置凭证的引擎必须报错而不是静默回退——用户在
+// A/B 对比引擎效果，静默换引擎会污染结论。
+function resolveEngine(requested: FormDataEntryValue | null): {
+  engine: AsrEngine;
+  provider: string;
+  errorCode?: undefined;
+  message?: undefined;
+} | {
+  errorCode: string;
+  message: string;
+  provider: string;
+} {
+  const tencentReady = Boolean(Deno.env.get("TENCENT_SECRET_ID") && Deno.env.get("TENCENT_SECRET_KEY"));
+  const qwenReady = Boolean(Deno.env.get("DASHSCOPE_API_KEY"));
+  const value = typeof requested === "string" ? requested.trim().toLowerCase() : "";
+  const engine: AsrEngine = value === "qwen" ? "qwen" : value === "tencent" ? "tencent"
+    : Deno.env.get("ASR_DEFAULT_ENGINE") === "qwen" ? "qwen" : "tencent";
+  if (value && value !== "tencent" && value !== "qwen") {
+    return { errorCode: "engine_unavailable", message: `不支持的识别引擎：${value}`, provider: USAGE_PROVIDER_TENCENT_CLOUD };
+  }
+  if (engine === "qwen" && !qwenReady) {
+    return { errorCode: "engine_unavailable", message: "千问识别引擎暂未配置，请先用腾讯引擎。", provider: USAGE_PROVIDER_TENCENT_CLOUD };
+  }
+  if (engine === "tencent" && !tencentReady) {
+    return { errorCode: "engine_unavailable", message: "腾讯识别引擎暂未配置。", provider: USAGE_PROVIDER_TENCENT_CLOUD };
+  }
+  return { engine, provider: engine === "qwen" ? USAGE_PROVIDER_QWEN_CLOUD : USAGE_PROVIDER_TENCENT_CLOUD };
+}
+
 function requireEnv(name: string) {
   const value = Deno.env.get(name);
   if (!value) throw new Error(`${name} is not configured`);
@@ -231,19 +287,21 @@ async function reserveAndGetPlan(
     requestId,
     durationMs,
     audioSizeBytes,
-    cachedPlan
+    cachedPlan,
+    provider
   }: {
     userId: string;
     requestId: string;
     durationMs: number;
     audioSizeBytes: number;
     cachedPlan: PlanName | null;
+    provider: string;
   }
 ) {
   const { data, error } = await serviceClient.rpc("reserve_and_get_plan", {
     p_user_id: userId,
     p_request_id: requestId,
-    p_provider: PROVIDER,
+    p_provider: provider,
     p_mode: "cloud",
     p_audio_duration_ms: Math.round(durationMs),
     p_audio_size_bytes: audioSizeBytes,
@@ -306,7 +364,8 @@ async function recordUsage(
     durationMs,
     audioSizeBytes,
     status,
-    errorCode
+    errorCode,
+    provider = USAGE_PROVIDER_TENCENT_CLOUD
   }: {
     userId: string;
     requestId: string;
@@ -314,13 +373,14 @@ async function recordUsage(
     audioSizeBytes: number;
     status: "success" | "failed" | "rejected";
     errorCode?: string;
+    provider?: string;
   }
 ) {
   try {
     const { error } = await serviceClient.from("usage_events").insert({
       user_id: userId,
       request_id: requestId,
-      provider: PROVIDER,
+      provider,
       mode: "cloud",
       audio_duration_ms: Number.isFinite(durationMs) ? Math.round(durationMs as number) : null,
       audio_size_bytes: audioSizeBytes || null,
